@@ -2,6 +2,9 @@
 
 一个用于检测Model Context Protocol (MCP)安全性的Chrome扩展工具。
 
+(该项目纯cursor生成)
+
+
 ## 🆕 更新内容
 
 ### v1.1.0 新特性
@@ -32,6 +35,16 @@
 - **资源面板**: 查看和读取MCP资源
 - **提示面板**: 管理和使用MCP提示模板
 - **历史面板**: 查看调用历史，支持筛选和导出
+
+## 使用截屏
+### index
+![](./images/index.png)
+
+### explorer
+![](./images/explorer.png)
+
+### history
+![](./images/history.png)
 
 ## 快速开始
 
@@ -250,4 +263,4 @@ MIT License
 ---
 
 **开发者**: MCP Security Inspector Team  
-**联系方式**: [GitHub Issues](https://github.com/your-repo/mcp-inspector/issues) 
+**联系方式**: [GitHub Issues](https://github.com/purpleroc/mcp-security-inspector/issues) 
