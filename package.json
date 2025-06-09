@@ -1,0 +1,34 @@
+{
+  "name": "mcp-security-inspector",
+  "version": "1.0.0",
+  "description": "Chrome扩展 - MCP协议安全性检测工具",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:extension": "npm run build && npm run copy-extension-files",
+    "copy-extension-files": "cp public/manifest.json dist/ && cp public/background.js dist/ && cp -r public/icons dist/ && mv dist/public/index.html dist/index.html && rm -rf dist/public",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit",
+    "package": "npm run build:extension && cd dist && zip -r ../mcp-security-inspector-v1.0.0.zip ."
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.2.6",
+    "@reduxjs/toolkit": "^1.9.7",
+    "antd": "^5.12.5",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-redux": "^8.1.3",
+    "uuid": "^9.0.1",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.254",
+    "@types/react": "^18.2.37",
+    "@types/react-dom": "^18.2.15",
+    "@types/uuid": "^9.0.7",
+    "@vitejs/plugin-react": "^4.1.1",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0"
+  }
+} 
