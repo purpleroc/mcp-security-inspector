@@ -4,3 +4,6 @@
 .DS_Store
 .env
 .gitignore
+mcp-security-inspector-*.zip
+.python-version
+create_icons.py
