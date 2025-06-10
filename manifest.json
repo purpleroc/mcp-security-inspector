@@ -11,9 +11,18 @@
   },
   "permissions": [
     "storage",
-    "tabs"
+    "tabs",
+    "activeTab"
   ],
   "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://localhost/*",
+    "https://127.0.0.1/*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "optional_host_permissions": [
     "<all_urls>"
   ],
   "content_security_policy": {
@@ -25,6 +34,6 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "homepage_url": "https://github.com/your-username/mcp-security-inspector",
-  "privacy_policy": "https://github.com/your-username/mcp-security-inspector/blob/main/privacy-policy.md"
+  "homepage_url": "https://github.com/purpleroc/mcp-security-inspector",
+  "privacy_policy": "https://purpleroc.github.io/mcp-security-inspector/privacy-policy.html"
 } 

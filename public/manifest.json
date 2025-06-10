@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MCP Security Inspector",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Model Context Protocol安全性检测工具 - 测试MCP服务器工具、资源和提示的安全性",
   "action": {
     "default_title": "MCP Security Inspector"
@@ -11,10 +11,18 @@
   },
   "permissions": [
     "storage",
-    "activeTab",
-    "tabs"
+    "tabs",
+    "activeTab"
   ],
   "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://localhost/*",
+    "https://127.0.0.1/*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "optional_host_permissions": [
     "<all_urls>"
   ],
   "content_security_policy": {
@@ -25,5 +33,7 @@
     "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "homepage_url": "https://github.com/purpleroc/mcp-security-inspector",
+  "privacy_policy": "https://purpleroc.github.io/mcp-security-inspector/privacy-policy.html"
 } 

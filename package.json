@@ -6,11 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:extension": "npm run build && npm run copy-extension-files",
-    "copy-extension-files": "cp public/manifest.json dist/ && cp public/background.js dist/ && cp -r public/icons dist/ && mv dist/public/index.html dist/index.html && rm -rf dist/public",
+    "build:extension": "npm run build && npm run copy-extension-files && npm run clean-dist",
+    "copy-extension-files": "cp public/manifest.json dist/ && cp public/background.js dist/ && cp -r public/icons dist/",
+    "clean-dist": "rm -rf dist/public",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
-    "package": "npm run build:extension && cd dist && zip -r ../mcp-security-inspector-v1.0.0.zip ."
+    "package": "npm run build:extension && cd dist && zip -r ../mcp-security-inspector-v1.0.1.zip ."
   },
   "dependencies": {
     "@ant-design/icons": "^5.2.6",
