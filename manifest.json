@@ -14,17 +14,6 @@
     "tabs",
     "activeTab"
   ],
-  "host_permissions": [
-    "http://localhost/*",
-    "http://127.0.0.1/*",
-    "https://localhost/*",
-    "https://127.0.0.1/*",
-    "http://*/*",
-    "https://*/*"
-  ],
-  "optional_host_permissions": [
-    "<all_urls>"
-  ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self';"
   },
