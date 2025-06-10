@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MCP Security Inspector",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Model Context Protocol安全性检测工具 - 测试MCP服务器工具、资源和提示的安全性",
   "action": {
     "default_title": "MCP Security Inspector"
@@ -11,7 +11,6 @@
   },
   "permissions": [
     "storage",
-    "activeTab",
     "tabs"
   ],
   "host_permissions": [
@@ -25,5 +24,7 @@
     "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "homepage_url": "https://github.com/your-username/mcp-security-inspector",
+  "privacy_policy": "https://github.com/your-username/mcp-security-inspector/blob/main/privacy-policy.md"
 } 
