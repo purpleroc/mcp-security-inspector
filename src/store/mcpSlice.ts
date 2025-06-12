@@ -12,6 +12,7 @@ import {
   InitializeResult
 } from '@/types/mcp';
 import { mcpClient } from '@/services/mcpClient';
+import { storage } from '@/utils/storage';
 import { v4 as uuidv4 } from 'uuid';
 
 // 应用状态接口
@@ -51,7 +52,7 @@ export interface MCPState {
 // 初始状态
 const initialState: MCPState = {
   connectionStatus: 'disconnected',
-  serverConfig: null,
+  serverConfig: storage.getServerConfig(),
   serverInfo: null,
   tools: [],
   resources: [],
@@ -65,7 +66,7 @@ const initialState: MCPState = {
   lastResult: null,
   lastError: null,
   securityCheck: null,
-  history: [],
+  history: storage.getHistory(),
   currentTab: 'config'
 };
 
@@ -335,6 +336,8 @@ const mcpSlice = createSlice({
     // 清除历史记录
     clearHistory: (state) => {
       state.history = [];
+      // 清除localStorage中的历史记录
+      storage.saveHistory([]);
     },
     
     // 删除历史记录项
@@ -359,6 +362,8 @@ const mcpSlice = createSlice({
         state.isLoading = false;
         state.serverConfig = action.payload.config;
         state.serverInfo = action.payload.serverInfo;
+        // 保存服务器配置到localStorage
+        storage.saveServerConfig(action.payload.config);
       })
       .addCase(connectToServer.rejected, (state, action) => {
         state.connectionStatus = 'error';
@@ -433,6 +438,8 @@ const mcpSlice = createSlice({
         state.isLoading = false;
         state.lastResult = action.payload.result;
         state.history.unshift(action.payload.historyItem);
+        // 保存历史记录到localStorage
+        storage.saveHistory(state.history);
       })
       .addCase(callTool.rejected, (state, action) => {
         state.isLoading = false;
