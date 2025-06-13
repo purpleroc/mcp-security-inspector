@@ -2,7 +2,9 @@
 
 一个用于检测Model Context Protocol (MCP)安全性的Chrome扩展工具。
 
-(该项目纯cursor生成，插件正在发布中，已经被打回来几次了...)
+(该项目纯cursor生成)
+
+插件地址：https://chromewebstore.google.com/detail/mcp-security-inspector/opajbcoflmgkjmjafchlgehgllbekgeo
 
 ## 功能特性
 
