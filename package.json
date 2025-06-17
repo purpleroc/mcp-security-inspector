@@ -1,6 +1,6 @@
 {
   "name": "mcp-security-inspector",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Chrome扩展 - MCP协议安全性检测工具",
   "type": "module",
   "scripts": {
@@ -11,7 +11,7 @@
     "clean-dist": "rm -rf dist/public",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
-    "package": "npm run build:extension && cd dist && zip -r ../mcp-security-inspector-v1.0.1.zip ."
+    "package": "npm run build:extension && cd dist && zip -r ../mcp-security-inspector-v1.0.2.zip ."
   },
   "dependencies": {
     "@ant-design/icons": "^5.2.6",
