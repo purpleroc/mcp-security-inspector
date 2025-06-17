@@ -22,6 +22,8 @@ export class MCPClient {
   private status: MCPConnectionStatus = 'disconnected';
   private eventSource: EventSource | null = null;
   private sessionId: string | null = null;
+  private sessionIdParamName: string = 'session_id'; // 动态保存参数名
+  private messageEndpoint: string | null = null; // 从SSE获取的完整message端点
   private requestId = 0;
   private pendingRequests = new Map<string | number, {
     resolve: (value: any) => void;
@@ -99,13 +101,22 @@ export class MCPClient {
    * 获取消息发送端点
    */
   private getMessageEndpoint(): string {
-    if (!this.config || !this.sessionId) {
-      throw new Error('配置或session_id未准备好');
+    if (!this.config) {
+      throw new Error('MCP客户端未配置');
     }
 
-    const baseUrl = this.config.host.replace(/\/$/, '');
-    const messagePath = this.config.messagePath.startsWith('/') ? this.config.messagePath : '/' + this.config.messagePath;
-    return `${baseUrl}${messagePath}?session_id=${this.sessionId}`;
+    if (!this.messageEndpoint) {
+      throw new Error('消息端点未从SSE获取到');
+    }
+
+    // 如果messageEndpoint是相对路径，需要加上host
+    if (this.messageEndpoint.startsWith('/')) {
+      const baseUrl = this.config.host.replace(/\/$/, '');
+      return `${baseUrl}${this.messageEndpoint}`;
+    }
+
+    // 如果是完整URL，直接返回
+    return this.messageEndpoint;
   }
 
   /**
@@ -135,12 +146,32 @@ export class MCPClient {
             data: event.data
           });
           
-          // 解析endpoint数据，格式：/messages/?session_id=xxx
-          if (event.data.includes('session_id=')) {
-            const match = event.data.match(/session_id=([a-f0-9\-]+)/);
+          // 解析endpoint数据，直接保存完整的message端点
+          // 格式：/messages/?session_id=xxx 或 /mcp/server/xxx/fla/message?sessionId=xxx
+          if (event.data.includes('session_id=') || event.data.includes('sessionId=')) {
+            // 保存完整的message端点
+            this.messageEndpoint = event.data.trim();
+            
+            // 提取sessionId用于日志和其他用途
+            let match = event.data.match(/sessionId=([a-f0-9\-]+)/);
             if (match) {
               this.sessionId = match[1];
-              console.log('从endpoint事件中获取到session_id:', this.sessionId);
+              this.sessionIdParamName = 'sessionId';
+              console.log('从endpoint事件中获取到完整端点:', this.messageEndpoint);
+              console.log('提取的sessionId:', this.sessionId, '参数名:', this.sessionIdParamName);
+              if (!resolved) {
+                resolved = true;
+                resolve();
+              }
+              return;
+            }
+            
+            match = event.data.match(/session_id=([a-f0-9\-]+)/);
+            if (match) {
+              this.sessionId = match[1];
+              this.sessionIdParamName = 'session_id';
+              console.log('从endpoint事件中获取到完整端点:', this.messageEndpoint);
+              console.log('提取的sessionId:', this.sessionId, '参数名:', this.sessionIdParamName);
               if (!resolved) {
                 resolved = true;
                 resolve();
@@ -162,16 +193,37 @@ export class MCPClient {
           });
           
           // 备用处理：检查普通消息中是否包含endpoint信息
-          if (event.data.includes('session_id=')) {
-            const match = event.data.match(/session_id=([a-f0-9\-]+)/);
-            if (match && !this.sessionId) {
-              this.sessionId = match[1];
-              console.log('从普通消息中获取到session_id:', this.sessionId);
-              if (!resolved) {
-                resolved = true;
-                resolve();
+          if (event.data.includes('session_id=') || event.data.includes('sessionId=')) {
+            if (!this.messageEndpoint) {
+              // 保存完整的message端点
+              this.messageEndpoint = event.data.trim();
+              
+              // 提取sessionId
+              let match = event.data.match(/sessionId=([a-f0-9\-]+)/);
+              if (match) {
+                this.sessionId = match[1];
+                this.sessionIdParamName = 'sessionId';
+                console.log('从普通消息中获取到完整端点:', this.messageEndpoint);
+                console.log('提取的sessionId:', this.sessionId, '参数名:', this.sessionIdParamName);
+                if (!resolved) {
+                  resolved = true;
+                  resolve();
+                }
+                return;
               }
-              return;
+              
+              match = event.data.match(/session_id=([a-f0-9\-]+)/);
+              if (match) {
+                this.sessionId = match[1];
+                this.sessionIdParamName = 'session_id';
+                console.log('从普通消息中获取到完整端点:', this.messageEndpoint);
+                console.log('提取的sessionId:', this.sessionId, '参数名:', this.sessionIdParamName);
+                if (!resolved) {
+                  resolved = true;
+                  resolve();
+                }
+                return;
+              }
             }
           }
           
@@ -228,6 +280,8 @@ export class MCPClient {
     this.pendingRequests.clear();
     
     this.sessionId = null;
+    this.sessionIdParamName = 'session_id'; // 重置为默认值
+    this.messageEndpoint = null; // 清理message端点
     this.status = 'disconnected';
   }
 
@@ -266,10 +320,14 @@ export class MCPClient {
     const response = await this.sendRequest(request);
     
     // 发送initialized通知
-    await this.sendNotification({
-      jsonrpc: '2.0',
-      method: 'notifications/initialized'
-    });
+    try {
+      await this.sendNotification({
+        jsonrpc: '2.0',
+        method: 'notifications/initialized'
+      });
+    } catch (error) {
+      console.warn('发送initialized通知失败，但连接仍然有效:', error);
+    }
     
     return response.result as InitializeResult;
   }
@@ -297,11 +355,15 @@ export class MCPClient {
       headers['Authorization'] = `Bearer ${this.config.apiKey}`;
     }
 
-    // 如果有session_id，使用消息端点，否则使用SSE端点
+    // 选择合适的端点发送通知
     let endpoint: string;
-    if (this.sessionId) {
-      endpoint = this.getMessageEndpoint();
+    if (this.messageEndpoint) {
+      // 如果有从SSE获取的消息端点，优先使用
+      endpoint = this.messageEndpoint.startsWith('/') 
+        ? `${this.config.host.replace(/\/$/, '')}${this.messageEndpoint}`
+        : this.messageEndpoint;
     } else {
+      // 否则使用SSE端点
       endpoint = this.getSSEEndpoint();
     }
 
@@ -439,8 +501,8 @@ export class MCPClient {
       throw new Error('MCP客户端未配置');
     }
 
-    if (!this.sessionId) {
-      throw new Error('Session ID未准备好');
+    if (!this.messageEndpoint) {
+      throw new Error('消息端点未从SSE获取到');
     }
 
     const timeout = 30000; // 30秒超时
@@ -466,9 +528,17 @@ export class MCPClient {
    * 通过HTTP发送请求
    */
   private async sendHTTPRequest(request: JSONRPCRequest): Promise<void> {
-    if (!this.config || !this.sessionId) return;
+    if (!this.config) return;
 
-    const endpoint = this.getMessageEndpoint();
+    // 检查是否有可用的端点
+    if (!this.messageEndpoint) {
+      throw new Error('消息端点未从SSE获取到，无法发送请求');
+    }
+
+    // 构建完整的端点URL
+    const endpoint = this.messageEndpoint.startsWith('/') 
+      ? `${this.config.host.replace(/\/$/, '')}${this.messageEndpoint}`
+      : this.messageEndpoint;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'application/json'

@@ -15,7 +15,7 @@ const ConfigPanel: React.FC = () => {
   const handleConnect = async (values: any) => {
     try {
       // 验证必要字段
-      if (!values.host || !values.ssePath || !values.messagePath) {
+      if (!values.host || !values.ssePath) {
         message.error('请填写完整的配置信息');
         return;
       }
@@ -24,8 +24,8 @@ const ConfigPanel: React.FC = () => {
         name: values.name,
         host: values.host,
         ssePath: values.ssePath,
-        messagePath: values.messagePath,
-        transport: values.transport,
+        messagePath: '', // 现在从SSE自动获取，不需要配置
+        transport: 'sse', // 固定为SSE传输方式
         apiKey: values.apiKey || undefined,
         sessionId: values.sessionId || undefined,
         headers: values.headers ? JSON.parse(values.headers || '{}') : undefined
@@ -61,8 +61,7 @@ const ConfigPanel: React.FC = () => {
             transport: 'sse',
             name: 'MCP Server',
             host: 'http://127.0.0.1:8020',
-            ssePath: '/sse',
-            messagePath: '/messages/'
+            ssePath: '/sse'
           }}
         >
           <Form.Item
@@ -76,8 +75,14 @@ const ConfigPanel: React.FC = () => {
           <Form.Item
             name="host"
             label="主机地址"
-            rules={[{ required: true, message: '请输入主机地址' }]}
-            tooltip="包含协议、主机和端口的基础URL"
+            rules={[
+              { required: true, message: '请输入主机地址' },
+              {
+                pattern: /^https?:\/\/[^\/\s]+$/,
+                message: '请输入正确的主机地址格式，例如: http://127.0.0.1:8020 (不要包含路径)'
+              }
+            ]}
+            tooltip="包含协议、主机和端口的基础URL，不要包含路径"
           >
             <Input placeholder="例如: http://127.0.0.1:8020" />
           </Form.Item>
@@ -86,29 +91,9 @@ const ConfigPanel: React.FC = () => {
             name="ssePath"
             label="SSE路径"
             rules={[{ required: true, message: '请输入SSE路径' }]}
-            tooltip="SSE连接的路径，通常是 /sse"
+            tooltip="SSE连接的路径，通常是 /sse。消息路径将从SSE响应中自动获取"
           >
             <Input placeholder="例如: /sse" />
-          </Form.Item>
-
-          <Form.Item
-            name="messagePath"
-            label="消息路径"
-            rules={[{ required: true, message: '请输入消息路径' }]}
-            tooltip="消息发送的路径，通常是 /messages/"
-          >
-            <Input placeholder="例如: /messages/" />
-          </Form.Item>
-
-          <Form.Item
-            name="transport"
-            label="传输方式"
-            rules={[{ required: true, message: '请选择传输方式' }]}
-          >
-            <Select>
-              <Select.Option value="sse">SSE (推荐)</Select.Option>
-              <Select.Option value="http">HTTP</Select.Option>
-            </Select>
           </Form.Item>
 
           <Form.Item

@@ -114,8 +114,8 @@ export interface MCPServerConfig {
   name: string;
   host: string; // 主机地址，如 http://127.0.0.1:8020
   ssePath: string; // SSE路径，如 /sse
-  messagePath: string; // 消息路径，如 /messages/
-  transport: 'sse' | 'http' | 'stdio';
+  messagePath?: string; // 消息路径，现在从SSE自动获取，可选
+  transport: 'sse';
   apiKey?: string;
   sessionId?: string;
   headers?: Record<string, string>;
