@@ -9,8 +9,10 @@
   "background": {
     "service_worker": "background.js"
   },
-  "host_permissions": [
-    "<all_urls>"
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self';"
@@ -21,5 +23,5 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "homepage_url": "https://github.com/purpleroc/mcp-security-inspector"
+  "homepage_url": "https://github.com/purpleroc/mcp-security-inspector",
 } 
