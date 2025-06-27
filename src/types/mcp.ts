@@ -39,6 +39,44 @@ export interface JSONRPCNotification extends JSONRPCMessage {
 }
 
 /**
+ * 认证类型
+ */
+export type AuthType = 'none' | 'url_params' | 'headers';
+
+/**
+ * URL参数认证配置
+ */
+export interface URLParamsAuth {
+  type: 'url_params';
+  params: Array<{
+    name: string;
+    value: string;
+  }>;
+}
+
+/**
+ * 请求头认证配置
+ */
+export interface HeadersAuth {
+  type: 'headers';
+  headers: Array<{
+    name: string;
+    value: string;
+  }>;
+  useBasicAuth?: boolean;
+  basicAuthUsername?: string;
+  basicAuthPassword?: string;
+}
+
+/**
+ * 认证配置联合类型
+ */
+export type AuthConfig = 
+  | { type: 'none' }
+  | URLParamsAuth
+  | HeadersAuth;
+
+/**
  * MCP 工具参数 Schema
  */
 export interface MCPToolInputSchema {
@@ -116,9 +154,9 @@ export interface MCPServerConfig {
   ssePath: string; // SSE路径，如 /sse
   messagePath?: string; // 消息路径，现在从SSE自动获取，可选
   transport: 'sse';
-  apiKey?: string;
   sessionId?: string;
   headers?: Record<string, string>;
+  auth?: AuthConfig; // 认证配置
 }
 
 /**
