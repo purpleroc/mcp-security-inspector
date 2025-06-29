@@ -10,7 +10,8 @@ import {
   MCPConnectionStatus,
   InitializeResult,
   SecurityCheckResult,
-  SecurityRiskLevel
+  SecurityRiskLevel,
+  AuthConfig
 } from '@/types/mcp';
 
 /**
@@ -32,6 +33,71 @@ export class MCPClient {
   }>();
 
   constructor() {}
+
+  /**
+   * 生成Basic Auth编码
+   */
+  private generateBasicAuth(username: string, password: string): string {
+    const credentials = `${username}:${password}`;
+    return `Basic ${btoa(credentials)}`;
+  }
+
+  /**
+   * 应用认证到请求头
+   */
+  private applyAuthHeaders(headers: Record<string, string>): void {
+    if (!this.config?.auth || this.config.auth.type === 'none') return;
+
+    if (this.config.auth.type === 'combined') {
+      // 应用API Key认证
+      if (this.config.auth.apiKey && this.config.auth.apiKey.apiKey) {
+        const headerName = this.config.auth.apiKey.headerName || 'Authorization';
+        const prefix = this.config.auth.apiKey.prefix || 'Bearer ';
+        headers[headerName] = `${prefix}${this.config.auth.apiKey.apiKey}`;
+      }
+
+      // 应用Basic Auth
+      if (this.config.auth.basicAuth && this.config.auth.basicAuth.username && this.config.auth.basicAuth.password) {
+        headers['Authorization'] = this.generateBasicAuth(
+          this.config.auth.basicAuth.username,
+          this.config.auth.basicAuth.password
+        );
+      }
+
+      // 应用自定义请求头
+      if (this.config.auth.customHeaders) {
+        this.config.auth.customHeaders.forEach(header => {
+          headers[header.name] = header.value;
+        });
+      }
+    }
+  }
+
+  /**
+   * 为URL添加认证参数
+   */
+  private applyAuthToUrl(url: string): string {
+    if (!this.config?.auth || this.config.auth.type === 'none') {
+      return url;
+    }
+
+    const urlObj = new URL(url);
+
+    if (this.config.auth.type === 'combined' && this.config.auth.urlParams) {
+      // 组合认证：应用URL参数
+      console.log('应用URL参数认证，参数数量:', this.config.auth.urlParams.length);
+      this.config.auth.urlParams.forEach(param => {
+        if (param.name && param.value) {
+          console.log(`添加URL参数: ${param.name}=${param.value}`);
+          urlObj.searchParams.append(param.name, param.value);
+        }
+      });
+    }
+    
+    const finalUrl = urlObj.toString();
+    console.log('URL参数认证后的地址:', finalUrl);
+    return finalUrl;
+  }
 
   /**
    * 配置MCP服务器连接
@@ -75,6 +141,12 @@ export class MCPClient {
       console.error('连接失败:', error);
       this.status = 'error';
       
+      // 清理资源
+      if (this.eventSource) {
+        this.eventSource.close();
+        this.eventSource = null;
+      }
+      
       // 确保错误信息是字符串
       if (error instanceof Error) {
         throw new Error(`连接失败: ${error.message}`);
@@ -94,7 +166,56 @@ export class MCPClient {
       throw new Error('MCP客户端未配置');
     }
 
-    return this.config.host.replace(/\/$/, '') + this.config.ssePath;
+    let url = this.config.host.replace(/\/$/, '') + this.config.ssePath;
+    
+    // 如果配置了组合认证，处理其中的URL参数
+    if (this.config.auth?.type === 'combined') {
+      console.warn('警告：EventSource不支持自定义请求头，组合认证中的请求头部分无法用于SSE连接。');
+      
+      // 添加URL参数部分
+      if (this.config.auth.urlParams) {
+        const params = new URLSearchParams();
+        this.config.auth.urlParams.forEach(param => {
+          params.append(param.name, param.value);
+        });
+        const paramString = params.toString();
+        if (paramString) {
+          url += (url.includes('?') ? '&' : '?') + paramString;
+          console.log('已将组合认证中的URL参数添加到SSE连接');
+        }
+      }
+
+      // 尝试将API Key转换为URL参数
+      if (this.config.auth.apiKey && this.config.auth.apiKey.apiKey) {
+        const params = new URLSearchParams();
+        const headerName = this.config.auth.apiKey.headerName || 'Authorization';
+        const prefix = this.config.auth.apiKey.prefix || 'Bearer ';
+        const apiKeyValue = `${prefix}${this.config.auth.apiKey.apiKey}`;
+        
+        params.append(`header_${headerName.toLowerCase()}`, apiKeyValue);
+        const paramString = params.toString();
+        if (paramString) {
+          url += (url.includes('?') ? '&' : '?') + paramString;
+          console.log(`已将组合认证中的API Key转换为URL参数用于SSE连接：${headerName}`);
+        }
+      }
+
+      // 尝试将Basic Auth转换为URL参数
+      if (this.config.auth.basicAuth && this.config.auth.basicAuth.username && this.config.auth.basicAuth.password) {
+        const params = new URLSearchParams();
+        params.append('auth_user', this.config.auth.basicAuth.username);
+        params.append('auth_pass', this.config.auth.basicAuth.password);
+        const paramString = params.toString();
+        if (paramString) {
+          url += (url.includes('?') ? '&' : '?') + paramString;
+          console.log('已将组合认证中的Basic Auth转换为URL参数用于SSE连接');
+        }
+      }
+      
+      console.warn('注意：服务器需要支持这些URL参数格式的认证。如果服务器不支持，SSE连接可能失败。');
+    }
+
+    return url;
   }
 
   /**
@@ -109,14 +230,173 @@ export class MCPClient {
       throw new Error('消息端点未从SSE获取到');
     }
 
+    let endpoint: string;
     // 如果messageEndpoint是相对路径，需要加上host
     if (this.messageEndpoint.startsWith('/')) {
       const baseUrl = this.config.host.replace(/\/$/, '');
-      return `${baseUrl}${this.messageEndpoint}`;
+      endpoint = `${baseUrl}${this.messageEndpoint}`;
+    } else {
+      // 如果是完整URL，直接使用
+      endpoint = this.messageEndpoint;
     }
 
-    // 如果是完整URL，直接返回
-    return this.messageEndpoint;
+    // 应用URL参数认证
+    return this.applyAuthToUrl(endpoint);
+  }
+
+  /**
+   * 使用fetch + ReadableStream实现SSE连接（支持自定义请求头）
+   */
+  private async establishFetchSSEConnection(): Promise<void> {
+    if (!this.config) return;
+
+    return new Promise(async (resolve, reject) => {
+      // 构建SSE端点URL并应用URL参数认证
+      const baseSSEEndpoint = this.config.host.replace(/\/$/, '') + this.config.ssePath;
+      const sseEndpoint = this.applyAuthToUrl(baseSSEEndpoint);
+      console.log('使用Fetch方式建立SSE连接到:', sseEndpoint);
+
+      const headers: Record<string, string> = {
+        'Accept': 'text/event-stream',
+        'Cache-Control': 'no-cache'
+      };
+
+      // 应用认证配置到请求头
+      this.applyAuthHeaders(headers);
+
+      // 应用自定义headers
+      if (this.config.headers) {
+        Object.entries(this.config.headers).forEach(([key, value]) => {
+          if (value !== null && value !== undefined && value !== '') {
+            headers[key] = String(value);
+          }
+        });
+      }
+
+      let resolved = false;
+
+      try {
+        const response = await fetch(sseEndpoint, {
+          method: 'GET',
+          headers,
+          mode: 'cors'
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        if (!response.body) {
+          throw new Error('响应体为空');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        const processChunk = async () => {
+          try {
+            const { done, value } = await reader.read();
+            
+            if (done) {
+              console.log('SSE流结束');
+              return;
+            }
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // 保留最后一个不完整的行
+
+            for (const line of lines) {
+              this.processFetchSSELine(line, resolve, resolved);
+              if (resolved) break;
+            }
+
+            if (!resolved) {
+              // 继续读取下一个chunk
+              processChunk();
+            }
+          } catch (error) {
+            console.error('读取SSE流失败:', error);
+            if (!resolved) {
+              resolved = true;
+              reject(error);
+            }
+          }
+        };
+
+        processChunk();
+
+        // 超时处理
+        setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            reader.cancel();
+            reject(new Error('等待服务器推送session_id超时'));
+          }
+        }, 10000);
+
+      } catch (error) {
+        console.error('Fetch SSE连接失败:', error);
+        if (!resolved) {
+          resolved = true;
+          reject(error);
+        }
+      }
+    });
+  }
+
+  /**
+   * 处理Fetch SSE的每一行数据
+   */
+  private processFetchSSELine(line: string, resolve: () => void, resolved: boolean): void {
+    if (line.startsWith('data: ')) {
+      const data = line.substring(6);
+      
+      // 检查是否包含endpoint信息
+      if (data.includes('session_id=') || data.includes('sessionId=')) {
+        // 保存完整的message端点
+        this.messageEndpoint = data.trim();
+        
+                 // 提取sessionId
+         let match = data.match(/sessionId=([a-f0-9\-]+)/);
+         if (match && match[1]) {
+           this.sessionId = match[1];
+           this.sessionIdParamName = 'sessionId';
+           console.log('从Fetch SSE中获取到完整端点:', this.messageEndpoint);
+           console.log('提取的sessionId:', this.sessionId, '参数名:', this.sessionIdParamName);
+           if (!resolved) {
+             resolve();
+           }
+           return;
+         }
+         
+         match = data.match(/session_id=([a-f0-9\-]+)/);
+         if (match && match[1]) {
+           this.sessionId = match[1];
+           this.sessionIdParamName = 'session_id';
+           console.log('从Fetch SSE中获取到完整端点:', this.messageEndpoint);
+           console.log('提取的sessionId:', this.sessionId, '参数名:', this.sessionIdParamName);
+           if (!resolved) {
+             resolve();
+           }
+           return;
+         }
+      }
+
+      // 处理其他消息
+      if (data === 'ping') {
+        return;
+      }
+
+      // 尝试解析JSON-RPC响应
+      try {
+        const response: JSONRPCResponse = JSON.parse(data);
+        this.handleResponse(response);
+      } catch (e) {
+        console.log('收到非JSON消息:', data);
+      }
+    }
   }
 
   /**
@@ -125,12 +405,34 @@ export class MCPClient {
   private async establishSSEConnection(): Promise<void> {
     if (!this.config) return;
 
+    // 如果配置了组合认证，优先使用Fetch方式（支持自定义请求头）
+    if (this.config.auth?.type === 'combined') {
+      console.log('检测到组合认证方式，使用Fetch方式建立SSE连接以支持自定义请求头');
+      return this.establishFetchSSEConnection();
+    }
+
+    // 否则使用标准EventSource
+    return this.establishEventSourceConnection();
+  }
+
+  /**
+   * 使用标准EventSource建立连接
+   */
+  private async establishEventSourceConnection(): Promise<void> {
+    if (!this.config) return;
+
     return new Promise((resolve, reject) => {
       // 使用新的SSE端点获取方法
       const sseEndpoint = this.getSSEEndpoint();
-      console.log('建立SSE连接到:', sseEndpoint);
+      console.log('建立EventSource连接到:', sseEndpoint);
 
-      this.eventSource = new EventSource(sseEndpoint);
+      try {
+        this.eventSource = new EventSource(sseEndpoint);
+      } catch (error) {
+        console.error('创建EventSource失败:', error);
+        reject(new Error('无法创建SSE连接'));
+        return;
+      }
       
       let resolved = false;
       
@@ -248,9 +550,15 @@ export class MCPClient {
       this.eventSource.onerror = (error) => {
         console.error('SSE连接错误:', error);
         if (!resolved) {
+          // 初次连接失败 - 关闭EventSource防止重连
           resolved = true;
           reject(new Error('SSE连接失败'));
+          if (this.eventSource) {
+            this.eventSource.close();
+            this.eventSource = null;
+          }
         }
+        // 连接成功后的错误 - 让EventSource自己处理重连
       };
 
       // 超时处理 - 增加超时时间，因为需要等待服务器推送
@@ -342,6 +650,9 @@ export class MCPClient {
       'Content-Type': 'application/json'
     };
 
+    // 应用认证配置
+    this.applyAuthHeaders(headers);
+
     // 安全地添加自定义headers，过滤掉null/undefined值
     if (this.config.headers) {
       Object.entries(this.config.headers).forEach(([key, value]) => {
@@ -351,17 +662,14 @@ export class MCPClient {
       });
     }
 
-    if (this.config.apiKey) {
-      headers['Authorization'] = `Bearer ${this.config.apiKey}`;
-    }
-
     // 选择合适的端点发送通知
     let endpoint: string;
     if (this.messageEndpoint) {
       // 如果有从SSE获取的消息端点，优先使用
-      endpoint = this.messageEndpoint.startsWith('/') 
+      const baseEndpoint = this.messageEndpoint.startsWith('/') 
         ? `${this.config.host.replace(/\/$/, '')}${this.messageEndpoint}`
         : this.messageEndpoint;
+      endpoint = this.applyAuthToUrl(baseEndpoint);
     } else {
       // 否则使用SSE端点
       endpoint = this.getSSEEndpoint();
@@ -516,7 +824,7 @@ export class MCPClient {
       this.pendingRequests.set(request.id, {
         resolve,
         reject,
-        timeout: timeoutHandle
+        timeout: timeoutHandle as any
       });
 
       // 发送HTTP请求到对应端点
@@ -536,13 +844,17 @@ export class MCPClient {
     }
 
     // 构建完整的端点URL
-    const endpoint = this.messageEndpoint.startsWith('/') 
+    const baseEndpoint = this.messageEndpoint.startsWith('/') 
       ? `${this.config.host.replace(/\/$/, '')}${this.messageEndpoint}`
       : this.messageEndpoint;
+    const endpoint = this.applyAuthToUrl(baseEndpoint);
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'application/json'
     };
+
+    // 应用认证配置
+    this.applyAuthHeaders(headers);
 
     // 安全地添加自定义headers，过滤掉null/undefined值
     if (this.config.headers) {
@@ -551,10 +863,6 @@ export class MCPClient {
           headers[key] = String(value);
         }
       });
-    }
-
-    if (this.config.apiKey) {
-      headers['Authorization'] = `Bearer ${this.config.apiKey}`;
     }
 
     try {
@@ -685,8 +993,9 @@ export class MCPClient {
       }
     });
 
-    // 生成建议
-    if (level === 'high' || level === 'critical') {
+    // 生成建议 - 使用数组来避免类型推断问题
+    const dangerousLevels: SecurityRiskLevel[] = ['high', 'critical'];
+    if (dangerousLevels.includes(level)) {
       recommendations.push('建议在受控环境中测试此工具');
       recommendations.push('确认工具的预期行为与实际行为一致');
     }

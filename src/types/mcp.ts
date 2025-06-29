@@ -39,6 +39,42 @@ export interface JSONRPCNotification extends JSONRPCMessage {
 }
 
 /**
+ * 认证类型
+ */
+export type AuthType = 'none' | 'combined';
+
+/**
+ * 组合认证配置
+ */
+export interface CombinedAuth {
+  type: 'combined';
+  apiKey?: {
+    apiKey: string;
+    headerName?: string; // 默认为 'Authorization'
+    prefix?: string; // 默认为 'Bearer '
+  };
+  urlParams?: Array<{
+    name: string;
+    value: string;
+  }>;
+  customHeaders?: Array<{
+    name: string;
+    value: string;
+  }>;
+  basicAuth?: {
+    username: string;
+    password: string;
+  };
+}
+
+/**
+ * 认证配置联合类型
+ */
+export type AuthConfig = 
+  | { type: 'none' }
+  | CombinedAuth;
+
+/**
  * MCP 工具参数 Schema
  */
 export interface MCPToolInputSchema {
@@ -116,9 +152,9 @@ export interface MCPServerConfig {
   ssePath: string; // SSE路径，如 /sse
   messagePath?: string; // 消息路径，现在从SSE自动获取，可选
   transport: 'sse';
-  apiKey?: string;
   sessionId?: string;
   headers?: Record<string, string>;
+  auth?: AuthConfig; // 认证配置
 }
 
 /**
