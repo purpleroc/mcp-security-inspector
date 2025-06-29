@@ -46,21 +46,30 @@ export class MCPClient {
    * 应用认证到请求头
    */
   private applyAuthHeaders(headers: Record<string, string>): void {
-    if (!this.config?.auth) return;
+    if (!this.config?.auth || this.config.auth.type === 'none') return;
 
-    if (this.config.auth.type === 'headers') {
-      // 添加Basic Auth
-      if (this.config.auth.useBasicAuth && this.config.auth.basicAuthUsername && this.config.auth.basicAuthPassword) {
+    if (this.config.auth.type === 'combined') {
+      // 应用API Key认证
+      if (this.config.auth.apiKey && this.config.auth.apiKey.apiKey) {
+        const headerName = this.config.auth.apiKey.headerName || 'Authorization';
+        const prefix = this.config.auth.apiKey.prefix || 'Bearer ';
+        headers[headerName] = `${prefix}${this.config.auth.apiKey.apiKey}`;
+      }
+
+      // 应用Basic Auth
+      if (this.config.auth.basicAuth && this.config.auth.basicAuth.username && this.config.auth.basicAuth.password) {
         headers['Authorization'] = this.generateBasicAuth(
-          this.config.auth.basicAuthUsername,
-          this.config.auth.basicAuthPassword
+          this.config.auth.basicAuth.username,
+          this.config.auth.basicAuth.password
         );
       }
 
-      // 添加自定义请求头
-      this.config.auth.headers.forEach(header => {
-        headers[header.name] = header.value;
-      });
+      // 应用自定义请求头
+      if (this.config.auth.customHeaders) {
+        this.config.auth.customHeaders.forEach(header => {
+          headers[header.name] = header.value;
+        });
+      }
     }
   }
 
@@ -68,16 +77,26 @@ export class MCPClient {
    * 为URL添加认证参数
    */
   private applyAuthToUrl(url: string): string {
-    if (!this.config?.auth || this.config.auth.type !== 'url_params') {
+    if (!this.config?.auth || this.config.auth.type === 'none') {
       return url;
     }
 
     const urlObj = new URL(url);
-    this.config.auth.params.forEach(param => {
-      urlObj.searchParams.append(param.name, param.value);
-    });
+
+    if (this.config.auth.type === 'combined' && this.config.auth.urlParams) {
+      // 组合认证：应用URL参数
+      console.log('应用URL参数认证，参数数量:', this.config.auth.urlParams.length);
+      this.config.auth.urlParams.forEach(param => {
+        if (param.name && param.value) {
+          console.log(`添加URL参数: ${param.name}=${param.value}`);
+          urlObj.searchParams.append(param.name, param.value);
+        }
+      });
+    }
     
-    return urlObj.toString();
+    const finalUrl = urlObj.toString();
+    console.log('URL参数认证后的地址:', finalUrl);
+    return finalUrl;
   }
 
   /**
@@ -149,50 +168,49 @@ export class MCPClient {
 
     let url = this.config.host.replace(/\/$/, '') + this.config.ssePath;
     
-    // 添加URL参数认证
-    if (this.config.auth?.type === 'url_params') {
-      const params = new URLSearchParams();
-      this.config.auth.params.forEach(param => {
-        params.append(param.name, param.value);
-      });
-      const paramString = params.toString();
-      if (paramString) {
-        url += (url.includes('?') ? '&' : '?') + paramString;
-      }
-    }
-
-    // 注意：EventSource不支持自定义请求头，所以headers认证无法用于SSE连接
-    // 如果配置了headers认证，尝试将认证信息转换为URL参数用于SSE连接
-    if (this.config.auth?.type === 'headers') {
-      console.warn('警告：EventSource不支持自定义请求头，headers认证无法用于SSE连接。');
+    // 如果配置了组合认证，处理其中的URL参数
+    if (this.config.auth?.type === 'combined') {
+      console.warn('警告：EventSource不支持自定义请求头，组合认证中的请求头部分无法用于SSE连接。');
       
-      // 尝试将Basic Auth转换为URL参数
-      if (this.config.auth.useBasicAuth && this.config.auth.basicAuthUsername && this.config.auth.basicAuthPassword) {
+      // 添加URL参数部分
+      if (this.config.auth.urlParams) {
         const params = new URLSearchParams();
-        params.append('auth_user', this.config.auth.basicAuthUsername);
-        params.append('auth_pass', this.config.auth.basicAuthPassword);
+        this.config.auth.urlParams.forEach(param => {
+          params.append(param.name, param.value);
+        });
         const paramString = params.toString();
         if (paramString) {
           url += (url.includes('?') ? '&' : '?') + paramString;
-          console.log('已将Basic Auth转换为URL参数用于SSE连接');
+          console.log('已将组合认证中的URL参数添加到SSE连接');
         }
       }
-      
-      // 尝试将自定义头转换为URL参数
-      this.config.auth.headers.forEach(header => {
-        // 只转换一些常见的认证头
-        if (header.name.toLowerCase() === 'authorization' || 
-            header.name.toLowerCase().includes('token') ||
-            header.name.toLowerCase().includes('key')) {
-          const params = new URLSearchParams();
-          params.append(`header_${header.name.toLowerCase()}`, header.value);
-          const paramString = params.toString();
-          if (paramString) {
-            url += (url.includes('?') ? '&' : '?') + paramString;
-            console.log(`已将请求头 ${header.name} 转换为URL参数用于SSE连接`);
-          }
+
+      // 尝试将API Key转换为URL参数
+      if (this.config.auth.apiKey && this.config.auth.apiKey.apiKey) {
+        const params = new URLSearchParams();
+        const headerName = this.config.auth.apiKey.headerName || 'Authorization';
+        const prefix = this.config.auth.apiKey.prefix || 'Bearer ';
+        const apiKeyValue = `${prefix}${this.config.auth.apiKey.apiKey}`;
+        
+        params.append(`header_${headerName.toLowerCase()}`, apiKeyValue);
+        const paramString = params.toString();
+        if (paramString) {
+          url += (url.includes('?') ? '&' : '?') + paramString;
+          console.log(`已将组合认证中的API Key转换为URL参数用于SSE连接：${headerName}`);
         }
-      });
+      }
+
+      // 尝试将Basic Auth转换为URL参数
+      if (this.config.auth.basicAuth && this.config.auth.basicAuth.username && this.config.auth.basicAuth.password) {
+        const params = new URLSearchParams();
+        params.append('auth_user', this.config.auth.basicAuth.username);
+        params.append('auth_pass', this.config.auth.basicAuth.password);
+        const paramString = params.toString();
+        if (paramString) {
+          url += (url.includes('?') ? '&' : '?') + paramString;
+          console.log('已将组合认证中的Basic Auth转换为URL参数用于SSE连接');
+        }
+      }
       
       console.warn('注意：服务器需要支持这些URL参数格式的认证。如果服务器不支持，SSE连接可能失败。');
     }
@@ -233,7 +251,9 @@ export class MCPClient {
     if (!this.config) return;
 
     return new Promise(async (resolve, reject) => {
-      const sseEndpoint = this.config.host.replace(/\/$/, '') + this.config.ssePath;
+      // 构建SSE端点URL并应用URL参数认证
+      const baseSSEEndpoint = this.config.host.replace(/\/$/, '') + this.config.ssePath;
+      const sseEndpoint = this.applyAuthToUrl(baseSSEEndpoint);
       console.log('使用Fetch方式建立SSE连接到:', sseEndpoint);
 
       const headers: Record<string, string> = {
@@ -385,9 +405,9 @@ export class MCPClient {
   private async establishSSEConnection(): Promise<void> {
     if (!this.config) return;
 
-    // 如果配置了headers认证，优先使用Fetch方式
-    if (this.config.auth?.type === 'headers') {
-      console.log('检测到headers认证，使用Fetch方式建立SSE连接以支持自定义请求头');
+    // 如果配置了组合认证，优先使用Fetch方式（支持自定义请求头）
+    if (this.config.auth?.type === 'combined') {
+      console.log('检测到组合认证方式，使用Fetch方式建立SSE连接以支持自定义请求头');
       return this.establishFetchSSEConnection();
     }
 

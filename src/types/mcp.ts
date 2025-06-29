@@ -41,31 +41,30 @@ export interface JSONRPCNotification extends JSONRPCMessage {
 /**
  * 认证类型
  */
-export type AuthType = 'none' | 'url_params' | 'headers';
+export type AuthType = 'none' | 'combined';
 
 /**
- * URL参数认证配置
+ * 组合认证配置
  */
-export interface URLParamsAuth {
-  type: 'url_params';
-  params: Array<{
+export interface CombinedAuth {
+  type: 'combined';
+  apiKey?: {
+    apiKey: string;
+    headerName?: string; // 默认为 'Authorization'
+    prefix?: string; // 默认为 'Bearer '
+  };
+  urlParams?: Array<{
     name: string;
     value: string;
   }>;
-}
-
-/**
- * 请求头认证配置
- */
-export interface HeadersAuth {
-  type: 'headers';
-  headers: Array<{
+  customHeaders?: Array<{
     name: string;
     value: string;
   }>;
-  useBasicAuth?: boolean;
-  basicAuthUsername?: string;
-  basicAuthPassword?: string;
+  basicAuth?: {
+    username: string;
+    password: string;
+  };
 }
 
 /**
@@ -73,8 +72,7 @@ export interface HeadersAuth {
  */
 export type AuthConfig = 
   | { type: 'none' }
-  | URLParamsAuth
-  | HeadersAuth;
+  | CombinedAuth;
 
 /**
  * MCP 工具参数 Schema

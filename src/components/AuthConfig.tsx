@@ -9,265 +9,259 @@ interface AuthConfigProps {
 }
 
 const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => {
-  const authType = value?.type || 'none';
+  const authEnabled = value?.type === 'combined';
 
-  const handleAuthTypeChange = (type: AuthType) => {
-    let newConfig: AuthConfig;
-    switch (type) {
-      case 'none':
-        newConfig = { type: 'none' };
-        break;
-      case 'url_params':
-        newConfig = { type: 'url_params', params: [] };
-        break;
-      case 'headers':
-        newConfig = { 
-          type: 'headers', 
-          headers: [],
-          useBasicAuth: false
-        };
-        break;
-      default:
-        newConfig = { type: 'none' };
-    }
-    onChange?.(newConfig);
-  };
-
-  const handleParamsChange = (params: Array<{ name: string; value: string }>) => {
-    if (value?.type === 'url_params') {
-      onChange?.({ 
-        ...value, 
-        params: params || []
-      });
+  const handleAuthToggle = (enabled: boolean) => {
+    if (enabled) {
+      onChange?.({ type: 'combined' });
+    } else {
+      onChange?.({ type: 'none' });
     }
   };
 
-  const handleHeadersChange = (headers: Array<{ name: string; value: string }>) => {
-    if (value?.type === 'headers') {
+  // 组合认证处理方法
+  const handleCombinedChange = (section: 'apiKey' | 'urlParams' | 'customHeaders' | 'basicAuth', data: any) => {
+    if (value?.type === 'combined') {
       onChange?.({ 
         ...value, 
-        headers: headers || []
-      });
-    }
-  };
-
-  const handleBasicAuthToggle = (useBasicAuth: boolean) => {
-    if (value?.type === 'headers') {
-      onChange?.({ 
-        ...value, 
-        useBasicAuth,
-        basicAuthUsername: useBasicAuth ? value.basicAuthUsername || '' : undefined,
-        basicAuthPassword: useBasicAuth ? value.basicAuthPassword || '' : undefined
-      });
-    }
-  };
-
-  const handleBasicAuthChange = (field: 'basicAuthUsername' | 'basicAuthPassword', val: string) => {
-    if (value?.type === 'headers') {
-      onChange?.({ 
-        ...value, 
-        [field]: val
+        [section]: data
       });
     }
   };
 
   return (
     <Card title="认证配置" size="small" style={{ marginBottom: 16 }}>
-      <Form.Item label="认证类型">
-        <Select
-          value={authType}
-          onChange={handleAuthTypeChange}
-          options={[
-            { label: '无认证', value: 'none' },
-            { label: 'URL参数认证', value: 'url_params' },
-            { label: '请求头认证', value: 'headers' }
-          ]}
+      <Form.Item label="启用认证" valuePropName="checked">
+        <Switch
+          checked={authEnabled}
+          onChange={handleAuthToggle}
         />
+        <span style={{ marginLeft: 8, fontSize: '12px', color: '#666' }}>
+          {authEnabled ? '已启用认证功能' : '未启用认证'}
+        </span>
       </Form.Item>
 
-      {authType === 'url_params' && (
+      {authEnabled && (
         <div>
-          <Form.Item label="URL参数">
-            <Form.List
-              name={['auth', 'params']}
-              initialValue={value?.type === 'url_params' ? value.params : []}
-            >
-              {(fields, { add, remove }) => (
-                <>
-                  {fields.map(({ key, name, ...restField }) => (
-                    <Space key={key} style={{ display: 'flex', marginBottom: 8 }} align="baseline">
-                      <Form.Item
-                        {...restField}
-                        name={[name, 'name']}
-                        rules={[{ required: true, message: '请输入参数名' }]}
-                      >
-                        <Input 
-                          placeholder="参数名" 
-                          style={{ width: 150 }}
-                          onChange={(e) => {
-                            // 实时更新认证配置
-                            const params = [...(value?.type === 'url_params' ? value.params : [])];
-                            if (params[name]) {
-                              params[name] = { ...params[name], name: e.target.value };
-                            } else {
-                              params[name] = { name: e.target.value, value: '' };
-                            }
-                            handleParamsChange(params);
-                          }}
-                        />
-                      </Form.Item>
-                      <Form.Item
-                        {...restField}
-                        name={[name, 'value']}
-                        rules={[{ required: true, message: '请输入参数值' }]}
-                      >
-                        <Input 
-                          placeholder="参数值" 
-                          style={{ width: 200 }}
-                          onChange={(e) => {
-                            // 实时更新认证配置
-                            const params = [...(value?.type === 'url_params' ? value.params : [])];
-                            if (params[name]) {
-                              params[name] = { ...params[name], value: e.target.value };
-                            } else {
-                              params[name] = { name: '', value: e.target.value };
-                            }
-                            handleParamsChange(params);
-                          }}
-                        />
-                      </Form.Item>
-                      <MinusCircleOutlined onClick={() => {
-                        remove(name);
-                        // 同时从认证配置中移除
-                        const params = [...(value?.type === 'url_params' ? value.params : [])];
-                        params.splice(name, 1);
-                        handleParamsChange(params);
-                      }} />
-                    </Space>
-                  ))}
-                  <Form.Item>
-                    <Button type="dashed" onClick={() => {
-                      add();
-                      // 同时添加到认证配置
-                      const params = [...(value?.type === 'url_params' ? value.params : [])];
-                      params.push({ name: '', value: '' });
-                      handleParamsChange(params);
-                    }} block icon={<PlusOutlined />}>
-                      添加URL参数
-                    </Button>
-                  </Form.Item>
-                </>
-              )}
-            </Form.List>
-          </Form.Item>
-        </div>
-      )}
+          <div style={{ marginBottom: 16, padding: '8px 12px', backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: '6px' }}>
+            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#52c41a', marginBottom: '4px' }}>
+              组合认证模式
+            </div>
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              可以同时配置多种认证方式，系统会自动组合应用这些认证配置
+            </div>
+          </div>
 
-      {authType === 'headers' && (
-        <div>
-          <Form.Item label="Basic Auth" valuePropName="checked">
+          {/* API Key 配置 */}
+          <Form.Item label="API Key 认证" valuePropName="checked">
             <Switch
-              checked={value?.type === 'headers' ? value.useBasicAuth : false}
-              onChange={handleBasicAuthToggle}
+              checked={value?.type === 'combined' && !!value.apiKey}
+              onChange={(checked) => {
+                if (checked) {
+                  handleCombinedChange('apiKey', {
+                    apiKey: '',
+                    headerName: 'Authorization',
+                    prefix: 'Bearer '
+                  });
+                } else {
+                  handleCombinedChange('apiKey', undefined);
+                }
+              }}
             />
             <span style={{ marginLeft: 8, fontSize: '12px', color: '#666' }}>
-              启用Basic Authentication
+              启用 API Key 认证
             </span>
           </Form.Item>
 
-          {value?.type === 'headers' && value.useBasicAuth && (
-            <>
+          {value?.type === 'combined' && value.apiKey && (
+            <div style={{ marginLeft: 24, marginBottom: 16 }}>
+              <Form.Item label="API Key" required>
+                <Input.Password
+                  placeholder="请输入API Key"
+                  value={value.apiKey.apiKey || ''}
+                  onChange={(e) => handleCombinedChange('apiKey', { ...value.apiKey, apiKey: e.target.value })}
+                />
+              </Form.Item>
+              <Form.Item label="请求头名称">
+                <Input
+                  placeholder="Authorization"
+                  value={value.apiKey.headerName || 'Authorization'}
+                  onChange={(e) => handleCombinedChange('apiKey', { ...value.apiKey, headerName: e.target.value })}
+                />
+              </Form.Item>
+              <Form.Item label="前缀">
+                <Input
+                  placeholder="Bearer "
+                  value={value.apiKey.prefix || 'Bearer '}
+                  onChange={(e) => handleCombinedChange('apiKey', { ...value.apiKey, prefix: e.target.value })}
+                />
+              </Form.Item>
+            </div>
+          )}
+
+          {/* URL 参数配置 */}
+          <Form.Item label="URL 参数认证" valuePropName="checked">
+            <Switch
+              checked={value?.type === 'combined' && !!value.urlParams}
+              onChange={(checked) => {
+                if (checked) {
+                  handleCombinedChange('urlParams', [{ name: '', value: '' }]);
+                } else {
+                  handleCombinedChange('urlParams', undefined);
+                }
+              }}
+            />
+            <span style={{ marginLeft: 8, fontSize: '12px', color: '#666' }}>
+              启用 URL 参数认证
+            </span>
+          </Form.Item>
+
+          {value?.type === 'combined' && value.urlParams !== undefined && (
+            <div style={{ marginLeft: 24, marginBottom: 16 }}>
+              {value.urlParams.map((param, index) => (
+                <Space key={index} style={{ display: 'flex', marginBottom: 8 }} align="baseline">
+                  <Input 
+                    placeholder="参数名" 
+                    style={{ width: 150 }}
+                    value={param.name || ''}
+                    onChange={(e) => {
+                      const params = [...value.urlParams!];
+                      params[index] = { ...params[index], name: e.target.value };
+                      handleCombinedChange('urlParams', params);
+                    }}
+                  />
+                  <Input 
+                    placeholder="参数值" 
+                    style={{ width: 200 }}
+                    value={param.value || ''}
+                    onChange={(e) => {
+                      const params = [...value.urlParams!];
+                      params[index] = { ...params[index], value: e.target.value };
+                      handleCombinedChange('urlParams', params);
+                    }}
+                  />
+                  <MinusCircleOutlined onClick={() => {
+                    const params = [...value.urlParams!];
+                    params.splice(index, 1);
+                    handleCombinedChange('urlParams', params.length > 0 ? params : [{ name: '', value: '' }]);
+                  }} />
+                </Space>
+              ))}
+              <Button 
+                type="dashed" 
+                onClick={() => {
+                  const params = [...(value.urlParams || [])];
+                  params.push({ name: '', value: '' });
+                  handleCombinedChange('urlParams', params);
+                }} 
+                block 
+                icon={<PlusOutlined />}
+                style={{ marginTop: 8 }}
+              >
+                添加URL参数
+              </Button>
+            </div>
+          )}
+
+          {/* Basic Auth 配置 */}
+          <Form.Item label="Basic Auth 认证" valuePropName="checked">
+            <Switch
+              checked={value?.type === 'combined' && !!value.basicAuth}
+              onChange={(checked) => {
+                if (checked) {
+                  handleCombinedChange('basicAuth', { username: '', password: '' });
+                } else {
+                  handleCombinedChange('basicAuth', undefined);
+                }
+              }}
+            />
+            <span style={{ marginLeft: 8, fontSize: '12px', color: '#666' }}>
+              启用 Basic Auth 认证
+            </span>
+          </Form.Item>
+
+          {value?.type === 'combined' && value.basicAuth && (
+            <div style={{ marginLeft: 24, marginBottom: 16 }}>
               <Form.Item label="用户名">
                 <Input
                   placeholder="Basic Auth用户名"
-                  value={value.basicAuthUsername || ''}
-                  onChange={(e) => handleBasicAuthChange('basicAuthUsername', e.target.value)}
+                  value={value.basicAuth.username || ''}
+                  onChange={(e) => handleCombinedChange('basicAuth', { ...value.basicAuth, username: e.target.value })}
                 />
               </Form.Item>
               <Form.Item label="密码">
                 <Input.Password
                   placeholder="Basic Auth密码"
-                  value={value.basicAuthPassword || ''}
-                  onChange={(e) => handleBasicAuthChange('basicAuthPassword', e.target.value)}
+                  value={value.basicAuth.password || ''}
+                  onChange={(e) => handleCombinedChange('basicAuth', { ...value.basicAuth, password: e.target.value })}
                 />
               </Form.Item>
-              <Divider style={{ margin: '12px 0' }} />
-            </>
+            </div>
           )}
 
-          <Form.Item label="自定义请求头">
-            <Form.List
-              name={['auth', 'headers']}
-              initialValue={value?.type === 'headers' ? value.headers : []}
-            >
-              {(fields, { add, remove }) => (
-                <>
-                  {fields.map(({ key, name, ...restField }) => (
-                    <Space key={key} style={{ display: 'flex', marginBottom: 8 }} align="baseline">
-                      <Form.Item
-                        {...restField}
-                        name={[name, 'name']}
-                        rules={[{ required: true, message: '请输入请求头名称' }]}
-                      >
-                        <Input 
-                          placeholder="请求头名称（如：Authorization）" 
-                          style={{ width: 200 }}
-                          onChange={(e) => {
-                            // 实时更新认证配置
-                            const headers = [...(value?.type === 'headers' ? value.headers : [])];
-                            if (headers[name]) {
-                              headers[name] = { ...headers[name], name: e.target.value };
-                            } else {
-                              headers[name] = { name: e.target.value, value: '' };
-                            }
-                            handleHeadersChange(headers);
-                          }}
-                        />
-                      </Form.Item>
-                      <Form.Item
-                        {...restField}
-                        name={[name, 'value']}
-                        rules={[{ required: true, message: '请输入请求头值' }]}
-                      >
-                        <Input 
-                          placeholder="请求头值" 
-                          style={{ width: 250 }}
-                          onChange={(e) => {
-                            // 实时更新认证配置
-                            const headers = [...(value?.type === 'headers' ? value.headers : [])];
-                            if (headers[name]) {
-                              headers[name] = { ...headers[name], value: e.target.value };
-                            } else {
-                              headers[name] = { name: '', value: e.target.value };
-                            }
-                            handleHeadersChange(headers);
-                          }}
-                        />
-                      </Form.Item>
-                      <MinusCircleOutlined onClick={() => {
-                        remove(name);
-                        // 同时从认证配置中移除
-                        const headers = [...(value?.type === 'headers' ? value.headers : [])];
-                        headers.splice(name, 1);
-                        handleHeadersChange(headers);
-                      }} />
-                    </Space>
-                  ))}
-                  <Form.Item>
-                    <Button type="dashed" onClick={() => {
-                      add();
-                      // 同时添加到认证配置
-                      const headers = [...(value?.type === 'headers' ? value.headers : [])];
-                      headers.push({ name: '', value: '' });
-                      handleHeadersChange(headers);
-                    }} block icon={<PlusOutlined />}>
-                      添加自定义请求头
-                    </Button>
-                  </Form.Item>
-                </>
-              )}
-            </Form.List>
+          {/* 自定义请求头配置 */}
+          <Form.Item label="自定义请求头" valuePropName="checked">
+            <Switch
+              checked={value?.type === 'combined' && !!value.customHeaders}
+              onChange={(checked) => {
+                if (checked) {
+                  handleCombinedChange('customHeaders', [{ name: '', value: '' }]);
+                } else {
+                  handleCombinedChange('customHeaders', undefined);
+                }
+              }}
+            />
+            <span style={{ marginLeft: 8, fontSize: '12px', color: '#666' }}>
+              启用自定义请求头
+            </span>
           </Form.Item>
+
+          {value?.type === 'combined' && value.customHeaders !== undefined && (
+            <div style={{ marginLeft: 24 }}>
+              {value.customHeaders.map((header, index) => (
+                <Space key={index} style={{ display: 'flex', marginBottom: 8 }} align="baseline">
+                  <Input 
+                    placeholder="请求头名称" 
+                    style={{ width: 200 }}
+                    value={header.name || ''}
+                    onChange={(e) => {
+                      const headers = [...value.customHeaders!];
+                      headers[index] = { ...headers[index], name: e.target.value };
+                      handleCombinedChange('customHeaders', headers);
+                    }}
+                  />
+                  <Input 
+                    placeholder="请求头值" 
+                    style={{ width: 250 }}
+                    value={header.value || ''}
+                    onChange={(e) => {
+                      const headers = [...value.customHeaders!];
+                      headers[index] = { ...headers[index], value: e.target.value };
+                      handleCombinedChange('customHeaders', headers);
+                    }}
+                  />
+                  <MinusCircleOutlined onClick={() => {
+                    const headers = [...value.customHeaders!];
+                    headers.splice(index, 1);
+                    handleCombinedChange('customHeaders', headers.length > 0 ? headers : [{ name: '', value: '' }]);
+                  }} />
+                </Space>
+              ))}
+              <Button 
+                type="dashed" 
+                onClick={() => {
+                  const headers = [...(value.customHeaders || [])];
+                  headers.push({ name: '', value: '' });
+                  handleCombinedChange('customHeaders', headers);
+                }} 
+                block 
+                icon={<PlusOutlined />}
+                style={{ marginTop: 8 }}
+              >
+                添加自定义请求头
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </Card>

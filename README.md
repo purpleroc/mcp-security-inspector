@@ -95,7 +95,12 @@ python3 test-mcp-server.py
 
 ## 更新日志
 
-### v1.0.2 (当前版本)
+### v1.0.3 (当前版本)
+- 本地保存历史连接服务列表
+- 本地保存历史调用详情
+- 增加多种认证适配，支持apikey、自定义header、basic auth、get参数
+
+### v1.0.2
 - 修复去掉host_permissions导致cors的错误
 - 去掉多余配置，单纯从sse url获取
 
