@@ -53,10 +53,7 @@
 ## 📊 权限说明
 
 插件请求的权限及原因：
-- `storage`: 保存MCP服务器配置
-- `activeTab`: 与当前标签页交互
-- `tabs`: 创建新标签页
-- `<all_urls>`: 连接MCP服务器
+- `<all_urls>`: 连接MCP服务器和处理CORS
 
 ## 🔒 隐私政策要点
 

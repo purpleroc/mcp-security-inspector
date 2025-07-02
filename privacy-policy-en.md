@@ -37,7 +37,7 @@ We collect data only for:
 
 ### 4.1 Local Storage
 - All data is stored locally in your browser
-- Uses Chrome's storage API for secure storage
+- Uses browser standard localStorage for local storage
 - Data is not uploaded to our servers
 
 ### 4.2 Network Requests
