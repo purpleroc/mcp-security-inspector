@@ -29,11 +29,13 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store';
 import { callTool, readResource, getPrompt } from '../store/mcpSlice';
 import { MCPTool, MCPResource, MCPPrompt, SecurityRiskLevel } from '../types/mcp';
+import { useI18n } from '../hooks/useI18n';
 
 const { Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
 const MCPExplorer: React.FC = () => {
+  const { t } = useI18n();
   const dispatch = useDispatch();
   const { 
     connectionStatus, 
@@ -73,9 +75,9 @@ const MCPExplorer: React.FC = () => {
     try {
       await dispatch(callTool({ tool: selectedTool, parameters: toolParams }) as any).unwrap();
       setShowResult(true);
-      message.success('工具调用成功');
+      message.success(t.success.connected);
     } catch (error) {
-      message.error(`工具调用失败: ${error}`);
+      message.error(`${t.errors.toolCallFailed}: ${error}`);
     }
   };
 
@@ -107,9 +109,9 @@ const MCPExplorer: React.FC = () => {
 
       await dispatch(readResource({ resource: resourceToRead, parameters: resourceParams }) as any).unwrap();
       setShowResult(true);
-      message.success('资源读取成功');
+      message.success(t.success.connected);
     } catch (error) {
-      message.error(`资源读取失败: ${error}`);
+      message.error(`${t.errors.resourceReadFailed}: ${error}`);
     }
   };
 
@@ -120,9 +122,9 @@ const MCPExplorer: React.FC = () => {
     try {
       await dispatch(getPrompt({ prompt: selectedPrompt, parameters: promptParams }) as any).unwrap();
       setShowResult(true);
-      message.success('提示获取成功');
+      message.success(t.success.connected);
     } catch (error) {
-      message.error(`提示获取失败: ${error}`);
+      message.error(`${t.errors.promptGetFailed}: ${error}`);
     }
   };
 
@@ -145,7 +147,7 @@ const MCPExplorer: React.FC = () => {
           >
             {prop.type === 'string' && prop.enum ? (
               <Select
-                placeholder={`选择 ${key}（可选）`}
+                placeholder={`${t.tools.selectTool} ${key}`}
                 value={values[key]}
                 allowClear
                 onChange={(value: any) => onChange({ ...values, [key]: value })}
@@ -161,11 +163,11 @@ const MCPExplorer: React.FC = () => {
                 checked={values[key] || false}
                 onChange={(e: any) => onChange({ ...values, [key]: e.target.checked })}
               >
-                {prop.title || key}（可选）
+                {prop.title || key}
               </Checkbox>
             ) : (
               <Input
-                placeholder={prop.description ? `${prop.description}（可选）` : `输入 ${key}（可选）`}
+                placeholder={prop.description ? prop.description : `${t.tools.pleaseInput} ${key}`}
                 value={values[key] || ''}
                 onChange={(e) => onChange({ ...values, [key]: e.target.value })}
               />
@@ -180,8 +182,8 @@ const MCPExplorer: React.FC = () => {
     return (
       <div style={{ padding: 24, textAlign: 'center' }}>
         <Alert
-          message="未连接到MCP服务器"
-          description="请先在配置页面连接到MCP服务器"
+          message={t.explorer.noConnection}
+          description={t.explorer.connectFirst}
           type="warning"
           showIcon
         />
@@ -197,14 +199,14 @@ const MCPExplorer: React.FC = () => {
       label: (
         <Space>
           <ToolOutlined />
-          <span>工具 (Tools)</span>
+          <span>{t.tools.title}</span>
           <Badge count={tools.length} />
         </Space>
       ),
       children: (
         <div>
           {tools.length === 0 ? (
-            <Alert message="没有可用的工具" type="info" />
+            <Alert message={t.tools.noTools} type="info" />
           ) : (
             <List
               dataSource={tools}
@@ -219,7 +221,7 @@ const MCPExplorer: React.FC = () => {
                         setToolParams({}); // 清空参数状态
                       }}
                     >
-                      {selectedTool?.name === tool.name ? '已选择' : '选择'}
+                      {selectedTool?.name === tool.name ? t.tools.selectTool : t.tools.selectTool}
                     </Button>
                   ]}
                 >
@@ -235,7 +237,7 @@ const MCPExplorer: React.FC = () => {
           {selectedTool && (
             <>
               <Divider />
-              <Card size="small" title={`调用工具: ${selectedTool.name}`}>
+              <Card size="small" title={`${t.tools.callTool}: ${selectedTool.name}`}>
                 {renderParameterForm(
                   selectedTool.inputSchema,
                   toolParams,
@@ -244,12 +246,12 @@ const MCPExplorer: React.FC = () => {
                 
                 {securityCheck && (
                   <Alert
-                    message={`安全风险等级: ${securityCheck.level.toUpperCase()}`}
+                    message={`${t.security.riskAssessment}: ${securityCheck.level.toUpperCase()}`}
                     description={
                       <div>
                         {securityCheck.warnings.length > 0 && (
                           <div>
-                            <Text strong>警告:</Text>
+                            <Text strong>{t.common.warning}:</Text>
                             <ul>
                               {securityCheck.warnings.map((warning, idx) => (
                                 <li key={idx}>{warning}</li>
@@ -259,7 +261,7 @@ const MCPExplorer: React.FC = () => {
                         )}
                         {securityCheck.recommendations.length > 0 && (
                           <div>
-                            <Text strong>建议:</Text>
+                            <Text strong>{t.security.recommendations}:</Text>
                             <ul>
                               {securityCheck.recommendations.map((rec, idx) => (
                                 <li key={idx}>{rec}</li>
@@ -281,7 +283,7 @@ const MCPExplorer: React.FC = () => {
                   onClick={handleToolCall}
                   loading={isLoading}
                 >
-                  执行工具
+                  {t.tools.callTool}
                 </Button>
               </Card>
             </>
@@ -295,19 +297,19 @@ const MCPExplorer: React.FC = () => {
       label: (
         <Space>
           <FileTextOutlined />
-          <span>资源 (Resources)</span>
+          <span>{t.resources.title}</span>
           <Badge count={resources.length + resourceTemplates.length} />
         </Space>
       ),
       children: (
         <div>
           {resources.length === 0 && resourceTemplates.length === 0 ? (
-            <Alert message="没有可用的资源" type="info" />
+            <Alert message={t.resources.noResources} type="info" />
           ) : (
             <div>
               {resources.length > 0 && (
                 <div>
-                  <Text strong>静态资源 ({resources.length})</Text>
+                  <Text strong>{t.resources.staticResources} ({resources.length})</Text>
                   <List
                     dataSource={resources}
                     renderItem={(resource) => (
@@ -321,7 +323,7 @@ const MCPExplorer: React.FC = () => {
                               setResourceParams({}); // 清空参数状态
                             }}
                           >
-                            {selectedResource?.uri === resource.uri ? '已选择' : '选择'}
+                            {selectedResource?.uri === resource.uri ? t.resources.selectResource : t.resources.selectResource}
                           </Button>
                         ]}
                       >
@@ -330,7 +332,7 @@ const MCPExplorer: React.FC = () => {
                           description={
                             <div>
                               <div>{resource.description}</div>
-                              <Text type="secondary">URI: {resource.uri}</Text>
+                              <Text type="secondary">{t.resources.resourceUri}: {resource.uri}</Text>
                               {resource.mimeType && <Tag>{resource.mimeType}</Tag>}
                             </div>
                           }
@@ -343,7 +345,7 @@ const MCPExplorer: React.FC = () => {
 
               {resourceTemplates.length > 0 && (
                 <div style={{ marginTop: resources.length > 0 ? 16 : 0 }}>
-                  <Text strong>动态资源模板 ({resourceTemplates.length})</Text>
+                  <Text strong>{t.resources.templates} ({resourceTemplates.length})</Text>
                   <List
                     dataSource={resourceTemplates}
                     renderItem={(template) => (
@@ -357,7 +359,7 @@ const MCPExplorer: React.FC = () => {
                               setResourceParams({}); // 清空参数状态
                             }}
                           >
-                            {selectedResource?.name === template.name ? '已选择' : '选择'}
+                            {selectedResource?.name === template.name ? t.resources.selectResource : t.resources.selectResource}
                           </Button>
                         ]}
                       >
@@ -366,9 +368,9 @@ const MCPExplorer: React.FC = () => {
                           description={
                             <div>
                               <div>{template.description}</div>
-                              <Text type="secondary">URI模板: {(template as any).uriTemplate}</Text>
+                              <Text type="secondary">{t.resources.resourceUri}: {(template as any).uriTemplate}</Text>
                               {template.mimeType && <Tag>{template.mimeType}</Tag>}
-                              <Tag color="blue">动态模板</Tag>
+                              <Tag color="blue">{t.resources.templates}</Tag>
                             </div>
                           }
                         />
@@ -377,59 +379,38 @@ const MCPExplorer: React.FC = () => {
                   />
                 </div>
               )}
-            </div>
-          )}
 
-          {selectedResource && (
-            <>
-              <Divider />
-              <Card size="small" title={`读取资源: ${selectedResource.name || selectedResource.uri}`}>
-                {/* 如果是动态资源模板，显示参数输入表单 */}
-                {(() => {
-                  // 处理动态资源模板的URI字段
-                  const uri = selectedResource.uri || (selectedResource as any).uriTemplate;
-                  const hasParams = uri && uri.includes('{');
-                  
-                  return hasParams && (
-                    <div style={{ marginBottom: 16 }}>
-                      <Text strong>URI参数配置：</Text>
-                      <Form layout="vertical" style={{ marginTop: 8 }}>
-                        {/* 解析URI模板中的参数 */}
-                        {(() => {
-                          const matches = uri.match(/\{([^}]+)\}/g) || [];
-                          const paramNames = matches.map((match: string) => match.slice(1, -1));
-                          return paramNames.map((paramName: string) => (
-                            <Form.Item
-                              key={paramName}
-                              label={paramName}
-                              required={false}
-                            >
-                              <Input
-                                placeholder={`输入${paramName}参数（可选）`}
-                                value={resourceParams[paramName] || ''}
-                                onChange={(e) => setResourceParams({
-                                  ...resourceParams,
-                                  [paramName]: e.target.value
-                                })}
-                              />
-                            </Form.Item>
-                          ));
-                        })()}
-                      </Form>
-                    </div>
-                  );
-                })()}
-                
-                <Button 
-                  type="primary" 
-                  icon={<PlayCircleOutlined />}
-                  onClick={handleResourceRead}
-                  loading={isLoading}
-                >
-                  读取资源
-                </Button>
-              </Card>
-            </>
+              {selectedResource && (
+                <>
+                  <Divider />
+                  <Card size="small" title={`${t.resources.readResource}: ${selectedResource.name || selectedResource.uri}`}>
+                    {selectedResource.uri && selectedResource.uri.includes('{') && (
+                      <div style={{ marginBottom: 16 }}>
+                        <Alert
+                          message={`${t.resources.resourceUri}: ${selectedResource.uri}`}
+                          type="info"
+                          style={{ marginBottom: 16 }}
+                        />
+                        {renderParameterForm(
+                          (selectedResource as any).inputSchema || { properties: {} },
+                          resourceParams,
+                          setResourceParams
+                        )}
+                      </div>
+                    )}
+
+                    <Button 
+                      type="primary" 
+                      icon={<PlayCircleOutlined />}
+                      onClick={handleResourceRead}
+                      loading={isLoading}
+                    >
+                      {t.resources.readResource}
+                    </Button>
+                  </Card>
+                </>
+              )}
+            </div>
           )}
         </div>
       )
@@ -440,14 +421,14 @@ const MCPExplorer: React.FC = () => {
       label: (
         <Space>
           <MessageOutlined />
-          <span>提示 (Prompts)</span>
+          <span>{t.prompts.title}</span>
           <Badge count={prompts.length} />
         </Space>
       ),
       children: (
         <div>
           {prompts.length === 0 ? (
-            <Alert message="没有可用的提示" type="info" />
+            <Alert message={t.prompts.noPrompts} type="info" />
           ) : (
             <List
               dataSource={prompts}
@@ -462,7 +443,7 @@ const MCPExplorer: React.FC = () => {
                         setPromptParams({}); // 清空参数状态
                       }}
                     >
-                      {selectedPrompt?.name === prompt.name ? '已选择' : '选择'}
+                      {selectedPrompt?.name === prompt.name ? t.prompts.selectPrompt : t.prompts.selectPrompt}
                     </Button>
                   ]}
                 >
@@ -478,7 +459,7 @@ const MCPExplorer: React.FC = () => {
           {selectedPrompt && (
             <>
               <Divider />
-              <Card size="small" title={`获取提示: ${selectedPrompt.name}`}>
+              <Card size="small" title={`${t.prompts.getPrompt}: ${selectedPrompt.name}`}>
                 {selectedPrompt.arguments && selectedPrompt.arguments.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
                     <Form layout="vertical">
@@ -490,7 +471,7 @@ const MCPExplorer: React.FC = () => {
                           required={false}
                         >
                           <Input
-                            placeholder={arg.description ? `${arg.description}（可选）` : `输入 ${arg.name}（可选）`}
+                            placeholder={arg.description ? arg.description : `${t.prompts.pleaseInput} ${arg.name}`}
                             value={promptParams[arg.name] || ''}
                             onChange={(e) => setPromptParams({ 
                               ...promptParams, 
@@ -509,7 +490,7 @@ const MCPExplorer: React.FC = () => {
                   onClick={handlePromptGet}
                   loading={isLoading}
                 >
-                  获取提示
+                  {t.prompts.getPrompt}
                 </Button>
               </Card>
             </>
@@ -520,46 +501,50 @@ const MCPExplorer: React.FC = () => {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      <Card title="MCP功能浏览器">
-        <Collapse 
-          defaultActiveKey={tools.length > 0 ? ['tools'] : []}
-          items={collapseItems}
-        />
+    <div style={{ height: '100%', overflow: 'auto' }}>
+      <Collapse 
+        items={collapseItems}
+        defaultActiveKey={['tools', 'resources', 'prompts']}
+        size="small"
+      />
 
-        {/* 结果显示模态框 */}
-        <Modal
-          title="执行结果"
-          open={showResult}
-          onCancel={() => setShowResult(false)}
-          footer={[
-            <Button key="close" onClick={() => setShowResult(false)}>
-              关闭
-            </Button>
-          ]}
-          width={800}
-        >
-          {lastError ? (
-            <Alert
-              message="执行出错"
-              description={lastError}
-              type="error"
-              showIcon
-            />
-          ) : lastResult ? (
-            <div>
-              <Paragraph>
-                <Text strong>执行成功</Text>
-              </Paragraph>
-              <TextArea
-                value={JSON.stringify(lastResult, null, 2)}
-                rows={20}
-                readOnly
-              />
+      {/* 结果显示模态框 */}
+      <Modal
+        title={t.tools.result}
+        open={showResult}
+        onCancel={() => setShowResult(false)}
+        footer={[
+          <Button key="close" onClick={() => setShowResult(false)}>
+            {t.common.close}
+          </Button>
+        ]}
+        width={800}
+      >
+        {lastError ? (
+          <Alert
+            message={t.common.error}
+            description={lastError}
+            type="error"
+          />
+        ) : lastResult ? (
+          <div>
+            <Paragraph>
+              <Text strong>{t.tools.result}:</Text>
+            </Paragraph>
+            <div style={{ 
+              backgroundColor: '#f5f5f5', 
+              padding: 16, 
+              borderRadius: 4,
+              maxHeight: 400,
+              overflow: 'auto'
+            }}>
+              <pre>{JSON.stringify(lastResult, null, 2)}</pre>
             </div>
-          ) : null}
-        </Modal>
-      </Card>
+          </div>
+        ) : (
+          <div>{t.common.loading}</div>
+        )}
+      </Modal>
     </div>
   );
 };

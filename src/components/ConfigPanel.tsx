@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Form, Input, Select, Button, Card, Space, message, Divider, Switch } from 'antd';
-import { ApiOutlined, DisconnectOutlined, SaveOutlined } from '@ant-design/icons';
+import { Card, Form, Input, Button, Select, Switch, Space, message } from 'antd';
+import { ApiOutlined, SaveOutlined, DisconnectOutlined } from '@ant-design/icons';
 import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '../store';
 import { connectToServer, disconnectFromServer } from '../store/mcpSlice';
-import { MCPServerConfig, AuthConfig } from '../types/mcp';
-import AuthConfigComponent from './AuthConfig';
+import { RootState } from '../store';
+import { MCPServerConfig } from '../types/mcp';
 import { storage } from '../utils/storage';
+import AuthConfigComponent from './AuthConfig';
+import { useI18n } from '../hooks/useI18n';
 
 interface ConfigPanelProps {
   onConfigLoad?: (config: MCPServerConfig) => void;
@@ -15,40 +16,30 @@ interface ConfigPanelProps {
 }
 
 const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig, onConfigSaved }) => {
+  const { t } = useI18n();
   const dispatch = useDispatch();
-  const { connectionStatus, serverConfig } = useSelector((state: RootState) => state.mcp);
   const [form] = Form.useForm();
-  const [authConfig, setAuthConfig] = useState<AuthConfig>({ type: 'none' });
+  const { connectionStatus, serverConfig } = useSelector((state: RootState) => state.mcp);
+  const [authConfig, setAuthConfig] = useState<any>({ type: 'none' });
   const [autoSave, setAutoSave] = useState(true);
 
-  // 监听从外部选择的配置
+  // 监听选中的配置变化
   useEffect(() => {
     if (selectedConfig) {
       form.setFieldsValue({
         name: selectedConfig.name,
         host: selectedConfig.host,
         ssePath: selectedConfig.ssePath,
-        sessionId: selectedConfig.sessionId || '',
-        headers: selectedConfig.headers ? JSON.stringify(selectedConfig.headers, null, 2) : ''
+        transport: selectedConfig.transport || 'sse',
+        sessionId: selectedConfig.sessionId
       });
-      
-      if (selectedConfig.auth) {
-        setAuthConfig(selectedConfig.auth);
-      } else {
-        setAuthConfig({ type: 'none' });
-      }
+      setAuthConfig(selectedConfig.auth || { type: 'none' });
     }
   }, [selectedConfig, form]);
 
   // 连接到服务器
   const handleConnect = async (values: any) => {
     try {
-      // 验证必要字段
-      if (!values.host || !values.ssePath) {
-        message.error('请填写完整的配置信息');
-        return;
-      }
-
       const serverConfig: MCPServerConfig = {
         name: values.name,
         host: values.host,
@@ -61,13 +52,13 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
       };
       
       await dispatch(connectToServer(serverConfig) as any).unwrap();
-      message.success('连接成功');
+      message.success(t.config.messages.connectSuccess);
       
       // 连接成功后自动保存配置
       if (autoSave) {
         const saved = storage.saveMCPConfig(serverConfig);
         if (saved) {
-          message.success('配置已自动保存');
+          message.success(t.config.messages.configSavedAuto);
           // 通知刷新配置列表
           if (onConfigSaved) {
             onConfigSaved();
@@ -80,7 +71,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
         onConfigLoad(serverConfig);
       }
     } catch (error) {
-      message.error(`连接失败: ${error}`);
+      message.error(`${t.config.messages.connectFailed}: ${error}`);
     }
   };
 
@@ -88,11 +79,11 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
   const handleDisconnect = async () => {
     try {
       await dispatch(disconnectFromServer() as any).unwrap();
-      message.success('已断开连接');
+      message.success(t.config.messages.disconnectSuccess);
       form.resetFields();
       setAuthConfig({ type: 'none' });
     } catch (error) {
-      message.error(`断开连接失败: ${error}`);
+      message.error(`${t.config.messages.disconnectFailed}: ${error}`);
     }
   };
 
@@ -100,7 +91,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
   const handleSaveConfig = () => {
     form.validateFields().then((values) => {
       if (!values.host || !values.ssePath) {
-        message.error('请填写完整的配置信息');
+        message.error(t.errors.invalidConfig);
         return;
       }
 
@@ -117,22 +108,22 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
 
       const saved = storage.saveMCPConfig(serverConfig);
       if (saved) {
-        message.success('配置保存成功');
+        message.success(t.success.configSaved);
         // 通知刷新配置列表
         if (onConfigSaved) {
           onConfigSaved();
         }
       } else {
-        message.error('配置保存失败');
+        message.error(t.errors.saveConfigFailed);
       }
     }).catch(() => {
-      message.error('配置验证失败，请检查输入');
+      message.error(t.errors.invalidConfig);
     });
   };
 
   return (
     <div style={{ padding: 24 }}>
-      <Card title="MCP服务器配置" style={{ maxWidth: 700, margin: '0 auto' }}>
+      <Card title={t.config.title} style={{ maxWidth: 700, margin: '0 auto' }}>
         <Form
           form={form}
           layout="vertical"
@@ -147,49 +138,49 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
         >
           <Form.Item
             name="name"
-            label="服务器名称"
-            rules={[{ required: true, message: '请输入服务器名称' }]}
+            label={t.config.serverName}
+            rules={[{ required: true, message: t.config.messages.serverNameRequired }]}
           >
-            <Input placeholder="例如: Docs Server" />
+            <Input placeholder={t.config.serverNamePlaceholder} />
           </Form.Item>
 
           <Form.Item
             name="host"
-            label="主机地址"
+            label={t.config.serverHost}
             rules={[
-              { required: true, message: '请输入主机地址' },
+              { required: true, message: t.config.messages.serverHostRequired },
               {
                 pattern: /^https?:\/\/[^\/\s]+$/,
-                message: '请输入正确的主机地址格式，例如: http://127.0.0.1:8020 (不要包含路径)'
+                message: t.config.messages.serverHostFormat
               }
             ]}
-            tooltip="包含协议、主机和端口的基础URL，不要包含路径"
+            tooltip={t.config.serverHostPlaceholder}
           >
-            <Input placeholder="例如: http://127.0.0.1:8020" />
+            <Input placeholder={t.config.serverHostPlaceholder} />
           </Form.Item>
 
           <Form.Item
             name="ssePath"
-            label="SSE路径"
-            rules={[{ required: true, message: '请输入SSE路径' }]}
-            tooltip="SSE连接的路径，通常是 /sse。消息路径将从SSE响应中自动获取"
+            label={t.config.ssePath}
+            rules={[{ required: true, message: t.config.messages.ssePathRequired }]}
+            tooltip={t.config.ssePathPlaceholder}
           >
-            <Input placeholder="例如: /sse" />
+            <Input placeholder={t.config.ssePathPlaceholder} />
           </Form.Item>
 
-          <Form.Item label="认证配置">
+          <Form.Item label={t.config.authentication}>
             <AuthConfigComponent
               value={authConfig}
               onChange={setAuthConfig}
             />
           </Form.Item>
 
-          <Form.Item label="自动保存配置" tooltip="连接成功后自动保存配置到本地">
+          <Form.Item label={t.config.autoSave} tooltip={t.config.autoSaveTooltip}>
             <Switch 
               checked={autoSave}
               onChange={setAutoSave}
-              checkedChildren="开启"
-              unCheckedChildren="关闭"
+              checkedChildren={t.common.ok}
+              unCheckedChildren={t.common.cancel}
             />
           </Form.Item>
 
@@ -203,7 +194,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
                   icon={<ApiOutlined />}
                   block
                 >
-                  {connectionStatus === 'connecting' ? '连接中...' : '连接'}
+                  {connectionStatus === 'connecting' ? t.config.connectionStatus.connecting : t.common.connect}
                 </Button>
                 <Button 
                   type="default" 
@@ -211,7 +202,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
                   block
                   onClick={handleSaveConfig}
                 >
-                  保存配置
+                  {t.config.saveConfig}
                 </Button>
               </Space>
             </Form.Item>
@@ -222,14 +213,18 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
         {connectionStatus === 'connected' && (
           <div style={{ marginTop: 16 }}>
             <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 4 }}>
-              <p><strong>已连接到:</strong> {serverConfig?.name}</p>
-              <p><strong>地址:</strong> {serverConfig?.host}</p>
-              <p><strong>传输方式:</strong> {serverConfig?.transport.toUpperCase()}</p>
-              <p><strong>认证方式:</strong> {
-                serverConfig?.auth?.type === 'none' ? '无认证' :
-                serverConfig?.auth?.type === 'url_params' ? 'URL参数认证' :
-                serverConfig?.auth?.type === 'headers' ? '请求头认证' :
-                '未知'
+              <p><strong>{t.config.connectionStatus.connected}:</strong> {serverConfig?.name}</p>
+              <p><strong>{t.config.serverHost}:</strong> {serverConfig?.host}</p>
+              <p><strong>{t.config.authType}:</strong> {
+                (() => {
+                  const authType = serverConfig?.auth?.type;
+                  if (!authType || authType === 'none') return t.auth.none;
+                  if (authType === 'apiKey') return t.auth.apiKey;
+                  if (authType === 'basic') return t.auth.basic;
+                  if (authType === 'custom') return t.auth.custom;
+                  if (authType === 'combined') return t.auth.combined;
+                  return t.auth.none;
+                })()
               }</p>
             </div>
             
@@ -240,7 +235,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
               danger
               block
             >
-              断开连接
+              {t.common.disconnect}
             </Button>
           </div>
         )}

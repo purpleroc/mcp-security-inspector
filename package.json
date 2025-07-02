@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:extension": "npm run build && npm run copy-extension-files && npm run clean-dist",
-    "copy-extension-files": "cp ./manifest.json public/&& cp public/manifest.json dist/ && cp public/background.js dist/ && cp -r public/icons dist/",
+    "copy-extension-files": "cp ./manifest.json public/ && cp public/manifest.json dist/ && cp public/background.js dist/ && cp -r public/icons dist/ && cp -r public/_locales dist/",
     "clean-dist": "rm -rf dist/public",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",

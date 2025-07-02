@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "MCP安全检测器",
+    "description": "扩展名称"
+  },
+  "extDescription": {
+    "message": "Model Context Protocol安全性检测工具 - 测试MCP服务器工具、资源和提示的安全性",
+    "description": "扩展描述"
+  },
+  "actionTitle": {
+    "message": "MCP安全检测器",
+    "description": "扩展按钮标题"
+  }
+} 

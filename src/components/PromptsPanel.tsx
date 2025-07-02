@@ -9,10 +9,12 @@ import {
 } from '../store/mcpSlice';
 import { MCPPrompt } from '../types/mcp';
 import ResultDisplay from './ResultDisplay';
+import { useI18n } from '../hooks/useI18n';
 
 const { Text } = Typography;
 
 const PromptsPanel: React.FC = () => {
+  const { t } = useI18n();
   const dispatch = useDispatch();
   const { 
     prompts, 
@@ -49,7 +51,7 @@ const PromptsPanel: React.FC = () => {
     if (!selectedPrompt || !selectedPrompt.arguments) return null;
 
     return (
-      <Card title="参数配置" size="small" style={{ marginTop: 16 }}>
+      <Card title={t.prompts.arguments} size="small" style={{ marginTop: 16 }}>
         <Form
           form={form}
           layout="vertical"
@@ -63,12 +65,12 @@ const PromptsPanel: React.FC = () => {
               rules={[
                 { 
                   required: arg.required,
-                  message: `请输入${arg.name}` 
+                  message: `${t.prompts.pleaseInput}${arg.name}` 
                 }
               ]}
             >
               <Input 
-                placeholder={arg.description || `输入${arg.name}`}
+                placeholder={arg.description || `${t.prompts.pleaseInput}${arg.name}`}
               />
             </Form.Item>
           ))}
@@ -78,7 +80,7 @@ const PromptsPanel: React.FC = () => {
             htmlType="submit"
             loading={isLoading}
           >
-            获取提示
+            {t.prompts.getPrompt}
           </Button>
         </Form>
       </Card>
@@ -89,7 +91,7 @@ const PromptsPanel: React.FC = () => {
     <div style={{ height: '100%', overflow: 'auto' }}>
       {lastError && (
         <Alert 
-          message="错误" 
+          message={t.common.error} 
           description={lastError} 
           type="error" 
           closable 
@@ -97,9 +99,9 @@ const PromptsPanel: React.FC = () => {
         />
       )}
 
-      <Card title="可用提示" loading={isLoading}>
+      <Card title={t.prompts.title} loading={isLoading}>
         {prompts.length === 0 ? (
-          <Empty description="暂无可用提示" />
+          <Empty description={t.prompts.noPrompts} />
         ) : (
           <List
             dataSource={prompts}
@@ -119,10 +121,10 @@ const PromptsPanel: React.FC = () => {
                   title={prompt.name}
                   description={
                     <div>
-                      <div>{prompt.description || '无描述'}</div>
+                      <div>{prompt.description || t.prompts.promptName}</div>
                       {prompt.arguments && prompt.arguments.length > 0 && (
                         <Text type="secondary" style={{ fontSize: 12 }}>
-                          参数: {prompt.arguments.map(arg => arg.name).join(', ')}
+                          {t.prompts.arguments}: {prompt.arguments.map(arg => arg.name).join(', ')}
                         </Text>
                       )}
                     </div>
@@ -135,14 +137,14 @@ const PromptsPanel: React.FC = () => {
       </Card>
 
       {selectedPrompt && (
-        <Card title={`提示详情: ${selectedPrompt.name}`} size="small" style={{ marginTop: 16 }}>
+        <Card title={`${t.prompts.promptName}: ${selectedPrompt.name}`} size="small" style={{ marginTop: 16 }}>
           <div style={{ marginBottom: 16 }}>
-            <p><strong>名称:</strong> {selectedPrompt.name}</p>
-            <p><strong>描述:</strong> {selectedPrompt.description || '无'}</p>
+            <p><strong>{t.prompts.promptName}:</strong> {selectedPrompt.name}</p>
+            <p><strong>{t.tools.description}:</strong> {selectedPrompt.description || t.prompts.promptName}</p>
             
             {selectedPrompt.arguments && selectedPrompt.arguments.length > 0 && (
               <div>
-                <p><strong>参数:</strong></p>
+                <p><strong>{t.prompts.arguments}:</strong></p>
                 <ul style={{ paddingLeft: 20 }}>
                   {selectedPrompt.arguments.map((arg) => (
                     <li key={arg.name}>
@@ -162,7 +164,7 @@ const PromptsPanel: React.FC = () => {
               onClick={() => handlePromptGet({})}
               loading={isLoading}
             >
-              获取提示
+              {t.prompts.getPrompt}
             </Button>
           )}
         </Card>

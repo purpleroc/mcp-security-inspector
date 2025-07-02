@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Provider, useSelector } from 'react-redux';
-import { Layout, Tabs } from 'antd';
+import { Layout, Tabs, Space } from 'antd';
 import { HistoryOutlined, SettingOutlined, AppstoreOutlined } from '@ant-design/icons';
 import { store, RootState } from './store';
 import ConfigPanel from './components/ConfigPanel';
 import MCPExplorer from './components/MCPExplorer';
 import HistoryPanel from './components/HistoryPanel';
 import MCPListPanel from './components/MCPListPanel';
+import LanguageSwitcher from './components/LanguageSwitcher';
 import { MCPServerConfig } from './types/mcp';
-
+import { useI18n } from './hooks/useI18n';
 
 const { Header, Content, Sider } = Layout;
 
 const AppContent: React.FC = () => {
+  const { t } = useI18n();
   const [selectedConfig, setSelectedConfig] = useState<MCPServerConfig | null>(null);
   const [activeTab, setActiveTab] = useState('config');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -42,7 +44,7 @@ const AppContent: React.FC = () => {
       label: (
         <span>
           <SettingOutlined />
-          配置
+          {t.tabs.config}
         </span>
       ),
       children: <ConfigPanel onConfigLoad={handleConfigLoad} selectedConfig={selectedConfig} onConfigSaved={handleConfigSaved} />
@@ -52,7 +54,7 @@ const AppContent: React.FC = () => {
       label: (
         <span>
           <AppstoreOutlined />
-          MCP浏览器
+          {t.tabs.explorer}
         </span>
       ),
       children: <MCPExplorer />
@@ -62,7 +64,7 @@ const AppContent: React.FC = () => {
       label: (
         <span>
           <HistoryOutlined />
-          历史记录
+          {t.tabs.history}
         </span>
       ),
       children: <HistoryPanel />
@@ -76,41 +78,43 @@ const AppContent: React.FC = () => {
         borderBottom: '1px solid #f0f0f0',
         padding: '0 24px',
         height: 64,
-        lineHeight: '64px'
+        lineHeight: '64px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
       }}>
         <h1 style={{ 
           margin: 0, 
-          fontSize: '20px', 
+          fontSize: '18px', 
           fontWeight: 'bold',
           color: '#1890ff'
         }}>
-          MCP Security Inspector
+          {t.app.title}
         </h1>
+        <Space size="large">
+          <span style={{ fontSize: '12px', color: '#666' }}>
+            {t.app.description}
+          </span>
+          <LanguageSwitcher />
+        </Space>
       </Header>
       
-      <Layout style={{ height: 'calc(100vh - 64px)' }}>
-        <Sider 
-          width={300} 
-          style={{ 
-            background: '#fff',
-            borderRight: '1px solid #f0f0f0'
-          }}
-        >
-          <MCPListPanel onConfigLoad={handleConfigLoad} refreshTrigger={refreshTrigger} />
+      <Layout>
+        <Sider width={250} style={{ background: '#fff', borderRight: '1px solid #f0f0f0' }}>
+          <div style={{ padding: '16px' }}>
+            <MCPListPanel 
+              onConfigLoad={handleConfigLoad}
+              refreshTrigger={refreshTrigger}
+            />
+          </div>
         </Sider>
         
-        <Content style={{ padding: 0 }}>
-          <Tabs 
+        <Content style={{ padding: '24px', background: '#fff' }}>
+          <Tabs
             activeKey={activeTab}
             onChange={setActiveTab}
             items={tabItems}
             style={{ height: '100%' }}
-            tabBarStyle={{ 
-              paddingLeft: 24,
-              paddingRight: 24,
-              marginBottom: 0,
-              background: '#fafafa'
-            }}
           />
         </Content>
       </Layout>
@@ -119,11 +123,7 @@ const AppContent: React.FC = () => {
 };
 
 const App: React.FC = () => {
-  return (
-    <Provider store={store}>
-      <AppContent />
-    </Provider>
-  );
+  return <AppContent />;
 };
 
 export default App; 

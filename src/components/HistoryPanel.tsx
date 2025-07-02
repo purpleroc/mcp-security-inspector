@@ -3,30 +3,32 @@ import {
   Card, 
   List, 
   Button, 
-  Empty, 
+  Space, 
   Tag, 
   Typography, 
-  Space, 
-  Popconfirm,
-  Divider 
+  Popconfirm, 
+  Empty,
+  Pagination
 } from 'antd';
 import { 
   DeleteOutlined, 
-  ClearOutlined, 
+  ClockCircleOutlined, 
   ToolOutlined, 
   DatabaseOutlined, 
-  BulbOutlined,
-  ClockCircleOutlined,
-  WarningOutlined
+  BulbOutlined, 
+  WarningOutlined,
+  ClearOutlined 
 } from '@ant-design/icons';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store';
-import { clearHistory, deleteHistoryItem } from '../store/mcpSlice';
+import { deleteHistoryItem, clearHistory } from '../store/mcpSlice';
 import { MCPCallHistory } from '../types/mcp';
+import { useI18n } from '../hooks/useI18n';
 
 const { Text, Paragraph } = Typography;
 
 const HistoryPanel: React.FC = () => {
+  const { t } = useI18n();
   const dispatch = useDispatch();
   const { history } = useSelector((state: RootState) => state.mcp);
 
@@ -65,7 +67,7 @@ const HistoryPanel: React.FC = () => {
   };
 
   const formatTime = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString('zh-CN');
+    return new Date(timestamp).toLocaleString();
   };
 
   const renderHistoryItem = (item: MCPCallHistory) => {
@@ -84,10 +86,10 @@ const HistoryPanel: React.FC = () => {
         }}
         actions={[
           <Popconfirm
-            title="确定删除这条记录吗？"
+            title={t.history.confirmDelete}
             onConfirm={() => handleDeleteItem(item.id)}
-            okText="删除"
-            cancelText="取消"
+            okText={t.common.delete}
+            cancelText={t.common.cancel}
           >
             <Button 
               type="text" 
@@ -108,10 +110,10 @@ const HistoryPanel: React.FC = () => {
                 {item.type.toUpperCase()}
               </Tag>
               <Text strong>{item.name}</Text>
-              {hasError && <Tag color="red">失败</Tag>}
+              {hasError && <Tag color="red">{t.common.error}</Tag>}
               {hasWarnings && (
                 <Tag color="orange" icon={<WarningOutlined />}>
-                  安全警告
+                  {t.security.warning}
                 </Tag>
               )}
             </Space>
@@ -123,13 +125,13 @@ const HistoryPanel: React.FC = () => {
                   <ClockCircleOutlined />
                   <Text type="secondary">{formatTime(item.timestamp)}</Text>
                   {item.duration && (
-                    <Text type="secondary">耗时: {item.duration}ms</Text>
+                    <Text type="secondary">{t.history.duration}: {item.duration}ms</Text>
                   )}
                 </Space>
                 
                 {item.parameters && Object.keys(item.parameters).length > 0 && (
                   <div>
-                    <Text type="secondary">参数: </Text>
+                    <Text type="secondary">{t.history.parameters}: </Text>
                     <Text code style={{ fontSize: 11 }}>
                       {JSON.stringify(item.parameters, null, 2)}
                     </Text>
@@ -138,13 +140,13 @@ const HistoryPanel: React.FC = () => {
                 
                 {hasError && (
                   <div>
-                    <Text type="danger">错误: {item.error}</Text>
+                    <Text type="danger">{t.common.error}: {item.error}</Text>
                   </div>
                 )}
                 
                 {hasWarnings && (
                   <div>
-                    <Text type="warning">安全警告:</Text>
+                    <Text type="warning">{t.history.securityWarnings}:</Text>
                     <ul style={{ paddingLeft: 16, margin: '4px 0' }}>
                       {item.securityWarnings!.map((warning, index) => (
                         <li key={index}>
@@ -161,7 +163,7 @@ const HistoryPanel: React.FC = () => {
                   <div style={{ marginTop: 8 }}>
                     <details>
                       <summary style={{ cursor: 'pointer' }}>
-                        <Text type="secondary">查看结果</Text>
+                        <Text type="secondary">{t.history.result}</Text>
                       </summary>
                       <pre 
                         className="code-block" 
@@ -188,14 +190,14 @@ const HistoryPanel: React.FC = () => {
   return (
     <div style={{ height: '100%', overflow: 'auto' }}>
       <Card 
-        title="调用历史" 
+        title={t.history.title} 
         extra={
           history.length > 0 && (
             <Popconfirm
-              title="确定清空所有历史记录吗？"
+              title={t.history.confirmClear}
               onConfirm={handleClearHistory}
-              okText="清空"
-              cancelText="取消"
+              okText={t.common.clear}
+              cancelText={t.common.cancel}
             >
               <Button 
                 type="text" 
@@ -203,14 +205,14 @@ const HistoryPanel: React.FC = () => {
                 icon={<ClearOutlined />}
                 size="small"
               >
-                清空历史
+                {t.history.clearAll}
               </Button>
             </Popconfirm>
           )
         }
       >
         {history.length === 0 ? (
-          <Empty description="暂无调用历史" />
+          <Empty description={t.history.noHistory} />
         ) : (
           <div>
             <Paragraph type="secondary" style={{ marginBottom: 16, fontSize: 12 }}>

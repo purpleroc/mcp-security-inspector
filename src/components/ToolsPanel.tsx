@@ -11,10 +11,12 @@ import {
 import { MCPTool } from '../types/mcp';
 import SecurityWarning from './SecurityWarning';
 import ResultDisplay from './ResultDisplay';
+import { useI18n } from '../hooks/useI18n';
 
 const { Option } = Select;
 
 const ToolsPanel: React.FC = () => {
+  const { t } = useI18n();
   const dispatch = useDispatch();
   const { 
     tools, 
@@ -60,7 +62,7 @@ const ToolsPanel: React.FC = () => {
     const properties = inputSchema.properties || {};
 
     return (
-      <Card title="参数配置" size="small" style={{ marginTop: 16 }}>
+      <Card title={t.tools.parameters} size="small" style={{ marginTop: 16 }}>
         <Form
           form={form}
           layout="vertical"
@@ -74,7 +76,7 @@ const ToolsPanel: React.FC = () => {
               rules={[
                 { 
                   required: inputSchema.required?.includes(key),
-                  message: `请输入${key}` 
+                  message: `${t.tools.pleaseInput}${key}` 
                 }
               ]}
             >
@@ -101,7 +103,7 @@ const ToolsPanel: React.FC = () => {
             loading={isLoading}
             disabled={!currentParameters || Object.keys(currentParameters).length === 0}
           >
-            调用工具
+            {t.tools.callTool}
           </Button>
         </Form>
       </Card>
@@ -112,7 +114,7 @@ const ToolsPanel: React.FC = () => {
     <div style={{ height: '100%', overflow: 'auto' }}>
       {lastError && (
         <Alert 
-          message="错误" 
+          message={t.common.error} 
           description={lastError} 
           type="error" 
           closable 
@@ -120,9 +122,9 @@ const ToolsPanel: React.FC = () => {
         />
       )}
 
-      <Card title="可用工具" loading={isLoading}>
+      <Card title={t.tools.title} loading={isLoading}>
         {tools.length === 0 ? (
-          <Empty description="暂无可用工具" />
+          <Empty description={t.tools.noTools} />
         ) : (
           <List
             dataSource={tools}
@@ -140,7 +142,7 @@ const ToolsPanel: React.FC = () => {
               >
                 <List.Item.Meta
                   title={tool.name}
-                  description={tool.description || '无描述'}
+                  description={tool.description || t.tools.description}
                 />
               </List.Item>
             )}
@@ -149,9 +151,9 @@ const ToolsPanel: React.FC = () => {
       </Card>
 
       {selectedTool && (
-        <Card title={`工具详情: ${selectedTool.name}`} size="small" style={{ marginTop: 16 }}>
-          <p><strong>描述:</strong> {selectedTool.description || '无'}</p>
-          <p><strong>参数结构:</strong></p>
+        <Card title={`${t.tools.toolName}: ${selectedTool.name}`} size="small" style={{ marginTop: 16 }}>
+          <p><strong>{t.tools.description}:</strong> {selectedTool.description || t.tools.description}</p>
+          <p><strong>{t.tools.parameters}:</strong></p>
           <pre className="code-block">
             {JSON.stringify(selectedTool.inputSchema, null, 2)}
           </pre>

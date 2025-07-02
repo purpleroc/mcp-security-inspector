@@ -13,6 +13,7 @@ import {
   SecurityRiskLevel,
   AuthConfig
 } from '@/types/mcp';
+import { i18n } from '../i18n';
 
 /**
  * MCP 客户端服务
@@ -28,22 +29,22 @@ export class MCPClient {
   private requestId = 0;
   private pendingRequests = new Map<string | number, {
     resolve: (value: any) => void;
-    reject: (reason: any) => void;
-    timeout: number;
+    reject: (error: any) => void;
+    timestamp: number;
   }>();
 
   constructor() {}
 
   /**
-   * 生成Basic Auth编码
+   * 生成Basic认证字符串
    */
   private generateBasicAuth(username: string, password: string): string {
-    const credentials = `${username}:${password}`;
-    return `Basic ${btoa(credentials)}`;
+    const credentials = btoa(`${username}:${password}`);
+    return `Basic ${credentials}`;
   }
 
   /**
-   * 应用认证到请求头
+   * 应用认证配置到请求头
    */
   private applyAuthHeaders(headers: Record<string, string>): void {
     if (!this.config?.auth || this.config.auth.type === 'none') return;
@@ -74,7 +75,7 @@ export class MCPClient {
   }
 
   /**
-   * 为URL添加认证参数
+   * 应用认证配置到URL
    */
   private applyAuthToUrl(url: string): string {
     if (!this.config?.auth || this.config.auth.type === 'none') {
@@ -100,7 +101,7 @@ export class MCPClient {
   }
 
   /**
-   * 配置MCP服务器连接
+   * 配置客户端
    */
   configure(config: MCPServerConfig): void {
     this.config = config;
@@ -111,7 +112,7 @@ export class MCPClient {
    */
   async connect(): Promise<InitializeResult> {
     if (!this.config) {
-      throw new Error('MCP服务器配置未设置');
+      throw new Error(i18n.t().config.messages.configNotSet);
     }
 
     console.log('开始连接MCP服务器:', this.config);
@@ -149,11 +150,11 @@ export class MCPClient {
       
       // 确保错误信息是字符串
       if (error instanceof Error) {
-        throw new Error(`连接失败: ${error.message}`);
+        throw new Error(`${i18n.t().config.messages.connectFailed}: ${error.message}`);
       } else if (typeof error === 'string') {
-        throw new Error(`连接失败: ${error}`);
+        throw new Error(`${i18n.t().config.messages.connectFailed}: ${error}`);
       } else {
-        throw new Error(`连接失败: ${JSON.stringify(error)}`);
+        throw new Error(`${i18n.t().config.messages.connectFailed}: ${JSON.stringify(error)}`);
       }
     }
   }
@@ -186,7 +187,7 @@ export class MCPClient {
       }
 
       // 尝试将API Key转换为URL参数
-      if (this.config.auth.apiKey && this.config.auth.apiKey.apiKey) {
+      if (this.config.auth.apiKey?.apiKey) {
         const params = new URLSearchParams();
         const headerName = this.config.auth.apiKey.headerName || 'Authorization';
         const prefix = this.config.auth.apiKey.prefix || 'Bearer ';
@@ -201,10 +202,12 @@ export class MCPClient {
       }
 
       // 尝试将Basic Auth转换为URL参数
-      if (this.config.auth.basicAuth && this.config.auth.basicAuth.username && this.config.auth.basicAuth.password) {
+      if (this.config.auth.basicAuth?.username && this.config.auth.basicAuth?.password) {
         const params = new URLSearchParams();
-        params.append('auth_user', this.config.auth.basicAuth.username);
-        params.append('auth_pass', this.config.auth.basicAuth.password);
+        const username = this.config.auth.basicAuth.username;
+        const password = this.config.auth.basicAuth.password;
+        params.append('auth_user', username);
+        params.append('auth_pass', password);
         const paramString = params.toString();
         if (paramString) {
           url += (url.includes('?') ? '&' : '?') + paramString;
@@ -581,8 +584,7 @@ export class MCPClient {
     }
     
     // 清理待处理的请求
-    this.pendingRequests.forEach(({ reject, timeout }) => {
-      clearTimeout(timeout);
+    this.pendingRequests.forEach(({ reject, timestamp }) => {
       reject(new Error('连接已断开'));
     });
     this.pendingRequests.clear();
@@ -824,7 +826,7 @@ export class MCPClient {
       this.pendingRequests.set(request.id, {
         resolve,
         reject,
-        timeout: timeoutHandle as any
+        timestamp: timeoutHandle as any
       });
 
       // 发送HTTP请求到对应端点
@@ -923,7 +925,7 @@ export class MCPClient {
       console.error('发送HTTP请求失败:', error);
       const pending = this.pendingRequests.get(request.id);
       if (pending) {
-        clearTimeout(pending.timeout);
+        clearTimeout(pending.timestamp);
         this.pendingRequests.delete(request.id);
         pending.reject(error);
       }
@@ -940,7 +942,7 @@ export class MCPClient {
       return;
     }
 
-    clearTimeout(pending.timeout);
+    clearTimeout(pending.timestamp);
     this.pendingRequests.delete(response.id);
 
     if (response.error) {

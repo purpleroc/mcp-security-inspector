@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
-import { Form, Input, Select, Button, Space, Card, Divider, Switch } from 'antd';
-import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
-import { AuthConfig, AuthType } from '../types/mcp';
+import React from 'react';
+import { Form, Input, Switch, Card, Space, Button } from 'antd';
+import { PlusOutlined, MinusCircleOutlined } from '@ant-design/icons';
+import { AuthConfig } from '../types/mcp';
+import { useI18n } from '../hooks/useI18n';
 
 interface AuthConfigProps {
   value?: AuthConfig;
@@ -9,35 +10,37 @@ interface AuthConfigProps {
 }
 
 const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => {
+  const { t } = useI18n();
   const authEnabled = value?.type === 'combined';
 
   const handleAuthToggle = (enabled: boolean) => {
     if (enabled) {
-      onChange?.({ type: 'combined' });
+      onChange?.({
+        type: 'combined'
+      });
     } else {
       onChange?.({ type: 'none' });
     }
   };
 
-  // 组合认证处理方法
   const handleCombinedChange = (section: 'apiKey' | 'urlParams' | 'customHeaders' | 'basicAuth', data: any) => {
     if (value?.type === 'combined') {
-      onChange?.({ 
-        ...value, 
+      onChange?.({
+        ...value,
         [section]: data
       });
     }
   };
 
   return (
-    <Card title="认证配置" size="small" style={{ marginBottom: 16 }}>
-      <Form.Item label="启用认证" valuePropName="checked">
+    <Card title={t.config.authentication} size="small" style={{ marginBottom: 16 }}>
+      <Form.Item label={t.auth.combinedMode} valuePropName="checked">
         <Switch
           checked={authEnabled}
           onChange={handleAuthToggle}
         />
         <span style={{ marginLeft: 8, fontSize: '12px', color: '#666' }}>
-          {authEnabled ? '已启用认证功能' : '未启用认证'}
+          {authEnabled ? t.auth.enableApiKey : t.auth.none}
         </span>
       </Form.Item>
 
@@ -45,15 +48,15 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
         <div>
           <div style={{ marginBottom: 16, padding: '8px 12px', backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: '6px' }}>
             <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#52c41a', marginBottom: '4px' }}>
-              组合认证模式
+              {t.auth.combinedMode}
             </div>
             <div style={{ fontSize: '12px', color: '#666' }}>
-              可以同时配置多种认证方式，系统会自动组合应用这些认证配置
+              {t.auth.combinedModeDesc}
             </div>
           </div>
 
           {/* API Key 配置 */}
-          <Form.Item label="API Key 认证" valuePropName="checked">
+          <Form.Item label={t.auth.enableApiKey} valuePropName="checked">
             <Switch
               checked={value?.type === 'combined' && !!value.apiKey}
               onChange={(checked) => {
@@ -69,29 +72,29 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
               }}
             />
             <span style={{ marginLeft: 8, fontSize: '12px', color: '#666' }}>
-              启用 API Key 认证
+              {t.auth.enableApiKey}
             </span>
           </Form.Item>
 
           {value?.type === 'combined' && value.apiKey && (
             <div style={{ marginLeft: 24, marginBottom: 16 }}>
-              <Form.Item label="API Key" required>
+              <Form.Item label={t.auth.apiKeyLabel} required>
                 <Input.Password
-                  placeholder="请输入API Key"
+                  placeholder={t.auth.apiKeyPlaceholder}
                   value={value.apiKey.apiKey || ''}
                   onChange={(e) => handleCombinedChange('apiKey', { ...value.apiKey, apiKey: e.target.value })}
                 />
               </Form.Item>
-              <Form.Item label="请求头名称">
+              <Form.Item label={t.auth.headerName}>
                 <Input
-                  placeholder="Authorization"
+                  placeholder={t.auth.headerNamePlaceholder}
                   value={value.apiKey.headerName || 'Authorization'}
                   onChange={(e) => handleCombinedChange('apiKey', { ...value.apiKey, headerName: e.target.value })}
                 />
               </Form.Item>
-              <Form.Item label="前缀">
+              <Form.Item label={t.auth.prefix}>
                 <Input
-                  placeholder="Bearer "
+                  placeholder={t.auth.prefixPlaceholder}
                   value={value.apiKey.prefix || 'Bearer '}
                   onChange={(e) => handleCombinedChange('apiKey', { ...value.apiKey, prefix: e.target.value })}
                 />
@@ -100,7 +103,7 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
           )}
 
           {/* URL 参数配置 */}
-          <Form.Item label="URL 参数认证" valuePropName="checked">
+          <Form.Item label={t.auth.enableUrlParams} valuePropName="checked">
             <Switch
               checked={value?.type === 'combined' && !!value.urlParams}
               onChange={(checked) => {
@@ -112,7 +115,7 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
               }}
             />
             <span style={{ marginLeft: 8, fontSize: '12px', color: '#666' }}>
-              启用 URL 参数认证
+              {t.auth.enableUrlParams}
             </span>
           </Form.Item>
 
@@ -121,7 +124,7 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
               {value.urlParams.map((param, index) => (
                 <Space key={index} style={{ display: 'flex', marginBottom: 8 }} align="baseline">
                   <Input 
-                    placeholder="参数名" 
+                    placeholder={t.auth.paramName} 
                     style={{ width: 150 }}
                     value={param.name || ''}
                     onChange={(e) => {
@@ -131,7 +134,7 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
                     }}
                   />
                   <Input 
-                    placeholder="参数值" 
+                    placeholder={t.auth.paramValue} 
                     style={{ width: 200 }}
                     value={param.value || ''}
                     onChange={(e) => {
@@ -158,13 +161,13 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
                 icon={<PlusOutlined />}
                 style={{ marginTop: 8 }}
               >
-                添加URL参数
+                {t.auth.addParam}
               </Button>
             </div>
           )}
 
           {/* Basic Auth 配置 */}
-          <Form.Item label="Basic Auth 认证" valuePropName="checked">
+          <Form.Item label={t.auth.basic} valuePropName="checked">
             <Switch
               checked={value?.type === 'combined' && !!value.basicAuth}
               onChange={(checked) => {
@@ -176,22 +179,22 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
               }}
             />
             <span style={{ marginLeft: 8, fontSize: '12px', color: '#666' }}>
-              启用 Basic Auth 认证
+              {t.auth.basic}
             </span>
           </Form.Item>
 
           {value?.type === 'combined' && value.basicAuth && (
             <div style={{ marginLeft: 24, marginBottom: 16 }}>
-              <Form.Item label="用户名">
+              <Form.Item label={t.auth.username}>
                 <Input
-                  placeholder="Basic Auth用户名"
+                  placeholder={t.auth.usernamePlaceholder}
                   value={value.basicAuth.username || ''}
                   onChange={(e) => handleCombinedChange('basicAuth', { ...value.basicAuth, username: e.target.value })}
                 />
               </Form.Item>
-              <Form.Item label="密码">
+              <Form.Item label={t.auth.password}>
                 <Input.Password
-                  placeholder="Basic Auth密码"
+                  placeholder={t.auth.passwordPlaceholder}
                   value={value.basicAuth.password || ''}
                   onChange={(e) => handleCombinedChange('basicAuth', { ...value.basicAuth, password: e.target.value })}
                 />
@@ -200,7 +203,7 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
           )}
 
           {/* 自定义请求头配置 */}
-          <Form.Item label="自定义请求头" valuePropName="checked">
+          <Form.Item label={t.auth.enableCustomHeaders} valuePropName="checked">
             <Switch
               checked={value?.type === 'combined' && !!value.customHeaders}
               onChange={(checked) => {
@@ -212,7 +215,7 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
               }}
             />
             <span style={{ marginLeft: 8, fontSize: '12px', color: '#666' }}>
-              启用自定义请求头
+              {t.auth.enableCustomHeaders}
             </span>
           </Form.Item>
 
@@ -221,7 +224,7 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
               {value.customHeaders.map((header, index) => (
                 <Space key={index} style={{ display: 'flex', marginBottom: 8 }} align="baseline">
                   <Input 
-                    placeholder="请求头名称" 
+                    placeholder={t.auth.headerName} 
                     style={{ width: 200 }}
                     value={header.name || ''}
                     onChange={(e) => {
@@ -231,7 +234,7 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
                     }}
                   />
                   <Input 
-                    placeholder="请求头值" 
+                    placeholder={t.auth.headerValue} 
                     style={{ width: 250 }}
                     value={header.value || ''}
                     onChange={(e) => {
@@ -258,7 +261,7 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
                 icon={<PlusOutlined />}
                 style={{ marginTop: 8 }}
               >
-                添加自定义请求头
+                {t.auth.custom}
               </Button>
             </div>
           )}

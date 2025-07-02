@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "MCP Security Inspector",
+    "description": "Extension name"
+  },
+  "extDescription": {
+    "message": "Model Context Protocol Security Testing Tool - Test the security of MCP server tools, resources and prompts",
+    "description": "Extension description"
+  },
+  "actionTitle": {
+    "message": "MCP Security Inspector",
+    "description": "Extension action title"
+  }
+} 

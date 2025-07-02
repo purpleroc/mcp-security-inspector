@@ -2,24 +2,26 @@ import React from 'react';
 import { Space, Typography } from 'antd';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
+import { useI18n } from '../hooks/useI18n';
 
 const { Text } = Typography;
 
 const StatusBar: React.FC = () => {
+  const { t } = useI18n();
   const { connectionStatus, serverConfig } = useSelector((state: RootState) => state.mcp);
 
   const getStatusText = () => {
     switch (connectionStatus) {
       case 'connected':
-        return '已连接';
+        return t.config.connectionStatus.connected;
       case 'connecting':
-        return '连接中...';
+        return t.config.connectionStatus.connecting;
       case 'disconnected':
-        return '未连接';
+        return t.config.connectionStatus.disconnected;
       case 'error':
-        return '连接错误';
+        return t.config.connectionStatus.error;
       default:
-        return '未知状态';
+        return t.config.connectionStatus.disconnected;
     }
   };
 

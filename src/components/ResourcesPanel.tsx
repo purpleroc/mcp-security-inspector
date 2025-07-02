@@ -9,10 +9,12 @@ import {
 } from '../store/mcpSlice';
 import { MCPResource } from '../types/mcp';
 import ResultDisplay from './ResultDisplay';
+import { useI18n } from '../hooks/useI18n';
 
 const { Text } = Typography;
 
 const ResourcesPanel: React.FC = () => {
+  const { t } = useI18n();
   const dispatch = useDispatch();
   const { 
     resources, 
@@ -45,7 +47,7 @@ const ResourcesPanel: React.FC = () => {
     <div style={{ height: '100%', overflow: 'auto' }}>
       {lastError && (
         <Alert 
-          message="错误" 
+          message={t.common.error} 
           description={lastError} 
           type="error" 
           closable 
@@ -53,9 +55,9 @@ const ResourcesPanel: React.FC = () => {
         />
       )}
 
-      <Card title="可用资源" loading={isLoading}>
+      <Card title={t.resources.title} loading={isLoading}>
         {resources.length === 0 ? (
-          <Empty description="暂无可用资源" />
+          <Empty description={t.resources.noResources} />
         ) : (
           <List
             dataSource={resources}
@@ -75,14 +77,14 @@ const ResourcesPanel: React.FC = () => {
                   title={resource.name || resource.uri}
                   description={
                     <div>
-                      <div>{resource.description || '无描述'}</div>
+                      <div>{resource.description || t.resources.resourceName}</div>
                       <Text type="secondary" style={{ fontSize: 12 }}>
-                        URI: {resource.uri}
+                        {t.resources.resourceUri}: {resource.uri}
                       </Text>
                       {resource.mimeType && (
                         <div>
                           <Text type="secondary" style={{ fontSize: 12 }}>
-                            类型: {resource.mimeType}
+                            {t.resources.mimeType}: {resource.mimeType}
                           </Text>
                         </div>
                       )}
@@ -96,12 +98,12 @@ const ResourcesPanel: React.FC = () => {
       </Card>
 
       {selectedResource && (
-        <Card title={`资源详情: ${selectedResource.name || selectedResource.uri}`} size="small" style={{ marginTop: 16 }}>
+        <Card title={`${t.resources.resourceName}: ${selectedResource.name || selectedResource.uri}`} size="small" style={{ marginTop: 16 }}>
           <div style={{ marginBottom: 16 }}>
-            <p><strong>URI:</strong> {selectedResource.uri}</p>
-            <p><strong>名称:</strong> {selectedResource.name || '无'}</p>
-            <p><strong>描述:</strong> {selectedResource.description || '无'}</p>
-            <p><strong>MIME类型:</strong> {selectedResource.mimeType || '未知'}</p>
+            <p><strong>{t.resources.resourceUri}:</strong> {selectedResource.uri}</p>
+            <p><strong>{t.resources.resourceName}:</strong> {selectedResource.name || t.resources.resourceName}</p>
+            <p><strong>{t.tools.description}:</strong> {selectedResource.description || t.resources.resourceName}</p>
+            <p><strong>{t.resources.mimeType}:</strong> {selectedResource.mimeType || t.auth.none}</p>
           </div>
           
           <Button 
@@ -109,7 +111,7 @@ const ResourcesPanel: React.FC = () => {
             onClick={handleResourceRead}
             loading={isLoading}
           >
-            读取资源
+            {t.resources.readResource}
           </Button>
         </Card>
       )}

@@ -24,6 +24,7 @@ import { useDispatch } from 'react-redux';
 import { connectToServer } from '../store/mcpSlice';
 import { storage } from '../utils/storage';
 import { MCPServerConfig } from '../types/mcp';
+import { useI18n } from '../hooks/useI18n';
 
 const { Text } = Typography;
 
@@ -38,6 +39,7 @@ interface MCPListPanelProps {
 }
 
 const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigger }) => {
+  const { t } = useI18n();
   const dispatch = useDispatch();
   const [savedConfigs, setSavedConfigs] = useState<SavedConfig[]>([]);
   const [loading, setLoading] = useState<string | null>(null);
@@ -64,14 +66,14 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
     setLoading(config.name);
     try {
       await dispatch(connectToServer(config) as any).unwrap();
-      message.success(`已连接到 ${config.name}`);
+      message.success(`${t.success.connected} - ${config.name}`);
       
       // 通知父组件配置已加载
       if (onConfigLoad) {
         onConfigLoad(config);
       }
     } catch (error) {
-      message.error(`连接失败: ${error}`);
+      message.error(`${t.errors.connectionFailed}: ${error}`);
     } finally {
       setLoading(null);
     }
@@ -81,10 +83,10 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
   const handleDelete = (name: string) => {
     const success = storage.deleteMCPConfig(name);
     if (success) {
-      message.success('配置已删除');
+      message.success(t.success.configDeleted);
       loadSavedConfigs();
     } else {
-      message.error('删除配置失败');
+      message.error(t.errors.saveConfigFailed);
     }
   };
 
@@ -92,9 +94,9 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
   const handleExport = () => {
     const success = storage.exportAllConfigs();
     if (success) {
-      message.success('配置已导出');
+      message.success(t.success.exportSuccess);
     } else {
-      message.error('导出配置失败');
+      message.error(t.errors.exportFailed);
     }
   };
 
@@ -102,10 +104,10 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
   const handleImport = async (file: File) => {
     const success = await storage.importConfigs(file);
     if (success) {
-      message.success('配置导入成功');
+      message.success(t.success.importSuccess);
       loadSavedConfigs();
     } else {
-      message.error('导入配置失败');
+      message.error(t.errors.importFailed);
     }
     return false; // 阻止默认上传行为
   };
@@ -113,22 +115,22 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
   // 格式化时间
   const formatTime = (timestamp?: number) => {
     if (!timestamp) return '';
-    return new Date(timestamp).toLocaleString('zh-CN');
+    return new Date(timestamp).toLocaleString();
   };
 
   // 获取认证类型标签
   const getAuthTag = (auth?: any) => {
     if (!auth || auth.type === 'none') {
-      return <Tag color="default">无认证</Tag>;
+      return <Tag color="default">{t.auth.none}</Tag>;
     }
     
     switch (auth.type) {
       case 'url_params':
-        return <Tag color="blue">URL参数</Tag>;
+        return <Tag color="blue">{t.auth.urlParams}</Tag>;
       case 'headers':
-        return <Tag color="green">请求头</Tag>;
+        return <Tag color="green">{t.auth.custom}</Tag>;
       default:
-        return <Tag color="default">未知</Tag>;
+        return <Tag color="default">{t.auth.none}</Tag>;
     }
   };
 
@@ -138,7 +140,7 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
         title={
           <Space>
             <DatabaseOutlined />
-            已保存的MCP配置
+            {t.config.savedConfigs}
           </Space>
         }
         size="small"
@@ -153,7 +155,7 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
                 type="text" 
                 icon={<UploadOutlined />} 
                 size="small"
-                title="导入配置"
+                title={t.config.importConfigs}
               />
             </Upload>
             <Button 
@@ -161,7 +163,7 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
               icon={<DownloadOutlined />}
               onClick={handleExport}
               size="small"
-              title="导出配置"
+              title={t.config.exportConfigs}
               disabled={savedConfigs.length === 0}
             />
           </Space>
@@ -170,7 +172,7 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
       >
         {savedConfigs.length === 0 ? (
           <Empty 
-            description="暂无保存的配置"
+            description={t.config.noSavedConfigs}
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             style={{ margin: '20px 0' }}
           />
@@ -199,8 +201,8 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
                         {config.host}
                       </Text>
                     </div>
-                    <Space direction="vertical" size={2} style={{ alignItems: 'flex-end' }}>
-                      <Space size={4}>
+                    <Space size="small">
+                      <Tooltip title={t.common.connect}>
                         <Button
                           type="primary"
                           size="small"
@@ -208,24 +210,21 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
                           onClick={() => handleConnect(config)}
                           loading={loading === config.name}
                           style={{ fontSize: '11px' }}
-                        >
-                          连接
-                        </Button>
-                        <Popconfirm
-                          title="确定删除此配置？"
-                          onConfirm={() => handleDelete(config.name)}
-                          okText="确定"
-                          cancelText="取消"
-                        >
-                          <Button
-                            type="text"
-                            size="small"
-                            icon={<DeleteOutlined />}
-                            danger
-                            style={{ fontSize: '11px' }}
-                          />
-                        </Popconfirm>
-                      </Space>
+                        />
+                      </Tooltip>
+                      <Popconfirm
+                        title={t.config.deleteConfig}
+                        onConfirm={() => handleDelete(config.name)}
+                        okText={t.common.ok}
+                        cancelText={t.common.cancel}
+                      >
+                        <Button
+                          danger
+                          size="small"
+                          icon={<DeleteOutlined />}
+                          style={{ fontSize: '11px' }}
+                        />
+                      </Popconfirm>
                     </Space>
                   </div>
                   
@@ -233,13 +232,17 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
                     {getAuthTag(config.auth)}
                   </div>
                   
-                  {config.updatedAt && (
-                    <Tooltip title={`更新时间: ${formatTime(config.updatedAt)}`}>
-                      <Text type="secondary" style={{ fontSize: '10px' }}>
-                        <ClockCircleOutlined style={{ marginRight: '2px' }} />
-                        {formatTime(config.updatedAt)}
-                      </Text>
-                    </Tooltip>
+                  {(config.createdAt || config.updatedAt) && (
+                    <div style={{ 
+                      fontSize: '10px', 
+                      color: '#999',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      <ClockCircleOutlined style={{ fontSize: '10px' }} />
+                      {config.updatedAt && formatTime(config.updatedAt)}
+                    </div>
                   )}
                 </div>
               </List.Item>
