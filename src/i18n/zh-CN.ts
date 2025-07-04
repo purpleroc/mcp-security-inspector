@@ -216,7 +216,7 @@ export const zhCN: TranslationKey = {
   },
   
   app: {
-    title: 'MCP安全检测器',
+    title: 'MCP Security Inspector',
     description: 'Model Context Protocol安全性检测工具',
     version: '版本',
     language: '语言',

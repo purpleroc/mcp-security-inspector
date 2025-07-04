@@ -80,8 +80,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
     try {
       await dispatch(disconnectFromServer() as any).unwrap();
       message.success(t.config.messages.disconnectSuccess);
-      form.resetFields();
-      setAuthConfig({ type: 'none' });
+      // 断开连接后保持配置，不重置表单
     } catch (error) {
       message.error(`${t.config.messages.disconnectFailed}: ${error}`);
     }
@@ -219,9 +218,6 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
                 (() => {
                   const authType = serverConfig?.auth?.type;
                   if (!authType || authType === 'none') return t.auth.none;
-                  if (authType === 'apiKey') return t.auth.apiKey;
-                  if (authType === 'basic') return t.auth.basic;
-                  if (authType === 'custom') return t.auth.custom;
                   if (authType === 'combined') return t.auth.combined;
                   return t.auth.none;
                 })()

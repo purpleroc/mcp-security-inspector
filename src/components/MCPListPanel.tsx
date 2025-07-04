@@ -18,10 +18,13 @@ import {
   DownloadOutlined, 
   UploadOutlined,
   ClockCircleOutlined,
-  DatabaseOutlined
+  DatabaseOutlined,
+  DisconnectOutlined,
+  CheckCircleOutlined
 } from '@ant-design/icons';
-import { useDispatch } from 'react-redux';
-import { connectToServer } from '../store/mcpSlice';
+import { useDispatch, useSelector } from 'react-redux';
+import { connectToServer, disconnectFromServer } from '../store/mcpSlice';
+import { RootState } from '../store';
 import { storage } from '../utils/storage';
 import { MCPServerConfig } from '../types/mcp';
 import { useI18n } from '../hooks/useI18n';
@@ -43,6 +46,9 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
   const dispatch = useDispatch();
   const [savedConfigs, setSavedConfigs] = useState<SavedConfig[]>([]);
   const [loading, setLoading] = useState<string | null>(null);
+  
+  // 从状态中获取连接信息
+  const { connectionStatus, serverConfig } = useSelector((state: RootState) => state.mcp);
 
   // 加载已保存的配置
   const loadSavedConfigs = () => {
@@ -61,6 +67,15 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
     }
   }, [refreshTrigger]);
 
+  // 检查配置是否为当前连接的配置
+  const isCurrentConnection = (config: MCPServerConfig) => {
+    return connectionStatus === 'connected' && 
+           serverConfig &&
+           serverConfig.name === config.name &&
+           serverConfig.host === config.host &&
+           serverConfig.ssePath === config.ssePath;
+  };
+
   // 连接到指定配置
   const handleConnect = async (config: MCPServerConfig) => {
     setLoading(config.name);
@@ -76,6 +91,16 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
       message.error(`${t.errors.connectionFailed}: ${error}`);
     } finally {
       setLoading(null);
+    }
+  };
+
+  // 断开连接
+  const handleDisconnect = async () => {
+    try {
+      await dispatch(disconnectFromServer() as any).unwrap();
+      message.success(t.config.messages.disconnectSuccess);
+    } catch (error) {
+      message.error(`${t.config.messages.disconnectFailed}: ${error}`);
     }
   };
 
@@ -180,73 +205,104 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
           <List
             size="small"
             dataSource={savedConfigs}
-            renderItem={(config) => (
-              <List.Item
-                key={config.name}
-                style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}
-              >
-                <div style={{ width: '100%' }}>
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'flex-start',
-                    marginBottom: '4px'
-                  }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <Text strong style={{ fontSize: '13px' }}>
-                        {config.name}
-                      </Text>
-                      <br />
-                      <Text type="secondary" style={{ fontSize: '11px' }}>
-                        {config.host}
-                      </Text>
-                    </div>
-                    <Space size="small">
-                      <Tooltip title={t.common.connect}>
-                        <Button
-                          type="primary"
-                          size="small"
-                          icon={<PlayCircleOutlined />}
-                          onClick={() => handleConnect(config)}
-                          loading={loading === config.name}
-                          style={{ fontSize: '11px' }}
-                        />
-                      </Tooltip>
+            renderItem={(config) => {
+              const isConnected = isCurrentConnection(config);
+              return (
+                <List.Item
+                  key={config.name}
+                  style={{ 
+                    padding: '8px 0', 
+                    borderBottom: '1px solid #f0f0f0',
+                    backgroundColor: isConnected ? '#f6ffed' : 'transparent',
+                    borderRadius: isConnected ? '4px' : '0',
+                    marginBottom: isConnected ? '4px' : '0',
+                    paddingLeft: isConnected ? '8px' : '0',
+                    paddingRight: isConnected ? '8px' : '0',
+                    border: isConnected ? '1px solid #b7eb8f' : 'none'
+                  }}
+                >
+                  <div style={{ width: '100%' }}>
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'flex-start',
+                      marginBottom: '4px'
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <Space>
+                          <Text strong style={{ fontSize: '13px' }}>
+                            {config.name}
+                          </Text>
+                          {isConnected && (
+                            <Tag color="success" icon={<CheckCircleOutlined />} style={{ fontSize: '10px' }}>
+                              {t.config.connectionStatus.connected}
+                            </Tag>
+                          )}
+                        </Space>
+                        <br />
+                        <Text type="secondary" style={{ fontSize: '11px' }}>
+                          {config.host}
+                        </Text>
+                      </div>
+                      <Space size="small">
+                        {isConnected ? (
+                          <Tooltip title={t.common.disconnect}>
+                            <Button
+                              danger
+                              size="small"
+                              icon={<DisconnectOutlined />}
+                              onClick={handleDisconnect}
+                              style={{ fontSize: '11px' }}
+                            />
+                          </Tooltip>
+                        ) : (
+                          <Tooltip title={t.common.connect}>
+                            <Button
+                              type="primary"
+                              size="small"
+                              icon={<PlayCircleOutlined />}
+                              onClick={() => handleConnect(config)}
+                              loading={loading === config.name}
+                              style={{ fontSize: '11px' }}
+                            />
+                          </Tooltip>
+                        )}
                         <Popconfirm
-                        title={t.config.deleteConfig}
+                          title={t.config.deleteConfig}
                           onConfirm={() => handleDelete(config.name)}
-                        okText={t.common.ok}
-                        cancelText={t.common.cancel}
+                          okText={t.common.ok}
+                          cancelText={t.common.cancel}
                         >
                           <Button
-                          danger
+                            danger
                             size="small"
                             icon={<DeleteOutlined />}
                             style={{ fontSize: '11px' }}
                           />
                         </Popconfirm>
-                    </Space>
-                  </div>
-                  
-                  <div style={{ marginBottom: '4px' }}>
-                    {getAuthTag(config.auth)}
-                  </div>
-                  
-                  {(config.createdAt || config.updatedAt) && (
-                    <div style={{ 
-                      fontSize: '10px', 
-                      color: '#999',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}>
-                      <ClockCircleOutlined style={{ fontSize: '10px' }} />
-                      {config.updatedAt && formatTime(config.updatedAt)}
+                      </Space>
                     </div>
-                  )}
-                </div>
-              </List.Item>
-            )}
+                    
+                    <div style={{ marginBottom: '4px' }}>
+                      {getAuthTag(config.auth)}
+                    </div>
+                    
+                    {(config.createdAt || config.updatedAt) && (
+                      <div style={{ 
+                        fontSize: '10px', 
+                        color: '#999',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        <ClockCircleOutlined style={{ fontSize: '10px' }} />
+                        {config.updatedAt && formatTime(config.updatedAt)}
+                      </div>
+                    )}
+                  </div>
+                </List.Item>
+              );
+            }}
           />
         )}
       </Card>

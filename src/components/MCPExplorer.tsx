@@ -510,40 +510,51 @@ const MCPExplorer: React.FC = () => {
 
         {/* 结果显示模态框 */}
         <Modal
-        title={t.tools.result}
+          title={t.tools.result}
           open={showResult}
           onCancel={() => setShowResult(false)}
           footer={[
             <Button key="close" onClick={() => setShowResult(false)}>
-            {t.common.close}
+              {t.common.close}
             </Button>
           ]}
-          width={800}
+          width={1000}
+          style={{ top: 20 }}
         >
           {lastError ? (
             <Alert
-            message={t.common.error}
+              message={t.common.error}
               description={lastError}
               type="error"
             />
           ) : lastResult ? (
             <div>
               <Paragraph>
-              <Text strong>{t.tools.result}:</Text>
+                <Text strong>{t.tools.result}:</Text>
               </Paragraph>
-            <div style={{ 
-              backgroundColor: '#f5f5f5', 
-              padding: 16, 
-              borderRadius: 4,
-              maxHeight: 400,
-              overflow: 'auto'
-            }}>
-              <pre>{JSON.stringify(lastResult, null, 2)}</pre>
+              <div style={{ 
+                backgroundColor: '#f5f5f5', 
+                padding: 16, 
+                borderRadius: 4,
+                maxHeight: 'calc(100vh - 300px)',
+                overflow: 'auto',
+                border: '1px solid #d9d9d9'
+              }}>
+                <pre style={{
+                  margin: 0,
+                  whiteSpace: 'pre-wrap',
+                  wordWrap: 'break-word',
+                  fontSize: '12px',
+                  lineHeight: '1.4',
+                  fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace'
+                }}>
+                  {JSON.stringify(lastResult, null, 2)}
+                </pre>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div>{t.common.loading}</div>
-        )}
+          ) : (
+            <div>{t.common.loading}</div>
+          )}
         </Modal>
     </div>
   );

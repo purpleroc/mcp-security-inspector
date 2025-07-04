@@ -132,9 +132,26 @@ const HistoryPanel: React.FC = () => {
                 {item.parameters && Object.keys(item.parameters).length > 0 && (
                   <div>
                     <Text type="secondary">{t.history.parameters}: </Text>
-                    <Text code style={{ fontSize: 11 }}>
-                      {JSON.stringify(item.parameters, null, 2)}
-                    </Text>
+                    <div style={{
+                      marginTop: 4,
+                      backgroundColor: '#fafafa',
+                      padding: 6,
+                      borderRadius: 3,
+                      border: '1px solid #e8e8e8',
+                      maxHeight: 150,
+                      overflow: 'auto'
+                    }}>
+                      <pre style={{
+                        margin: 0,
+                        whiteSpace: 'pre-wrap',
+                        wordWrap: 'break-word',
+                        fontSize: '10px',
+                        lineHeight: '1.2',
+                        fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace'
+                      }}>
+                        {JSON.stringify(item.parameters, null, 2)}
+                      </pre>
+                    </div>
                   </div>
                 )}
                 
@@ -165,17 +182,26 @@ const HistoryPanel: React.FC = () => {
                       <summary style={{ cursor: 'pointer' }}>
                         <Text type="secondary">{t.history.result}</Text>
                       </summary>
-                      <pre 
-                        className="code-block" 
-                        style={{ 
-                          marginTop: 8, 
-                          maxHeight: 200, 
-                          overflow: 'auto',
-                          fontSize: 10
-                        }}
-                      >
-                        {JSON.stringify(item.result, null, 2)}
-                      </pre>
+                      <div style={{
+                        marginTop: 8,
+                        backgroundColor: '#f5f5f5',
+                        padding: 8,
+                        borderRadius: 4,
+                        border: '1px solid #d9d9d9',
+                        maxHeight: 300,
+                        overflow: 'auto'
+                      }}>
+                        <pre style={{
+                          margin: 0,
+                          whiteSpace: 'pre-wrap',
+                          wordWrap: 'break-word',
+                          fontSize: '10px',
+                          lineHeight: '1.3',
+                          fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace'
+                        }}>
+                          {JSON.stringify(item.result, null, 2)}
+                        </pre>
+                      </div>
                     </details>
                   </div>
                 )}
