@@ -1,11 +1,10 @@
 {
   "manifest_version": 3,
   "name": "MCP Security Inspector",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "description": "Model Context Protocol Tool - 用于调试MCP工具、资源、Prompt(MCP server tools, resources and prompts)",
   "action": {
-    "default_title": "MCP Security Inspector",
-    "default_popup": "index.html"
+    "default_title": "MCP Security Inspector"
   },
   "background": {
     "service_worker": "background.js"

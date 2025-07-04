@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Provider, useSelector } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { Layout, Tabs, Space } from 'antd';
 import { HistoryOutlined, SettingOutlined, AppstoreOutlined } from '@ant-design/icons';
-import { store, RootState } from './store';
+import { RootState } from './store';
 import ConfigPanel from './components/ConfigPanel';
 import MCPExplorer from './components/MCPExplorer';
 import HistoryPanel from './components/HistoryPanel';
@@ -13,7 +13,7 @@ import { useI18n } from './hooks/useI18n';
 
 const { Header, Content, Sider } = Layout;
 
-const AppContent: React.FC = () => {
+const App: React.FC = () => {
   const { t } = useI18n();
   const [selectedConfig, setSelectedConfig] = useState<MCPServerConfig | null>(null);
   const [activeTab, setActiveTab] = useState('config');
@@ -114,16 +114,11 @@ const AppContent: React.FC = () => {
             activeKey={activeTab}
             onChange={setActiveTab}
             items={tabItems}
-            style={{ height: '100%' }}
           />
         </Content>
       </Layout>
     </Layout>
   );
-};
-
-const App: React.FC = () => {
-  return <AppContent />;
 };
 
 export default App; 
