@@ -377,15 +377,15 @@ const MCPExplorer: React.FC = () => {
                       </List.Item>
                     )}
                   />
-                </div>
-              )}
+            </div>
+          )}
 
-              {selectedResource && (
-                <>
-                  <Divider />
+          {selectedResource && (
+            <>
+              <Divider />
                   <Card size="small" title={`${t.resources.readResource}: ${selectedResource.name || selectedResource.uri}`}>
                     {selectedResource.uri && selectedResource.uri.includes('{') && (
-                      <div style={{ marginBottom: 16 }}>
+                    <div style={{ marginBottom: 16 }}>
                         <Alert
                           message={`${t.resources.resourceUri}: ${selectedResource.uri}`}
                           type="info"
@@ -396,19 +396,19 @@ const MCPExplorer: React.FC = () => {
                           resourceParams,
                           setResourceParams
                         )}
-                      </div>
+                    </div>
                     )}
-
-                    <Button 
-                      type="primary" 
-                      icon={<PlayCircleOutlined />}
-                      onClick={handleResourceRead}
-                      loading={isLoading}
-                    >
+                
+                <Button 
+                  type="primary" 
+                  icon={<PlayCircleOutlined />}
+                  onClick={handleResourceRead}
+                  loading={isLoading}
+                >
                       {t.resources.readResource}
-                    </Button>
-                  </Card>
-                </>
+                </Button>
+              </Card>
+            </>
               )}
             </div>
           )}
@@ -502,35 +502,35 @@ const MCPExplorer: React.FC = () => {
 
   return (
     <div style={{ height: '100%', overflow: 'auto' }}>
-      <Collapse 
-        items={collapseItems}
+        <Collapse 
+          items={collapseItems}
         defaultActiveKey={['tools', 'resources', 'prompts']}
         size="small"
-      />
+        />
 
-      {/* 结果显示模态框 */}
-      <Modal
+        {/* 结果显示模态框 */}
+        <Modal
         title={t.tools.result}
-        open={showResult}
-        onCancel={() => setShowResult(false)}
-        footer={[
-          <Button key="close" onClick={() => setShowResult(false)}>
+          open={showResult}
+          onCancel={() => setShowResult(false)}
+          footer={[
+            <Button key="close" onClick={() => setShowResult(false)}>
             {t.common.close}
-          </Button>
-        ]}
-        width={800}
-      >
-        {lastError ? (
-          <Alert
+            </Button>
+          ]}
+          width={800}
+        >
+          {lastError ? (
+            <Alert
             message={t.common.error}
-            description={lastError}
-            type="error"
-          />
-        ) : lastResult ? (
-          <div>
-            <Paragraph>
+              description={lastError}
+              type="error"
+            />
+          ) : lastResult ? (
+            <div>
+              <Paragraph>
               <Text strong>{t.tools.result}:</Text>
-            </Paragraph>
+              </Paragraph>
             <div style={{ 
               backgroundColor: '#f5f5f5', 
               padding: 16, 
@@ -544,7 +544,7 @@ const MCPExplorer: React.FC = () => {
         ) : (
           <div>{t.common.loading}</div>
         )}
-      </Modal>
+        </Modal>
     </div>
   );
 };

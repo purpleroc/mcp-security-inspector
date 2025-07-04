@@ -6,7 +6,7 @@ import {
   Space, 
   Tag, 
   Typography, 
-  Popconfirm, 
+  Popconfirm,
   Empty,
   Pagination
 } from 'antd';
@@ -15,7 +15,7 @@ import {
   ClockCircleOutlined, 
   ToolOutlined, 
   DatabaseOutlined, 
-  BulbOutlined, 
+  BulbOutlined,
   WarningOutlined,
   ClearOutlined 
 } from '@ant-design/icons';

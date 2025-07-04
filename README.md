@@ -34,15 +34,15 @@ A professional security testing tool for Model Context Protocol (MCP) servers. T
 
 ### 🔧 Development
 
-```bash
+   ```bash
 # Install dependencies
-npm install
+   npm install
 
 # Start development server
 npm run dev
 
 # Build for production
-npm run build:extension
+   npm run build:extension
 
 # Package for distribution
 npm run package

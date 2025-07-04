@@ -212,19 +212,19 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
                           style={{ fontSize: '11px' }}
                         />
                       </Tooltip>
-                      <Popconfirm
+                        <Popconfirm
                         title={t.config.deleteConfig}
-                        onConfirm={() => handleDelete(config.name)}
+                          onConfirm={() => handleDelete(config.name)}
                         okText={t.common.ok}
                         cancelText={t.common.cancel}
-                      >
-                        <Button
+                        >
+                          <Button
                           danger
-                          size="small"
-                          icon={<DeleteOutlined />}
-                          style={{ fontSize: '11px' }}
-                        />
-                      </Popconfirm>
+                            size="small"
+                            icon={<DeleteOutlined />}
+                            style={{ fontSize: '11px' }}
+                          />
+                        </Popconfirm>
                     </Space>
                   </div>
                   

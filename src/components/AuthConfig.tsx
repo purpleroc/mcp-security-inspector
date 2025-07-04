@@ -25,8 +25,8 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
 
   const handleCombinedChange = (section: 'apiKey' | 'urlParams' | 'customHeaders' | 'basicAuth', data: any) => {
     if (value?.type === 'combined') {
-      onChange?.({
-        ...value,
+      onChange?.({ 
+        ...value, 
         [section]: data
       });
     }
