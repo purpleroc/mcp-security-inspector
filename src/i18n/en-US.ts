@@ -122,7 +122,7 @@ export const enUS: TranslationKey = {
   tools: {
     title: 'Tools',
     noTools: 'No tools available',
-    selectTool: 'Please select a tool to test',
+    selectTool: 'Select Tool',
     toolName: 'Tool Name',
     description: 'Description',
     parameters: 'Parameters',

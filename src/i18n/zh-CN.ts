@@ -122,7 +122,7 @@ export const zhCN: TranslationKey = {
   tools: {
     title: '工具',
     noTools: '暂无可用工具',
-    selectTool: '请选择要测试的工具',
+    selectTool: '选择工具',
     toolName: '工具名称',
     description: '描述',
     parameters: '参数',
