@@ -148,7 +148,7 @@ npm run package
 - 📚 **History Records** | 历史记录：完整的测试历史记录和查看功能
 - 🔗 **Connection History** | 连接记录：自动保存和管理MCP服务器连接历史
 
-### v1.0.4 (Current | 当前版本)
+### v1.0.4
 - 🏪 **Chrome Web Store Release** | Chrome插件商城发布：现在可以通过Chrome Web Store直接安装
 - 🌐 **Official Store Listing** | 官方商店上架：提供更便捷的安装方式
 - 📦 **Simplified Installation** | 简化安装：一键安装，无需开发者模式
