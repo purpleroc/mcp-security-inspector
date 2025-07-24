@@ -143,7 +143,11 @@ npm run package
 - **CORS Support** | 跨域请求处理
 
 ## 📈 Changelog | 更新日志
-### v1.0.5 (Current | 当前版本)
+### v1.0.6 (Current | 当前版本)
+- 🔧 **Improved Debugging Experience** | 改进调试体验：调试面板现在直接显示在选中工具下方，无需滚动到底部
+- 📊 **Enhanced History Display** | 优化历史显示：改进历史记录页面参数框的显示效果，确保视觉一致性
+
+### v1.0.5
 - 🌍 **Enhanced Multi-language Support** | 增强多语言支持：支持更多国家和地区的语言
 - 📚 **History Records** | 历史记录：完整的测试历史记录和查看功能
 - 🔗 **Connection History** | 连接记录：自动保存和管理MCP服务器连接历史
