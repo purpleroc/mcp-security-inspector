@@ -12,7 +12,6 @@ import {
   Alert, 
   Tag, 
   Typography, 
-  Modal,
   message,
   Divider,
   Badge
@@ -55,7 +54,12 @@ const MCPExplorer: React.FC = () => {
   const [toolParams, setToolParams] = useState<Record<string, any>>({});
   const [resourceParams, setResourceParams] = useState<Record<string, any>>({});
   const [promptParams, setPromptParams] = useState<Record<string, any>>({});
-  const [showResult, setShowResult] = useState(false);
+  const [toolResults, setToolResults] = useState<Record<string, any>>({});
+  const [resourceResults, setResourceResults] = useState<Record<string, any>>({});
+  const [promptResults, setPromptResults] = useState<Record<string, any>>({});
+  const [toolErrors, setToolErrors] = useState<Record<string, string>>({});
+  const [resourceErrors, setResourceErrors] = useState<Record<string, string>>({});
+  const [promptErrors, setPromptErrors] = useState<Record<string, string>>({});
 
   // 安全等级颜色映射
   const getRiskColor = (level: SecurityRiskLevel) => {
@@ -73,10 +77,13 @@ const MCPExplorer: React.FC = () => {
     if (!selectedTool) return;
 
     try {
-      await dispatch(callTool({ tool: selectedTool, parameters: toolParams }) as any).unwrap();
-      setShowResult(true);
+      const result = await dispatch(callTool({ tool: selectedTool, parameters: toolParams }) as any).unwrap();
+      setToolResults(prev => ({ ...prev, [selectedTool.name]: result.result }));
+      setToolErrors(prev => ({ ...prev, [selectedTool.name]: '' }));
       message.success(t.success.connected);
     } catch (error) {
+      setToolErrors(prev => ({ ...prev, [selectedTool.name]: String(error) }));
+      setToolResults(prev => ({ ...prev, [selectedTool.name]: null }));
       message.error(`${t.errors.toolCallFailed}: ${error}`);
     }
   };
@@ -107,10 +114,15 @@ const MCPExplorer: React.FC = () => {
         uri: actualUri
       };
 
-      await dispatch(readResource({ resource: resourceToRead, parameters: resourceParams }) as any).unwrap();
-      setShowResult(true);
+      const result = await dispatch(readResource({ resource: resourceToRead, parameters: resourceParams }) as any).unwrap();
+      const resourceKey = selectedResource.name || selectedResource.uri;
+      setResourceResults(prev => ({ ...prev, [resourceKey]: result.result }));
+      setResourceErrors(prev => ({ ...prev, [resourceKey]: '' }));
       message.success(t.success.connected);
     } catch (error) {
+      const resourceKey = selectedResource.name || selectedResource.uri;
+      setResourceErrors(prev => ({ ...prev, [resourceKey]: String(error) }));
+      setResourceResults(prev => ({ ...prev, [resourceKey]: null }));
       message.error(`${t.errors.resourceReadFailed}: ${error}`);
     }
   };
@@ -120,12 +132,65 @@ const MCPExplorer: React.FC = () => {
     if (!selectedPrompt) return;
 
     try {
-      await dispatch(getPrompt({ prompt: selectedPrompt, parameters: promptParams }) as any).unwrap();
-      setShowResult(true);
+      const result = await dispatch(getPrompt({ prompt: selectedPrompt, parameters: promptParams }) as any).unwrap();
+      setPromptResults(prev => ({ ...prev, [selectedPrompt.name]: result.result }));
+      setPromptErrors(prev => ({ ...prev, [selectedPrompt.name]: '' }));
       message.success(t.success.connected);
     } catch (error) {
+      setPromptErrors(prev => ({ ...prev, [selectedPrompt.name]: String(error) }));
+      setPromptResults(prev => ({ ...prev, [selectedPrompt.name]: null }));
       message.error(`${t.errors.promptGetFailed}: ${error}`);
     }
+  };
+
+  // 渲染结果显示组件
+  const renderResultDisplay = (result: any, error: string, onClose: () => void) => {
+    if (!result && !error) return null;
+
+    return (
+      <Card 
+        size="small" 
+        title={t.tools.result}
+        style={{ marginTop: 16 }}
+        extra={
+          <Button size="small" onClick={onClose}>
+            {t.common.close}
+          </Button>
+        }
+      >
+        {error ? (
+          <Alert
+            message={t.common.error}
+            description={error}
+            type="error"
+          />
+        ) : result ? (
+          <div>
+            <div style={{ 
+              backgroundColor: '#f5f5f5', 
+              padding: 12, 
+              borderRadius: 4,
+              maxHeight: '400px',
+              overflow: 'auto',
+              border: '1px solid #d9d9d9'
+            }}>
+              <pre style={{
+                margin: 0,
+                whiteSpace: 'pre-wrap',
+                wordWrap: 'break-word',
+                fontSize: '12px',
+                lineHeight: '1.4',
+                fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace'
+              }}>
+                {JSON.stringify(result, null, 2)}
+              </pre>
+            </div>
+          </div>
+        ) : (
+          <div>{t.common.loading}</div>
+        )}
+      </Card>
+    );
   };
 
   // 渲染参数表单
@@ -211,83 +276,96 @@ const MCPExplorer: React.FC = () => {
             <List
               dataSource={tools}
               renderItem={(tool) => (
-                <List.Item
-                  actions={[
-                    <Button 
-                      key="select"
-                      type={selectedTool?.name === tool.name ? 'primary' : 'default'}
-                      onClick={() => {
-                        setSelectedTool(tool);
-                        setToolParams({}); // 清空参数状态
-                      }}
-                    >
-                      {selectedTool?.name === tool.name ? t.tools.selectTool : t.tools.selectTool}
-                    </Button>
-                  ]}
-                >
-                  <List.Item.Meta
-                    title={tool.name}
-                    description={tool.description}
-                  />
-                </List.Item>
+                <div key={tool.name}>
+                  <List.Item
+                    actions={[
+                      <Button 
+                        key="select"
+                        type={selectedTool?.name === tool.name ? 'primary' : 'default'}
+                        onClick={() => {
+                          setSelectedTool(tool);
+                          setToolParams({}); // 清空参数状态
+                        }}
+                      >
+                        {selectedTool?.name === tool.name ? t.tools.selectTool : t.tools.selectTool}
+                      </Button>
+                    ]}
+                  >
+                    <List.Item.Meta
+                      title={tool.name}
+                      description={tool.description}
+                    />
+                  </List.Item>
+                  
+                  {/* 在选中的工具下方显示调用功能框 */}
+                  {selectedTool?.name === tool.name && (
+                    <div style={{ marginLeft: 24, marginBottom: 16, marginTop: 8 }}>
+                      <Card size="small" title={`${t.tools.callTool}: ${selectedTool.name}`}>
+                        {renderParameterForm(
+                          selectedTool.inputSchema,
+                          toolParams,
+                          setToolParams
+                        )}
+                        
+                        {securityCheck && (
+                          <Alert
+                            message={`${t.security.riskAssessment}: ${securityCheck.level.toUpperCase()}`}
+                            description={
+                              <div>
+                                {securityCheck.warnings.length > 0 && (
+                                  <div>
+                                    <Text strong>{t.common.warning}:</Text>
+                                    <ul>
+                                      {securityCheck.warnings.map((warning, idx) => (
+                                        <li key={idx}>{warning}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                                {securityCheck.recommendations.length > 0 && (
+                                  <div>
+                                    <Text strong>{t.security.recommendations}:</Text>
+                                    <ul>
+                                      {securityCheck.recommendations.map((rec, idx) => (
+                                        <li key={idx}>{rec}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            }
+                            type={securityCheck.level === 'low' ? 'success' : 
+                                  securityCheck.level === 'medium' ? 'warning' : 'error'}
+                            style={{ marginBottom: 16 }}
+                          />
+                        )}
+
+                        <Button 
+                          type="primary" 
+                          icon={<PlayCircleOutlined />}
+                          onClick={handleToolCall}
+                          loading={isLoading}
+                        >
+                          {t.tools.callTool}
+                        </Button>
+                      </Card>
+                      
+                            {/* 工具调用结果显示 */}
+                            {renderResultDisplay(
+                              toolResults[tool.name], 
+                              toolErrors[tool.name], 
+                              () => {
+                                setToolResults(prev => ({ ...prev, [tool.name]: null }));
+                                setToolErrors(prev => ({ ...prev, [tool.name]: '' }));
+                              }
+                            )}
+                    </div>
+                  )}
+                </div>
               )}
             />
           )}
 
-          {selectedTool && (
-            <>
-              <Divider />
-              <Card size="small" title={`${t.tools.callTool}: ${selectedTool.name}`}>
-                {renderParameterForm(
-                  selectedTool.inputSchema,
-                  toolParams,
-                  setToolParams
-                )}
-                
-                {securityCheck && (
-                  <Alert
-                    message={`${t.security.riskAssessment}: ${securityCheck.level.toUpperCase()}`}
-                    description={
-                      <div>
-                        {securityCheck.warnings.length > 0 && (
-                          <div>
-                            <Text strong>{t.common.warning}:</Text>
-                            <ul>
-                              {securityCheck.warnings.map((warning, idx) => (
-                                <li key={idx}>{warning}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        {securityCheck.recommendations.length > 0 && (
-                          <div>
-                            <Text strong>{t.security.recommendations}:</Text>
-                            <ul>
-                              {securityCheck.recommendations.map((rec, idx) => (
-                                <li key={idx}>{rec}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    }
-                    type={securityCheck.level === 'low' ? 'success' : 
-                          securityCheck.level === 'medium' ? 'warning' : 'error'}
-                    style={{ marginBottom: 16 }}
-                  />
-                )}
-
-                <Button 
-                  type="primary" 
-                  icon={<PlayCircleOutlined />}
-                  onClick={handleToolCall}
-                  loading={isLoading}
-                >
-                  {t.tools.callTool}
-                </Button>
-              </Card>
-            </>
-          )}
         </div>
       )
     },
@@ -313,31 +391,75 @@ const MCPExplorer: React.FC = () => {
                   <List
                     dataSource={resources}
                     renderItem={(resource) => (
-                      <List.Item
-                        actions={[
-                          <Button 
-                            key="select"
-                            type={selectedResource?.uri === resource.uri ? 'primary' : 'default'}
-                            onClick={() => {
-                              setSelectedResource(resource);
-                              setResourceParams({}); // 清空参数状态
-                            }}
-                          >
-                            {selectedResource?.uri === resource.uri ? t.resources.selectResource : t.resources.selectResource}
-                          </Button>
-                        ]}
-                      >
-                        <List.Item.Meta
-                          title={resource.name || resource.uri}
-                          description={
-                            <div>
-                              <div>{resource.description}</div>
-                              <Text type="secondary">{t.resources.resourceUri}: {resource.uri}</Text>
-                              {resource.mimeType && <Tag>{resource.mimeType}</Tag>}
-                            </div>
-                          }
-                        />
-                      </List.Item>
+                      <div key={resource.uri}>
+                        <List.Item
+                          actions={[
+                            <Button 
+                              key="select"
+                              type={selectedResource?.uri === resource.uri ? 'primary' : 'default'}
+                              onClick={() => {
+                                setSelectedResource(resource);
+                                setResourceParams({}); // 清空参数状态
+                              }}
+                            >
+                              {selectedResource?.uri === resource.uri ? t.resources.selectResource : t.resources.selectResource}
+                            </Button>
+                          ]}
+                        >
+                          <List.Item.Meta
+                            title={resource.name || resource.uri}
+                            description={
+                              <div>
+                                <div>{resource.description}</div>
+                                <Text type="secondary">{t.resources.resourceUri}: {resource.uri}</Text>
+                                {resource.mimeType && <Tag>{resource.mimeType}</Tag>}
+                              </div>
+                            }
+                          />
+                        </List.Item>
+                        
+                        {/* 在选中的资源下方显示读取功能框 */}
+                        {selectedResource?.uri === resource.uri && (
+                          <div style={{ marginLeft: 24, marginBottom: 16, marginTop: 8 }}>
+                            <Card size="small" title={`${t.resources.readResource}: ${selectedResource.name || selectedResource.uri}`}>
+                              {selectedResource.uri && selectedResource.uri.includes('{') && (
+                                <div style={{ marginBottom: 16 }}>
+                                  <Alert
+                                    message={`${t.resources.resourceUri}: ${selectedResource.uri}`}
+                                    type="info"
+                                    style={{ marginBottom: 16 }}
+                                  />
+                                  {renderParameterForm(
+                                    (selectedResource as any).inputSchema || { properties: {} },
+                                    resourceParams,
+                                    setResourceParams
+                                  )}
+                                </div>
+                              )}
+                              
+                              <Button 
+                                type="primary" 
+                                icon={<PlayCircleOutlined />}
+                                onClick={handleResourceRead}
+                                loading={isLoading}
+                              >
+                                {t.resources.readResource}
+                              </Button>
+                            </Card>
+                            
+                            {/* 资源读取结果显示 */}
+                            {renderResultDisplay(
+                              resourceResults[resource.name || resource.uri], 
+                              resourceErrors[resource.name || resource.uri], 
+                              () => {
+                                const resourceKey = resource.name || resource.uri;
+                                setResourceResults(prev => ({ ...prev, [resourceKey]: null }));
+                                setResourceErrors(prev => ({ ...prev, [resourceKey]: '' }));
+                              }
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )}
                   />
                 </div>
@@ -349,67 +471,80 @@ const MCPExplorer: React.FC = () => {
                   <List
                     dataSource={resourceTemplates}
                     renderItem={(template) => (
-                      <List.Item
-                        actions={[
-                          <Button 
-                            key="select"
-                            type={selectedResource?.name === template.name ? 'primary' : 'default'}
-                            onClick={() => {
-                              setSelectedResource(template);
-                              setResourceParams({}); // 清空参数状态
-                            }}
-                          >
-                            {selectedResource?.name === template.name ? t.resources.selectResource : t.resources.selectResource}
-                          </Button>
-                        ]}
-                      >
-                        <List.Item.Meta
-                          title={template.name || (template as any).uriTemplate}
-                          description={
-                            <div>
-                              <div>{template.description}</div>
-                              <Text type="secondary">{t.resources.resourceUri}: {(template as any).uriTemplate}</Text>
-                              {template.mimeType && <Tag>{template.mimeType}</Tag>}
-                              <Tag color="blue">{t.resources.templates}</Tag>
-                            </div>
-                          }
-                        />
-                      </List.Item>
+                      <div key={template.name}>
+                        <List.Item
+                          actions={[
+                            <Button 
+                              key="select"
+                              type={selectedResource?.name === template.name ? 'primary' : 'default'}
+                              onClick={() => {
+                                setSelectedResource(template);
+                                setResourceParams({}); // 清空参数状态
+                              }}
+                            >
+                              {selectedResource?.name === template.name ? t.resources.selectResource : t.resources.selectResource}
+                            </Button>
+                          ]}
+                        >
+                          <List.Item.Meta
+                            title={template.name || (template as any).uriTemplate}
+                            description={
+                              <div>
+                                <div>{template.description}</div>
+                                <Text type="secondary">{t.resources.resourceUri}: {(template as any).uriTemplate}</Text>
+                                {template.mimeType && <Tag>{template.mimeType}</Tag>}
+                                <Tag color="blue">{t.resources.templates}</Tag>
+                              </div>
+                            }
+                          />
+                        </List.Item>
+                        
+                        {/* 在选中的资源模板下方显示读取功能框 */}
+                        {selectedResource?.name === template.name && (
+                          <div style={{ marginLeft: 24, marginBottom: 16, marginTop: 8 }}>
+                            <Card size="small" title={`${t.resources.readResource}: ${selectedResource.name || selectedResource.uri}`}>
+                              {selectedResource.uri && selectedResource.uri.includes('{') && (
+                                <div style={{ marginBottom: 16 }}>
+                                  <Alert
+                                    message={`${t.resources.resourceUri}: ${selectedResource.uri}`}
+                                    type="info"
+                                    style={{ marginBottom: 16 }}
+                                  />
+                                  {renderParameterForm(
+                                    (selectedResource as any).inputSchema || { properties: {} },
+                                    resourceParams,
+                                    setResourceParams
+                                  )}
+                                </div>
+                              )}
+                              
+                              <Button 
+                                type="primary" 
+                                icon={<PlayCircleOutlined />}
+                                onClick={handleResourceRead}
+                                loading={isLoading}
+                              >
+                                {t.resources.readResource}
+                              </Button>
+                            </Card>
+                            
+                            {/* 资源读取结果显示 */}
+                            {renderResultDisplay(
+                              resourceResults[template.name], 
+                              resourceErrors[template.name], 
+                              () => {
+                                setResourceResults(prev => ({ ...prev, [template.name]: null }));
+                                setResourceErrors(prev => ({ ...prev, [template.name]: '' }));
+                              }
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )}
                   />
             </div>
           )}
 
-          {selectedResource && (
-            <>
-              <Divider />
-                  <Card size="small" title={`${t.resources.readResource}: ${selectedResource.name || selectedResource.uri}`}>
-                    {selectedResource.uri && selectedResource.uri.includes('{') && (
-                    <div style={{ marginBottom: 16 }}>
-                        <Alert
-                          message={`${t.resources.resourceUri}: ${selectedResource.uri}`}
-                          type="info"
-                          style={{ marginBottom: 16 }}
-                        />
-                        {renderParameterForm(
-                          (selectedResource as any).inputSchema || { properties: {} },
-                          resourceParams,
-                          setResourceParams
-                        )}
-                    </div>
-                    )}
-                
-                <Button 
-                  type="primary" 
-                  icon={<PlayCircleOutlined />}
-                  onClick={handleResourceRead}
-                  loading={isLoading}
-                >
-                      {t.resources.readResource}
-                </Button>
-              </Card>
-            </>
-              )}
             </div>
           )}
         </div>
@@ -433,68 +568,81 @@ const MCPExplorer: React.FC = () => {
             <List
               dataSource={prompts}
               renderItem={(prompt) => (
-                <List.Item
-                  actions={[
-                    <Button 
-                      key="select"
-                      type={selectedPrompt?.name === prompt.name ? 'primary' : 'default'}
-                      onClick={() => {
-                        setSelectedPrompt(prompt);
-                        setPromptParams({}); // 清空参数状态
-                      }}
-                    >
-                      {selectedPrompt?.name === prompt.name ? t.prompts.selectPrompt : t.prompts.selectPrompt}
-                    </Button>
-                  ]}
-                >
-                  <List.Item.Meta
-                    title={prompt.name}
-                    description={prompt.description}
-                  />
-                </List.Item>
+                <div key={prompt.name}>
+                  <List.Item
+                    actions={[
+                      <Button 
+                        key="select"
+                        type={selectedPrompt?.name === prompt.name ? 'primary' : 'default'}
+                        onClick={() => {
+                          setSelectedPrompt(prompt);
+                          setPromptParams({}); // 清空参数状态
+                        }}
+                      >
+                        {selectedPrompt?.name === prompt.name ? t.prompts.selectPrompt : t.prompts.selectPrompt}
+                      </Button>
+                    ]}
+                  >
+                    <List.Item.Meta
+                      title={prompt.name}
+                      description={prompt.description}
+                    />
+                  </List.Item>
+                  
+                  {/* 在选中的提示下方显示获取功能框 */}
+                  {selectedPrompt?.name === prompt.name && (
+                    <div style={{ marginLeft: 24, marginBottom: 16, marginTop: 8 }}>
+                      <Card size="small" title={`${t.prompts.getPrompt}: ${selectedPrompt.name}`}>
+                        {selectedPrompt.arguments && selectedPrompt.arguments.length > 0 && (
+                          <div style={{ marginBottom: 16 }}>
+                            <Form layout="vertical">
+                              {selectedPrompt.arguments.map((arg) => (
+                                <Form.Item 
+                                  key={arg.name} 
+                                  label={arg.name}
+                                  help={arg.description}
+                                  required={false}
+                                >
+                                  <Input
+                                    placeholder={arg.description ? arg.description : `${t.prompts.pleaseInput} ${arg.name}`}
+                                    value={promptParams[arg.name] || ''}
+                                    onChange={(e) => setPromptParams({ 
+                                      ...promptParams, 
+                                      [arg.name]: e.target.value 
+                                    })}
+                                  />
+                                </Form.Item>
+                              ))}
+                            </Form>
+                          </div>
+                        )}
+                        
+                        <Button 
+                          type="primary" 
+                          icon={<PlayCircleOutlined />}
+                          onClick={handlePromptGet}
+                          loading={isLoading}
+                        >
+                          {t.prompts.getPrompt}
+                        </Button>
+                      </Card>
+                      
+                      {/* 提示获取结果显示 */}
+                      {renderResultDisplay(
+                        promptResults[prompt.name], 
+                        promptErrors[prompt.name], 
+                        () => {
+                          setPromptResults(prev => ({ ...prev, [prompt.name]: null }));
+                          setPromptErrors(prev => ({ ...prev, [prompt.name]: '' }));
+                        }
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             />
           )}
 
-          {selectedPrompt && (
-            <>
-              <Divider />
-              <Card size="small" title={`${t.prompts.getPrompt}: ${selectedPrompt.name}`}>
-                {selectedPrompt.arguments && selectedPrompt.arguments.length > 0 && (
-                  <div style={{ marginBottom: 16 }}>
-                    <Form layout="vertical">
-                      {selectedPrompt.arguments.map((arg) => (
-                        <Form.Item 
-                          key={arg.name} 
-                          label={arg.name}
-                          help={arg.description}
-                          required={false}
-                        >
-                          <Input
-                            placeholder={arg.description ? arg.description : `${t.prompts.pleaseInput} ${arg.name}`}
-                            value={promptParams[arg.name] || ''}
-                            onChange={(e) => setPromptParams({ 
-                              ...promptParams, 
-                              [arg.name]: e.target.value 
-                            })}
-                          />
-                        </Form.Item>
-                      ))}
-                    </Form>
-                  </div>
-                )}
-                
-                <Button 
-                  type="primary" 
-                  icon={<PlayCircleOutlined />}
-                  onClick={handlePromptGet}
-                  loading={isLoading}
-                >
-                  {t.prompts.getPrompt}
-                </Button>
-              </Card>
-            </>
-          )}
         </div>
       )
     }
@@ -508,54 +656,6 @@ const MCPExplorer: React.FC = () => {
         size="small"
         />
 
-        {/* 结果显示模态框 */}
-        <Modal
-          title={t.tools.result}
-          open={showResult}
-          onCancel={() => setShowResult(false)}
-          footer={[
-            <Button key="close" onClick={() => setShowResult(false)}>
-              {t.common.close}
-            </Button>
-          ]}
-          width={1000}
-          style={{ top: 20 }}
-        >
-          {lastError ? (
-            <Alert
-              message={t.common.error}
-              description={lastError}
-              type="error"
-            />
-          ) : lastResult ? (
-            <div>
-              <Paragraph>
-                <Text strong>{t.tools.result}:</Text>
-              </Paragraph>
-              <div style={{ 
-                backgroundColor: '#f5f5f5', 
-                padding: 16, 
-                borderRadius: 4,
-                maxHeight: 'calc(100vh - 300px)',
-                overflow: 'auto',
-                border: '1px solid #d9d9d9'
-              }}>
-                <pre style={{
-                  margin: 0,
-                  whiteSpace: 'pre-wrap',
-                  wordWrap: 'break-word',
-                  fontSize: '12px',
-                  lineHeight: '1.4',
-                  fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace'
-                }}>
-                  {JSON.stringify(lastResult, null, 2)}
-                </pre>
-              </div>
-            </div>
-          ) : (
-            <div>{t.common.loading}</div>
-          )}
-        </Modal>
     </div>
   );
 };

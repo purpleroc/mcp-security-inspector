@@ -119,8 +119,8 @@ const HistoryPanel: React.FC = () => {
             </Space>
           }
           description={
-            <div style={{ fontSize: 12 }}>
-              <Space direction="vertical" size={4}>
+            <div style={{ fontSize: 12, width: '100%' }}>
+              <Space direction="vertical" size={4} style={{ width: '100%' }}>
                 <Space>
                   <ClockCircleOutlined />
                   <Text type="secondary">{formatTime(item.timestamp)}</Text>
@@ -130,24 +130,33 @@ const HistoryPanel: React.FC = () => {
                 </Space>
                 
                 {item.parameters && Object.keys(item.parameters).length > 0 && (
-                  <div>
-                    <Text type="secondary">{t.history.parameters}: </Text>
+                  <div style={{ width: '100%', display: 'block' }}>
+                    <Text type="secondary">{t.history.parameters}</Text>
                     <div style={{
-                      marginTop: 4,
-                      backgroundColor: '#fafafa',
-                      padding: 6,
-                      borderRadius: 3,
-                      border: '1px solid #e8e8e8',
-                      maxHeight: 150,
-                      overflow: 'auto'
+                      marginTop: 8,
+                      backgroundColor: '#f5f5f5',
+                      padding: 8,
+                      borderRadius: 4,
+                      border: '1px solid #d9d9d9',
+                      minHeight: 80,
+                      maxHeight: 300,
+                      overflow: 'auto',
+                      width: '100%',
+                      display: 'block',
+                      boxSizing: 'border-box'
                     }}>
                       <pre style={{
                         margin: 0,
                         whiteSpace: 'pre-wrap',
                         wordWrap: 'break-word',
-                        fontSize: '10px',
-                        lineHeight: '1.2',
-                        fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace'
+                        fontSize: '11px',
+                        lineHeight: '1.4',
+                        fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+                        padding: '4px',
+                        width: '100%',
+                        minWidth: '100%',
+                        display: 'block',
+                        boxSizing: 'border-box'
                       }}>
                         {JSON.stringify(item.parameters, null, 2)}
                       </pre>
@@ -177,8 +186,8 @@ const HistoryPanel: React.FC = () => {
                 )}
                 
                 {item.result && !hasError && (
-                  <div style={{ marginTop: 8 }}>
-                    <details>
+                  <div style={{ marginTop: 8, width: '100%' }}>
+                    <details style={{ width: '100%' }}>
                       <summary style={{ cursor: 'pointer' }}>
                         <Text type="secondary">{t.history.result}</Text>
                       </summary>
@@ -188,8 +197,10 @@ const HistoryPanel: React.FC = () => {
                         padding: 8,
                         borderRadius: 4,
                         border: '1px solid #d9d9d9',
+                        minHeight: 80,
                         maxHeight: 300,
-                        overflow: 'auto'
+                        overflow: 'auto',
+                        width: '100%'
                       }}>
                         <pre style={{
                           margin: 0,
@@ -197,7 +208,9 @@ const HistoryPanel: React.FC = () => {
                           wordWrap: 'break-word',
                           fontSize: '10px',
                           lineHeight: '1.3',
-                          fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace'
+                          fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+                          width: '100%',
+                          minWidth: '100%'
                         }}>
                           {JSON.stringify(item.result, null, 2)}
                         </pre>
@@ -264,4 +277,4 @@ const HistoryPanel: React.FC = () => {
   );
 };
 
-export default HistoryPanel; 
+export default HistoryPanel;
