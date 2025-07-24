@@ -18,6 +18,12 @@ A professional security testing tool for Model Context Protocol (MCP) servers. T
 
 ### 🚀 Installation
 
+#### Option 1: Chrome Web Store (Recommended | 推荐)
+1. Visit [MCP Security Inspector on Chrome Web Store](https://chromewebstore.google.com/detail/mcp-security-inspector/opajbcoflmgkjmjafchlgehgllbekgeo?hl=en-US&utm_source=ext_sidebar)
+2. Click "Add to Chrome" to install the extension
+3. The extension will be automatically installed and ready to use
+
+#### Option 2: Manual Installation (Developer Mode | 开发者模式)
 1. Download the latest release from [GitHub Releases](https://github.com/purpleroc/mcp-security-inspector/releases)
 2. Extract the ZIP file
 3. Open Chrome and navigate to `chrome://extensions/`
@@ -76,6 +82,12 @@ npm run package
 
 ### 🚀 安装方法
 
+#### 方法一：Chrome插件商城（推荐）
+1. 访问 [Chrome插件商城中的MCP安全检测器](https://chromewebstore.google.com/detail/mcp-security-inspector/opajbcoflmgkjmjafchlgehgllbekgeo?hl=en-US&utm_source=ext_sidebar)
+2. 点击"添加至Chrome"安装扩展程序
+3. 扩展程序将自动安装并可以使用
+
+#### 方法二：手动安装（开发者模式）
 1. 从[GitHub Releases](https://github.com/purpleroc/mcp-security-inspector/releases)下载最新版本
 2. 解压ZIP文件
 3. 打开Chrome浏览器，访问 `chrome://extensions/`
@@ -131,8 +143,17 @@ npm run package
 - **CORS Support** | 跨域请求处理
 
 ## 📈 Changelog | 更新日志
+### v1.0.5 (Current | 当前版本)
+- 🌍 **Enhanced Multi-language Support** | 增强多语言支持：支持更多国家和地区的语言
+- 📚 **History Records** | 历史记录：完整的测试历史记录和查看功能
+- 🔗 **Connection History** | 连接记录：自动保存和管理MCP服务器连接历史
 
-### v1.0.3 (Current | 当前版本)
+### v1.0.4 (Current | 当前版本)
+- 🏪 **Chrome Web Store Release** | Chrome插件商城发布：现在可以通过Chrome Web Store直接安装
+- 🌐 **Official Store Listing** | 官方商店上架：提供更便捷的安装方式
+- 📦 **Simplified Installation** | 简化安装：一键安装，无需开发者模式
+
+### v1.0.3
 - ✨ **Multi-language Support** | 多语言支持：完整的中英文国际化
 - 🌐 **Language Switching** | 语言切换：界面内快速切换语言
 - 🔒 **Privacy Enhanced** | 隐私增强：移除不必要的storage权限
