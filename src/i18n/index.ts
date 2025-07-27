@@ -40,6 +40,8 @@ export interface TranslationKey {
     tools: string;
     resources: string;
     prompts: string;
+    llm: string;
+    security: string;
   };
   
   // 配置面板
@@ -193,13 +195,167 @@ export interface TranslationKey {
     exportHistory: string;
   };
   
-  // 安全警告
+  // LLM配置
+  llm: {
+    title: string;
+    addConfig: string;
+    editLLMConfig: string;
+    addLLMConfig: string;
+    configName: string;
+    configNamePlaceholder: string;
+    configNameRequired: string;
+    modelType: string;
+    modelTypeRequired: string;
+    endpoint: string;
+    endpointRequired: string;
+    endpointPlaceholder: string;
+    endpointHelpDefault: string;
+    endpointHelpOpenAI: string;
+    endpointHelpCustom: string;
+    endpointHelpClaude: string;
+    endpointHelpGemini: string;
+    endpointHelpOllama: string;
+    modelName: string;
+    modelNamePlaceholder: string;
+    modelNameRequired: string;
+    apiKey: string;
+    apiKeyPlaceholder: string;
+    maxTokens: string;
+    temperature: string;
+    enabled: string;
+    disabled: string;
+    description: string;
+    descriptionPlaceholder: string;
+    customHeaders: string;
+    addCustomHeader: string;
+    headerName: string;
+    headerNameRequired: string;
+    headerValue: string;
+    headerValueRequired: string;
+    deleteHeader: string;
+    testConnection: string;
+    saveConfig: string;
+    editConfig: string;
+    deleteConfig: string;
+    confirmDelete: string;
+    connectionTestSuccess: string;
+    connectionTestFailed: string;
+    configSaved: string;
+    configUpdated: string;
+    configDeleted: string;
+    configEnabled: string;
+    configDisabled: string;
+    saveConfigFailed: string;
+    noConfigs: string;
+    name: string;
+    type: string;
+    endpointUrl: string;
+    model: string;
+    status: string;
+    actions: string;
+    types: {
+      openai: string;
+      claude: string;
+      gemini: string;
+      ollama: string;
+      custom: string;
+    };
+  };
+
+  // 安全检测
   security: {
+    title: string;
     warning: string;
     riskAssessment: string;
-    recommendations: string;
     noRisks: string;
     potentialRisks: string;
+    overview: string;
+    scanning: string;
+    scanComplete: string;
+    riskLevel: string;
+    totalIssues: string;
+    criticalIssues: string;
+    highIssues: string;
+    mediumIssues: string;
+    lowIssues: string;
+    toolSecurity: string;
+    promptSecurity: string;
+    resourceSecurity: string;
+    startScan: string;
+    stopScan: string;
+    scanSettings: string;
+    settings: string;
+    scanLevel: string;
+    basic: string;
+    standard: string;
+    deep: string;
+    selectLLM: string;
+    selectLLMPlaceholder: string;
+    refreshLLMConfigs: string;
+    autoGenerateTests: string;
+    maxTestCases: string;
+    timeout: string;
+    vulnerabilities: string;
+    threats: string;
+    risks: string;
+    testResults: string;
+    llmAnalysis: string;
+    recommendations: string;
+    securityReport: string;
+    exportReport: string;
+    reportGenerated: string;
+    overallRisk: string;
+    noIssuesFound: string;
+    scanInProgress: string;
+    scanFailed: string;
+    noLLMConfigured: string;
+    connectFirst: string;
+    scanCancelled: string;
+    preparingScan: string;
+    scanSettingsSaved: string;
+    reportExported: string;
+    toolName: string;
+    promptName: string;
+    resourceUri: string;
+    vulnerabilityCount: string;
+    testCaseCount: string;
+    threatCount: string;
+    riskCount: string;
+    viewDetails: string;
+    toolSecurityAnalysis: string;
+    foundVulnerabilities: string;
+    securityTestResults: string;
+    testCase: string;
+    passed: string;
+    failed: string;
+    passStatus: string;
+    riskAssessmentTitle: string;
+    llmAnalysisTitle: string;
+    noData: string;
+    issueDist: string;
+    criticalRisk: string;
+    highRisk: string;
+    mediumRisk: string;
+    lowRisk: string;
+    riskLevels: {
+      low: string;
+      medium: string;
+      high: string;
+      critical: string;
+    };
+    checkTypes: {
+      tool: string;
+      prompt: string;
+      resource: string;
+    };
+    vulnerabilityTypes: {
+      injection: string;
+      privilege: string;
+      leak: string;
+      traversal: string;
+      manipulation: string;
+      malicious: string;
+    };
   };
   
   // 错误消息

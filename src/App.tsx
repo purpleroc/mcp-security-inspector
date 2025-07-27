@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { Layout, Tabs, Space, Badge } from 'antd';
-import { HistoryOutlined, SettingOutlined, AppstoreOutlined } from '@ant-design/icons';
+import { HistoryOutlined, SettingOutlined, AppstoreOutlined, RobotOutlined, SafetyOutlined } from '@ant-design/icons';
 import { RootState } from './store';
 import ConfigPanel from './components/ConfigPanel';
 import MCPExplorer from './components/MCPExplorer';
 import HistoryPanel from './components/HistoryPanel';
 import MCPListPanel from './components/MCPListPanel';
 import LanguageSwitcher from './components/LanguageSwitcher';
+import LLMConfig from './components/LLMConfig';
+import SecurityPanel from './components/SecurityPanel';
 import { MCPServerConfig } from './types/mcp';
 import { useI18n } from './hooks/useI18n';
 
@@ -75,7 +77,7 @@ const App: React.FC = () => {
       ),
       children: <MCPExplorer />
     },
-    {
+        {
       key: 'history',
       label: (
         <span>
@@ -84,6 +86,26 @@ const App: React.FC = () => {
         </span>
       ),
       children: <HistoryPanel />
+    },
+    {
+      key: 'llm',
+      label: (
+        <span>
+          <RobotOutlined />
+          {t.tabs.llm}
+        </span>
+      ),
+      children: <LLMConfig />
+    },
+    {
+      key: 'security',
+      label: (
+        <span>
+          <SafetyOutlined />
+          {t.tabs.security}
+        </span>
+      ),
+      children: <SecurityPanel />
     }
   ];
 

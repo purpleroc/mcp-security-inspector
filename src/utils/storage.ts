@@ -3,13 +3,14 @@
  * 使用localStorage保存用户配置和历史记录
  */
 
-import { MCPServerConfig } from '../types/mcp';
+import { MCPServerConfig, LLMConfig, LLMRequest, LLMResponse } from '../types/mcp';
 
 const STORAGE_KEYS = {
   SERVER_CONFIG: 'mcp_server_config',
   SAVED_CONFIGS: 'mcp_saved_configs',
   HISTORY: 'mcp_call_history',
-  SETTINGS: 'mcp_settings'
+  SETTINGS: 'mcp_settings',
+  LLM_CONFIGS: 'mcp_llm_configs'
 } as const;
 
 export const storage = {
@@ -209,5 +210,274 @@ export const storage = {
     } catch (error) {
       console.error('清除数据失败:', error);
     }
+  }
+};
+
+/**
+ * LLM配置相关函数
+ */
+
+/**
+ * 获取所有LLM配置
+ */
+export const getLLMConfigs = (): LLMConfig[] => {
+  try {
+    const configs = localStorage.getItem(STORAGE_KEYS.LLM_CONFIGS);
+    return configs ? JSON.parse(configs) : [];
+  } catch (error) {
+    console.error('获取LLM配置失败:', error);
+    return [];
+  }
+};
+
+/**
+ * 保存LLM配置
+ */
+export const saveLLMConfig = (config: LLMConfig): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    try {
+      const configs = getLLMConfigs();
+      
+      // 检查是否已存在相同ID的配置
+      const existingIndex = configs.findIndex(c => c.id === config.id);
+      if (existingIndex >= 0) {
+        configs[existingIndex] = config;
+      } else {
+        configs.push(config);
+      }
+      
+      localStorage.setItem(STORAGE_KEYS.LLM_CONFIGS, JSON.stringify(configs));
+      
+      // 触发自定义事件通知配置更新
+      window.dispatchEvent(new CustomEvent('llmConfigUpdated'));
+      
+      resolve();
+    } catch (error) {
+      console.error('保存LLM配置失败:', error);
+      reject(error);
+    }
+  });
+};
+
+/**
+ * 删除LLM配置
+ */
+export const deleteLLMConfig = (id: string): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    try {
+      const configs = getLLMConfigs();
+      const filteredConfigs = configs.filter(c => c.id !== id);
+      localStorage.setItem(STORAGE_KEYS.LLM_CONFIGS, JSON.stringify(filteredConfigs));
+      
+      // 触发自定义事件通知配置更新
+      window.dispatchEvent(new CustomEvent('llmConfigUpdated'));
+      
+      resolve();
+    } catch (error) {
+      console.error('删除LLM配置失败:', error);
+      reject(error);
+    }
+  });
+};
+
+/**
+ * 测试LLM连接
+ */
+export const testLLMConnection = async (config: LLMConfig): Promise<void> => {
+  const testRequest: LLMRequest = {
+    messages: [
+      {
+        role: 'user',
+        content: '请回答：1+1等于几？'
+      }
+    ],
+    model: config.model,
+    maxTokens: 10,
+    temperature: 0
+  };
+
+  const response = await callLLM(config, testRequest);
+  
+  if (!response.content) {
+    throw new Error('LLM返回空响应');
+  }
+};
+
+
+
+/**
+ * 调用LLM API
+ */
+export const callLLM = async (config: LLMConfig, request: LLMRequest): Promise<LLMResponse> => {
+  if (!config.enabled) {
+    throw new Error('LLM配置已被禁用');
+  }
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  };
+
+  // 根据不同的LLM类型设置认证头
+  if (config.apiKey) {
+    switch (config.type) {
+      case 'openai':
+      case 'custom':
+        headers['Authorization'] = `Bearer ${config.apiKey}`;
+        break;
+      case 'claude':
+        headers['x-api-key'] = config.apiKey;
+        headers['anthropic-version'] = '2023-06-01';
+        break;
+      case 'gemini':
+        // Gemini API 通常使用URL参数传递API key
+        break;
+      case 'ollama':
+        // Ollama 通常不需要API key
+        break;
+    }
+  }
+
+  // 添加自定义头部
+  if (config.customHeaders) {
+    Object.entries(config.customHeaders).forEach(([key, value]) => {
+      headers[key] = value;
+    });
+  }
+
+  // 构建请求体和完整端点
+  let requestBody: any;
+  let endpoint = config.endpoint;
+
+  switch (config.type) {
+    case 'openai':
+    case 'custom':
+      requestBody = {
+        model: request.model || config.model,
+        messages: request.messages,
+        max_tokens: request.maxTokens || config.maxTokens,
+        temperature: request.temperature ?? config.temperature,
+        stream: false
+      };
+      break;
+      
+    case 'claude':
+      requestBody = {
+        model: request.model || config.model,
+        max_tokens: request.maxTokens || config.maxTokens || 1024,
+        messages: request.messages,
+        temperature: request.temperature ?? config.temperature
+      };
+      break;
+      
+    case 'gemini':
+      // 添加API key参数到Gemini端点（如果提供且未包含）
+      if (config.apiKey && !endpoint.includes('key=')) {
+        endpoint = `${endpoint}${endpoint.includes('?') ? '&' : '?'}key=${config.apiKey}`;
+      }
+      
+      requestBody = {
+        contents: request.messages.map(msg => ({
+          parts: [{ text: msg.content }],
+          role: msg.role === 'assistant' ? 'model' : 'user'
+        })),
+        generationConfig: {
+          temperature: request.temperature ?? config.temperature,
+          maxOutputTokens: request.maxTokens || config.maxTokens
+        }
+      };
+      break;
+      
+    case 'ollama':
+      requestBody = {
+        model: request.model || config.model,
+        messages: request.messages,
+        options: {
+          temperature: request.temperature ?? config.temperature,
+          num_predict: request.maxTokens || config.maxTokens
+        },
+        stream: false
+      };
+      break;
+  }
+
+  try {
+    console.log(`LLM API调用 (${config.type}):`, {
+      configuredEndpoint: config.endpoint,
+      headers: { ...headers, Authorization: headers.Authorization ? '[HIDDEN]' : undefined },
+      requestBody: config.type === 'gemini' ? { ...requestBody, contents: '[CONTENTS]' } : { ...requestBody, messages: '[MESSAGES]' }
+    });
+    
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    
+    // 根据不同的LLM类型解析响应
+    return parseLLMResponse(config.type, data);
+  } catch (error) {
+    console.error('LLM API调用失败:', error);
+    throw error;
+  }
+};
+
+/**
+ * 解析不同LLM的响应格式
+ */
+const parseLLMResponse = (type: string, data: any): LLMResponse => {
+  switch (type) {
+    case 'openai':
+    case 'custom':
+      return {
+        content: data.choices?.[0]?.message?.content || '',
+        usage: data.usage ? {
+          promptTokens: data.usage.prompt_tokens,
+          completionTokens: data.usage.completion_tokens,
+          totalTokens: data.usage.total_tokens
+        } : undefined,
+        model: data.model
+      };
+      
+    case 'claude':
+      return {
+        content: data.content?.[0]?.text || '',
+        usage: data.usage ? {
+          promptTokens: data.usage.input_tokens,
+          completionTokens: data.usage.output_tokens,
+          totalTokens: data.usage.input_tokens + data.usage.output_tokens
+        } : undefined,
+        model: data.model
+      };
+      
+    case 'gemini':
+      return {
+        content: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
+        usage: data.usageMetadata ? {
+          promptTokens: data.usageMetadata.promptTokenCount,
+          completionTokens: data.usageMetadata.candidatesTokenCount,
+          totalTokens: data.usageMetadata.totalTokenCount
+        } : undefined
+      };
+      
+    case 'ollama':
+      return {
+        content: data.message?.content || '',
+        usage: data.prompt_eval_count ? {
+          promptTokens: data.prompt_eval_count,
+          completionTokens: data.eval_count,
+          totalTokens: data.prompt_eval_count + data.eval_count
+        } : undefined,
+        model: data.model
+      };
+      
+    default:
+      throw new Error(`不支持的LLM类型: ${type}`);
   }
 }; 

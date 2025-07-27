@@ -255,7 +255,7 @@ export class MCPClient {
 
     return new Promise(async (resolve, reject) => {
       // 构建SSE端点URL并应用URL参数认证
-      const baseSSEEndpoint = this.config.host.replace(/\/$/, '') + this.config.ssePath;
+      const baseSSEEndpoint = this.config!.host.replace(/\/$/, '') + this.config!.ssePath;
       const sseEndpoint = this.applyAuthToUrl(baseSSEEndpoint);
       console.log('使用Fetch方式建立SSE连接到:', sseEndpoint);
 
@@ -268,8 +268,8 @@ export class MCPClient {
       this.applyAuthHeaders(headers);
 
       // 应用自定义headers
-      if (this.config.headers) {
-        Object.entries(this.config.headers).forEach(([key, value]) => {
+      if (this.config!.headers) {
+        Object.entries(this.config!.headers).forEach(([key, value]) => {
           if (value !== null && value !== undefined && value !== '') {
             headers[key] = String(value);
           }
@@ -869,7 +869,7 @@ export class MCPClient {
 
     try {
       console.log('发送MCP请求到:', endpoint);
-      console.log('请求内容:', JSON.stringify(request, null, 2));
+      // console.log('请求内容:', JSON.stringify(request, null, 2));
       
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -910,11 +910,11 @@ export class MCPClient {
       } else {
         // 如果不是JSON响应，可能是SSE模式下的异步处理
         const textResponse = await response.text();
-        console.log('收到非JSON响应:', textResponse);
+        // console.log('收到非JSON响应:', textResponse);
         
         // 对于SSE模式，响应可能是"Accepted"，表示请求已被接受，将通过SSE推送结果
         if (textResponse === 'Accepted' || response.status === 202) {
-          console.log('请求已被服务器接受，等待SSE推送响应...');
+          // console.log('请求已被服务器接受，等待SSE推送响应...');
           // 不需要立即处理，响应将通过SSE连接推送
           return;
         } else {
