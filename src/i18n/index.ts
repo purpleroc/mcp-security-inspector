@@ -178,6 +178,7 @@ export interface TranslationKey {
   history: {
     title: string;
     noHistory: string;
+    totalRecords: string;
     clearAll: string;
     deleteItem: string;
     confirmClear: string;

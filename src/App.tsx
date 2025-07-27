@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
-import { Layout, Tabs, Space } from 'antd';
+import { Layout, Tabs, Space, Badge } from 'antd';
 import { HistoryOutlined, SettingOutlined, AppstoreOutlined } from '@ant-design/icons';
 import { RootState } from './store';
 import ConfigPanel from './components/ConfigPanel';
@@ -19,6 +19,10 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('config');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const connectionStatus = useSelector((state: RootState) => state.mcp.connectionStatus);
+  
+  // 获取工具、资源、提示的数量
+  const { tools, resources, resourceTemplates, prompts } = useSelector((state: RootState) => state.mcp);
+  const totalCount = tools.length + resources.length + resourceTemplates.length + prompts.length;
 
   // 监听连接状态，连接成功后自动切换到浏览器页面
   useEffect(() => {
@@ -52,10 +56,22 @@ const App: React.FC = () => {
     {
       key: 'explorer',
       label: (
-        <span>
+        <Space>
           <AppstoreOutlined />
-          {t.tabs.explorer}
-        </span>
+          <span>{t.tabs.explorer}</span>
+          {connectionStatus === 'connected' && totalCount > 0 && (
+            <Badge 
+              count={totalCount} 
+              style={{ 
+                backgroundColor: '#ff4d4f',
+                fontSize: '10px',
+                height: '18px',
+                minWidth: '18px',
+                lineHeight: '18px'
+              }}
+            />
+          )}
+        </Space>
       ),
       children: <MCPExplorer />
     },

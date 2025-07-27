@@ -255,7 +255,7 @@ const HistoryPanel: React.FC = () => {
         ) : (
           <div>
             <Paragraph type="secondary" style={{ marginBottom: 16, fontSize: 12 }}>
-              共 {history.length} 条记录
+              {t.history.totalRecords.replace('{count}', history.length.toString())}
             </Paragraph>
             
             <List

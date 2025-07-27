@@ -165,11 +165,12 @@ export const enUS: TranslationKey = {
   history: {
     title: 'Call History',
     noHistory: 'No history records',
+    totalRecords: 'Total {count} records',
     clearAll: 'Clear All',
     deleteItem: 'Delete Record',
     confirmClear: 'Are you sure you want to clear all history records?',
     confirmDelete: 'Are you sure you want to delete this record?',
-    timestamp: 'Timestamp',
+    timestamp: 'Time',
     duration: 'Duration',
     type: 'Type',
     name: 'Name',

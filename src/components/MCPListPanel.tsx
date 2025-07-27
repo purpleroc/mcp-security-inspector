@@ -8,7 +8,6 @@ import {
   message, 
   Upload, 
   Typography,
-  Tag,
   Tooltip,
   Empty
 } from 'antd';
@@ -17,10 +16,8 @@ import {
   DeleteOutlined, 
   DownloadOutlined, 
   UploadOutlined,
-  ClockCircleOutlined,
   DatabaseOutlined,
-  DisconnectOutlined,
-  CheckCircleOutlined
+  DisconnectOutlined
 } from '@ant-design/icons';
 import { useDispatch, useSelector } from 'react-redux';
 import { connectToServer, disconnectFromServer } from '../store/mcpSlice';
@@ -80,6 +77,12 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
   const handleConnect = async (config: MCPServerConfig) => {
     setLoading(config.name);
     try {
+      // 如果当前已连接到其他服务器，先断开连接
+      if (connectionStatus === 'connected') {
+        console.log('检测到已有连接，先断开连接...');
+        await dispatch(disconnectFromServer() as any).unwrap();
+      }
+      
       await dispatch(connectToServer(config) as any).unwrap();
       message.success(`${t.success.connected} - ${config.name}`);
       
@@ -140,23 +143,19 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
   // 格式化时间
   const formatTime = (timestamp?: number) => {
     if (!timestamp) return '';
-    return new Date(timestamp).toLocaleString();
-  };
-
-  // 获取认证类型标签
-  const getAuthTag = (auth?: any) => {
-    if (!auth || auth.type === 'none') {
-      return <Tag color="default">{t.auth.none}</Tag>;
-    }
+    const date = new Date(timestamp);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const targetDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     
-    switch (auth.type) {
-      case 'url_params':
-        return <Tag color="blue">{t.auth.urlParams}</Tag>;
-      case 'headers':
-        return <Tag color="green">{t.auth.custom}</Tag>;
-      default:
-        return <Tag color="default">{t.auth.none}</Tag>;
-    }
+      // 其他日期显示月/日 时:分
+      return date.toLocaleDateString('zh-CN', { 
+        month: 'numeric', 
+        day: 'numeric',
+        hour: '2-digit', 
+        minute: '2-digit'
+      });
+    
   };
 
   return (
@@ -193,7 +192,7 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
             />
           </Space>
         }
-        bodyStyle={{ padding: '8px' }}
+        bodyStyle={{ padding: '12px' }}
       >
         {savedConfigs.length === 0 ? (
           <Empty 
@@ -205,68 +204,170 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
           <List
             size="small"
             dataSource={savedConfigs}
+            split={false}
+            style={{ padding: '0' }}
             renderItem={(config) => {
               const isConnected = isCurrentConnection(config);
               return (
                 <List.Item
                   key={config.name}
                   style={{ 
-                    padding: '8px 0', 
-                    borderBottom: '1px solid #f0f0f0',
-                    backgroundColor: isConnected ? '#f6ffed' : 'transparent',
-                    borderRadius: isConnected ? '4px' : '0',
-                    marginBottom: isConnected ? '4px' : '0',
-                    paddingLeft: isConnected ? '8px' : '0',
-                    paddingRight: isConnected ? '8px' : '0',
-                    border: isConnected ? '1px solid #b7eb8f' : 'none'
+                    padding: '12px',
+                    marginBottom: '8px',
+                    backgroundColor: isConnected ? '#f6ffed' : '#fafafa',
+                    border: `1px solid ${isConnected ? '#52c41a' : '#e8e8e8'}`,
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    position: 'relative'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isConnected) {
+                      e.currentTarget.style.backgroundColor = '#f0f0f0';
+                      e.currentTarget.style.borderColor = '#d9d9d9';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isConnected) {
+                      e.currentTarget.style.backgroundColor = '#fafafa';
+                      e.currentTarget.style.borderColor = '#e8e8e8';
+                    }
                   }}
                 >
                   <div style={{ width: '100%' }}>
+                    {/* 服务器名称和状态 */}
                     <div style={{ 
                       display: 'flex', 
                       justifyContent: 'space-between', 
-                      alignItems: 'flex-start',
-                      marginBottom: '4px'
+                      alignItems: 'center',
+                      marginBottom: '8px'
                     }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <Space>
-                          <Text strong style={{ fontSize: '13px' }}>
-                            {config.name}
-                          </Text>
-                          {isConnected && (
-                            <Tag color="success" icon={<CheckCircleOutlined />} style={{ fontSize: '10px' }}>
-                              {t.config.connectionStatus.connected}
-                            </Tag>
-                          )}
-                        </Space>
-                        <br />
-                        <Text type="secondary" style={{ fontSize: '11px' }}>
+                        <div style={{ 
+                          fontSize: '14px', 
+                          fontWeight: '600',
+                          color: '#262626',
+                          marginBottom: '2px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {config.name}
+                        </div>
+                        <div style={{ 
+                          fontSize: '12px',
+                          color: '#8c8c8c',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
                           {config.host}
-                        </Text>
+                        </div>
                       </div>
-                      <Space size="small">
+                      
+                      {/* 连接状态指示器 */}
+                      {isConnected && (
+                        <div style={{
+                          width: '8px',
+                          height: '8px',
+                          backgroundColor: '#52c41a',
+                          borderRadius: '50%',
+                          marginLeft: '8px'
+                        }} />
+                      )}
+                    </div>
+
+                    {/* 认证信息和操作按钮 */}
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'flex-end'
+                    }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {/* 认证标签 */}
+                        <div>
+                          <span style={{
+                            fontSize: '10px',
+                            padding: '2px 6px',
+                            backgroundColor: config.auth?.type !== 'none' && config.auth?.type ? '#e6f7ff' : '#f5f5f5',
+                            color: config.auth?.type !== 'none' && config.auth?.type ? '#1890ff' : '#8c8c8c',
+                            borderRadius: '3px',
+                            border: `1px solid ${config.auth?.type !== 'none' && config.auth?.type ? '#d1e9ff' : '#e8e8e8'}`
+                          }}>
+                            {(() => {
+                              if (!config.auth || config.auth.type === 'none') {
+                                return t.auth.none;
+                              }
+                              if (config.auth.type === 'combined') {
+                                return t.auth.combined;
+                              }
+                              return t.auth.none;
+                            })()}
+                          </span>
+                        </div>
+                        
+                        {/* 时间戳 */}
+                        {config.updatedAt && (
+                          <div style={{
+                            fontSize: '10px',
+                            color: '#bfbfbf'
+                          }}>
+                            {formatTime(config.updatedAt)}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 操作按钮组 */}
+                      <div style={{ 
+                        display: 'flex', 
+                        gap: '2px',
+                        opacity: 0.7
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.opacity = '1';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.opacity = '0.7';
+                      }}>
                         {isConnected ? (
                           <Tooltip title={t.common.disconnect}>
                             <Button
-                              danger
                               size="small"
-                              icon={<DisconnectOutlined />}
-                              onClick={handleDisconnect}
-                              style={{ fontSize: '11px' }}
+                              type="text"
+                              danger
+                              icon={<DisconnectOutlined style={{ fontSize: '12px' }} />}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDisconnect();
+                              }}
+                              style={{ 
+                                minWidth: '28px',
+                                height: '28px',
+                                padding: '0'
+                              }}
                             />
                           </Tooltip>
                         ) : (
                           <Tooltip title={t.common.connect}>
                             <Button
-                              type="primary"
                               size="small"
-                              icon={<PlayCircleOutlined />}
-                              onClick={() => handleConnect(config)}
+                              type="text"
+                              icon={<PlayCircleOutlined style={{ fontSize: '12px' }} />}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleConnect(config);
+                              }}
                               loading={loading === config.name}
-                              style={{ fontSize: '11px' }}
+                              style={{ 
+                                minWidth: '28px',
+                                height: '28px',
+                                padding: '0',
+                                color: '#1890ff'
+                              }}
                             />
                           </Tooltip>
                         )}
+                        
                         <Popconfirm
                           title={t.config.deleteConfig}
                           onConfirm={() => handleDelete(config.name)}
@@ -274,31 +375,20 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
                           cancelText={t.common.cancel}
                         >
                           <Button
-                            danger
                             size="small"
-                            icon={<DeleteOutlined />}
-                            style={{ fontSize: '11px' }}
+                            type="text"
+                            danger
+                            icon={<DeleteOutlined style={{ fontSize: '12px' }} />}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ 
+                              minWidth: '28px',
+                              height: '28px',
+                              padding: '0'
+                            }}
                           />
                         </Popconfirm>
-                      </Space>
-                    </div>
-                    
-                    <div style={{ marginBottom: '4px' }}>
-                      {getAuthTag(config.auth)}
-                    </div>
-                    
-                    {(config.createdAt || config.updatedAt) && (
-                      <div style={{ 
-                        fontSize: '10px', 
-                        color: '#999',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}>
-                        <ClockCircleOutlined style={{ fontSize: '10px' }} />
-                        {config.updatedAt && formatTime(config.updatedAt)}
                       </div>
-                    )}
+                    </div>
                   </div>
                 </List.Item>
               );

@@ -19,7 +19,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
   const { t } = useI18n();
   const dispatch = useDispatch();
   const [form] = Form.useForm();
-  const { connectionStatus, serverConfig } = useSelector((state: RootState) => state.mcp);
+  const { connectionStatus, serverConfig, serverInfo } = useSelector((state: RootState) => state.mcp);
   const [authConfig, setAuthConfig] = useState<any>({ type: 'none' });
   const [autoSave, setAutoSave] = useState(true);
 
@@ -30,7 +30,6 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
         name: selectedConfig.name,
         host: selectedConfig.host,
         ssePath: selectedConfig.ssePath,
-        transport: selectedConfig.transport || 'sse',
         sessionId: selectedConfig.sessionId
       });
       setAuthConfig(selectedConfig.auth || { type: 'none' });
@@ -41,7 +40,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
   const handleConnect = async (values: any) => {
     try {
       const serverConfig: MCPServerConfig = {
-        name: values.name,
+        name: values.name || 'MCP Server', // 如果没有填写名称，使用默认值
         host: values.host,
         ssePath: values.ssePath,
         messagePath: '', // 现在从SSE自动获取，不需要配置
@@ -51,12 +50,22 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
         auth: authConfig // 添加认证配置
       };
       
-      await dispatch(connectToServer(serverConfig) as any).unwrap();
+      const result = await dispatch(connectToServer(serverConfig) as any).unwrap();
       message.success(t.config.messages.connectSuccess);
+      
+      // 确定最终的配置（如果服务器返回了名称且用户没有填写名称，使用服务器名称）
+      const finalConfig = (result.serverInfo && (!values.name || values.name === 'MCP Server'))
+        ? { ...serverConfig, name: result.serverInfo.serverInfo.name }
+        : serverConfig;
+      
+      // 如果服务器返回了名称且用户没有填写名称，更新表单显示
+      if (result.serverInfo && (!values.name || values.name === 'MCP Server')) {
+        form.setFieldsValue({ name: result.serverInfo.serverInfo.name });
+      }
       
       // 连接成功后自动保存配置
       if (autoSave) {
-        const saved = storage.saveMCPConfig(serverConfig);
+        const saved = storage.saveMCPConfig(finalConfig);
         if (saved) {
           message.success(t.config.messages.configSavedAuto);
           // 通知刷新配置列表
@@ -68,7 +77,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
       
       // 通知父组件配置已加载
       if (onConfigLoad) {
-        onConfigLoad(serverConfig);
+        onConfigLoad(finalConfig);
       }
     } catch (error) {
       message.error(`${t.config.messages.connectFailed}: ${error}`);
@@ -95,7 +104,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
       }
 
       const serverConfig: MCPServerConfig = {
-        name: values.name,
+        name: values.name || 'MCP Server',
         host: values.host,
         ssePath: values.ssePath,
         messagePath: '',
@@ -138,7 +147,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
           <Form.Item
             name="name"
             label={t.config.serverName}
-            rules={[{ required: true, message: t.config.messages.serverNameRequired }]}
+            rules={[]}
           >
             <Input placeholder={t.config.serverNamePlaceholder} />
           </Form.Item>
@@ -222,6 +231,12 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
                   return t.auth.none;
                 })()
               }</p>
+              {serverInfo && (
+                <>
+                  <p><strong>协议版本:</strong> {serverInfo.protocolVersion}</p>
+                  <p><strong>服务器版本:</strong> {serverInfo.serverInfo.name} v{serverInfo.serverInfo.version}</p>
+                </>
+              )}
             </div>
             
             <Button 

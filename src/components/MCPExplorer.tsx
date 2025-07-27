@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Card, 
   Collapse, 
@@ -60,6 +60,25 @@ const MCPExplorer: React.FC = () => {
   const [toolErrors, setToolErrors] = useState<Record<string, string>>({});
   const [resourceErrors, setResourceErrors] = useState<Record<string, string>>({});
   const [promptErrors, setPromptErrors] = useState<Record<string, string>>({});
+
+  // 监听连接状态变化，切换服务器时清空本地状态
+  useEffect(() => {
+    if (connectionStatus === 'connecting') {
+      // 清空所有选中状态和结果
+      setSelectedTool(null);
+      setSelectedResource(null);
+      setSelectedPrompt(null);
+      setToolParams({});
+      setResourceParams({});
+      setPromptParams({});
+      setToolResults({});
+      setResourceResults({});
+      setPromptResults({});
+      setToolErrors({});
+      setResourceErrors({});
+      setPromptErrors({});
+    }
+  }, [connectionStatus]);
 
   // 安全等级颜色映射
   const getRiskColor = (level: SecurityRiskLevel) => {
@@ -421,7 +440,7 @@ const MCPExplorer: React.FC = () => {
                         {/* 在选中的资源下方显示读取功能框 */}
                         {selectedResource?.uri === resource.uri && (
                           <div style={{ marginLeft: 24, marginBottom: 16, marginTop: 8 }}>
-                            <Card size="small" title={`${t.resources.readResource}: ${selectedResource.name || selectedResource.uri}`}>
+                            <Card size="small" title={`${t.resources.readResource}: ${selectedResource?.name || selectedResource?.uri}`}>
                               {selectedResource.uri && selectedResource.uri.includes('{') && (
                                 <div style={{ marginBottom: 16 }}>
                                   <Alert
@@ -502,11 +521,11 @@ const MCPExplorer: React.FC = () => {
                         {/* 在选中的资源模板下方显示读取功能框 */}
                         {selectedResource?.name === template.name && (
                           <div style={{ marginLeft: 24, marginBottom: 16, marginTop: 8 }}>
-                            <Card size="small" title={`${t.resources.readResource}: ${selectedResource.name || selectedResource.uri}`}>
-                              {selectedResource.uri && selectedResource.uri.includes('{') && (
+                            <Card size="small" title={`${t.resources.readResource}: ${selectedResource?.name || selectedResource?.uri}`}>
+                              {selectedResource?.uri && selectedResource?.uri.includes('{') && (
                                 <div style={{ marginBottom: 16 }}>
                                   <Alert
-                                    message={`${t.resources.resourceUri}: ${selectedResource.uri}`}
+                                    message={`${t.resources.resourceUri}: ${selectedResource?.uri}`}
                                     type="info"
                                     style={{ marginBottom: 16 }}
                                   />
@@ -530,11 +549,11 @@ const MCPExplorer: React.FC = () => {
                             
                             {/* 资源读取结果显示 */}
                             {renderResultDisplay(
-                              resourceResults[template.name], 
-                              resourceErrors[template.name], 
+                              resourceResults[template.name || ''], 
+                              resourceErrors[template.name || ''], 
                               () => {
-                                setResourceResults(prev => ({ ...prev, [template.name]: null }));
-                                setResourceErrors(prev => ({ ...prev, [template.name]: '' }));
+                                setResourceResults(prev => ({ ...prev, [template.name || '']: null }));
+                                setResourceErrors(prev => ({ ...prev, [template.name || '']: '' }));
                               }
                             )}
                           </div>

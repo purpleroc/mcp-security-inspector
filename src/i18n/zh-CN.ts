@@ -165,6 +165,7 @@ export const zhCN: TranslationKey = {
   history: {
     title: '调用历史',
     noHistory: '暂无历史记录',
+    totalRecords: '共 {count} 条记录',
     clearAll: '清空全部',
     deleteItem: '删除记录',
     confirmClear: '确定要清空所有历史记录吗？',

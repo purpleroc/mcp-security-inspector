@@ -46,7 +46,7 @@ export interface MCPState {
   history: MCPCallHistory[];
   
   // UI状态
-  currentTab: 'config' | 'tools' | 'resources' | 'prompts' | 'history';
+  currentTab: 'config' | 'explorer' | 'history';
 }
 
 // 初始状态
@@ -75,41 +75,69 @@ export const connectToServer = createAsyncThunk(
   'mcp/connectToServer',
   async (config: MCPServerConfig, { dispatch, rejectWithValue }) => {
     try {
+      // 连接开始时先清空旧数据
+      dispatch(setTools([]));
+      dispatch(setResources([]));
+      dispatch(setResourceTemplates([]));
+      dispatch(setPrompts([]));
+      
       mcpClient.configure(config);
       const serverInfo = await mcpClient.connect();
       
-      // 连接成功后，自动获取所有数据
+      // 连接成功后，独立获取各种数据（避免一个失败导致全部失败）
+      let hasAnyData = false;
+      
+      // 获取工具列表
       try {
-        // 并行获取tools、resources、resource templates、prompts
-        const [tools, resources, resourceTemplates, prompts] = await Promise.all([
-          mcpClient.listTools(),
-          mcpClient.listResources(),
-          mcpClient.listResourceTemplates(),
-          mcpClient.listPrompts()
-        ]);
-        
-        // 设置获取到的数据
+        const tools = await mcpClient.listTools();
+        console.log('获取工具列表成功:', tools.length, '个工具');
         dispatch(setTools(tools));
-        dispatch(setResources(resources));
-        dispatch(setResourceTemplates(resourceTemplates));
-        dispatch(setPrompts(prompts));
-        
-        // 如果有tools，切换到tools tab，否则切换到第一个有数据的tab
-        if (tools.length > 0) {
-          dispatch(setCurrentTab('tools'));
-        } else if (resources.length > 0) {
-          dispatch(setCurrentTab('resources'));
-        } else if (prompts.length > 0) {
-          dispatch(setCurrentTab('prompts'));
-        } else {
-          // 如果都没有数据，仍然切换到tools tab
-          dispatch(setCurrentTab('tools'));
-        }
-        
+        if (tools.length > 0) hasAnyData = true;
       } catch (error) {
-        console.warn('获取服务器数据失败:', error);
-        // 即使获取数据失败，也切换到tools tab
-        dispatch(setCurrentTab('tools'));
+        console.warn('获取工具列表失败:', error);
+        dispatch(setTools([]));
+      }
+      
+      // 获取资源列表
+      try {
+        const resources = await mcpClient.listResources();
+        console.log('获取资源列表成功:', resources.length, '个资源');
+        dispatch(setResources(resources));
+        if (resources.length > 0) hasAnyData = true;
+      } catch (error) {
+        console.warn('获取资源列表失败:', error);
+        dispatch(setResources([]));
+      }
+      
+      // 获取资源模板列表
+      try {
+        const resourceTemplates = await mcpClient.listResourceTemplates();
+        console.log('获取资源模板列表成功:', resourceTemplates.length, '个模板');
+        dispatch(setResourceTemplates(resourceTemplates));
+        if (resourceTemplates.length > 0) hasAnyData = true;
+      } catch (error) {
+        console.warn('获取资源模板列表失败:', error);
+        dispatch(setResourceTemplates([]));
+      }
+      
+      // 获取提示列表
+      try {
+        const prompts = await mcpClient.listPrompts();
+        console.log('获取提示列表成功:', prompts.length, '个提示');
+        dispatch(setPrompts(prompts));
+        if (prompts.length > 0) hasAnyData = true;
+      } catch (error) {
+        console.warn('获取提示列表失败:', error);
+        dispatch(setPrompts([]));
+      }
+      
+      // 根据获取到的数据决定切换到哪个tab
+      if (hasAnyData) {
+        // 切换到explorer tab显示数据
+        dispatch(setCurrentTab('explorer'));
+      } else {
+        // 如果没有数据，保持在tools tab
+        dispatch(setCurrentTab('explorer'));
       }
       
       return { config, serverInfo };
@@ -356,14 +384,35 @@ const mcpSlice = createSlice({
         state.connectionStatus = 'connecting';
         state.isLoading = true;
         state.lastError = null;
+        // 连接开始时清空旧服务器的数据
+        state.tools = [];
+        state.resources = [];
+        state.resourceTemplates = [];
+        state.prompts = [];
+        state.selectedTool = null;
+        state.selectedResource = null;
+        state.selectedPrompt = null;
+        state.lastResult = null;
+        state.securityCheck = null;
       })
       .addCase(connectToServer.fulfilled, (state, action) => {
         state.connectionStatus = 'connected';
         state.isLoading = false;
-        state.serverConfig = action.payload.config;
+        
+        // 如果用户没有填写名称或使用默认名称，则使用服务器返回的名称
+        let finalConfig = action.payload.config;
+        if (action.payload.serverInfo && 
+            (!action.payload.config.name || action.payload.config.name === 'MCP Server')) {
+          finalConfig = {
+            ...action.payload.config,
+            name: action.payload.serverInfo.serverInfo.name
+          };
+        }
+        
+        state.serverConfig = finalConfig;
         state.serverInfo = action.payload.serverInfo;
-        // 保存服务器配置到localStorage
-        storage.saveServerConfig(action.payload.config);
+        // 保存服务器配置到localStorage（使用最终的配置）
+        storage.saveServerConfig(finalConfig);
       })
       .addCase(connectToServer.rejected, (state, action) => {
         state.connectionStatus = 'error';
@@ -379,6 +428,7 @@ const mcpSlice = createSlice({
         state.serverInfo = null;
         state.tools = [];
         state.resources = [];
+        state.resourceTemplates = [];
         state.prompts = [];
         state.selectedTool = null;
         state.selectedResource = null;
