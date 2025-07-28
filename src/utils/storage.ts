@@ -303,12 +303,44 @@ export const testLLMConnection = async (config: LLMConfig): Promise<void> => {
   }
 };
 
+/**
+ * 清理大模型返回的内容，移除可能的markdown格式
+ * 处理类似 ```json {...} ``` 的情况
+ */
+const cleanLLMContent = (content: string): string => {
+  if (!content || typeof content !== 'string') {
+    return content;
+  }
 
+  // 移除前后空白字符
+  let cleaned = content.trim();
+
+  // 检查是否是markdown代码块格式
+  const codeBlockPattern = /^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i;
+  const match = cleaned.match(codeBlockPattern);
+  
+  if (match) {
+    // 提取代码块内容
+    cleaned = match[1].trim();
+  }
+
+  // 处理其他可能的格式，如单独的```包围
+  if (cleaned.startsWith('```') && cleaned.endsWith('```')) {
+    cleaned = cleaned.slice(3, -3).trim();
+  }
+
+  // 如果以json:开头，移除这个前缀
+  if (cleaned.toLowerCase().startsWith('json:')) {
+    cleaned = cleaned.slice(5).trim();
+  }
+
+  return cleaned;
+};
 
 /**
  * 调用LLM API
  */
-export const callLLM = async (config: LLMConfig, request: LLMRequest): Promise<LLMResponse> => {
+export const callLLM = async (config: LLMConfig, request: LLMRequest, abortSignal?: AbortSignal): Promise<LLMResponse> => {
   if (!config.enabled) {
     throw new Error('LLM配置已被禁用');
   }
@@ -410,7 +442,8 @@ export const callLLM = async (config: LLMConfig, request: LLMRequest): Promise<L
     const response = await fetch(endpoint, {
       method: 'POST',
       headers,
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(requestBody),
+      signal: abortSignal
     });
 
     if (!response.ok) {
@@ -436,7 +469,7 @@ const parseLLMResponse = (type: string, data: any): LLMResponse => {
     case 'openai':
     case 'custom':
       return {
-        content: data.choices?.[0]?.message?.content || '',
+        content: cleanLLMContent(data.choices?.[0]?.message?.content || ''),
         usage: data.usage ? {
           promptTokens: data.usage.prompt_tokens,
           completionTokens: data.usage.completion_tokens,
@@ -447,7 +480,7 @@ const parseLLMResponse = (type: string, data: any): LLMResponse => {
       
     case 'claude':
       return {
-        content: data.content?.[0]?.text || '',
+        content: cleanLLMContent(data.content?.[0]?.text || ''),
         usage: data.usage ? {
           promptTokens: data.usage.input_tokens,
           completionTokens: data.usage.output_tokens,
@@ -458,7 +491,7 @@ const parseLLMResponse = (type: string, data: any): LLMResponse => {
       
     case 'gemini':
       return {
-        content: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
+        content: cleanLLMContent(data.candidates?.[0]?.content?.parts?.[0]?.text || ''),
         usage: data.usageMetadata ? {
           promptTokens: data.usageMetadata.promptTokenCount,
           completionTokens: data.usageMetadata.candidatesTokenCount,
@@ -468,7 +501,7 @@ const parseLLMResponse = (type: string, data: any): LLMResponse => {
       
     case 'ollama':
       return {
-        content: data.message?.content || '',
+        content: cleanLLMContent(data.message?.content || ''),
         usage: data.prompt_eval_count ? {
           promptTokens: data.prompt_eval_count,
           completionTokens: data.eval_count,

@@ -273,10 +273,26 @@ export type SecurityCheckType = 'tool' | 'prompt' | 'resource';
 export interface SecurityCheckConfig {
   enabled: boolean;
   llmConfigId: string;
-  checkLevel: 'basic' | 'standard' | 'deep';
   autoGenerate: boolean;
   maxTestCases: number;
   timeout: number;
+  enableLLMAnalysis?: boolean;
+}
+
+/**
+ * LLM分析结果结构
+ */
+export interface LLMAnalysisResult {
+  summary: string;
+  riskLevel: SecurityRiskLevel;
+  analysis: {
+    description?: string;
+    potentialImpact?: string;
+    mitigation?: string;
+    sideEffects?: string;
+    [key: string]: any;
+  };
+  raw?: string; // 原始分析文本
 }
 
 /**
@@ -299,7 +315,7 @@ export interface ToolSecurityResult {
     riskAssessment: string;
     passed: boolean;
   }>;
-  llmAnalysis: string;
+  llmAnalysis: string | LLMAnalysisResult;
   timestamp: number;
 }
 
@@ -362,4 +378,120 @@ export interface SecurityReport {
     lowIssues: number;
   };
   recommendations: string[];
+  comprehensiveRiskAnalysis?: string; // LLM生成的综合风险分析报告
+} 
+
+/**
+ * 被动检测规则类型定义
+ */
+
+// 检测规则分类
+export type DetectionRuleCategory = 
+  | 'security'        // 安全威胁
+  | 'privacy'         // 隐私泄漏
+  | 'compliance'      // 合规检查
+  | 'data_quality'    // 数据质量
+  | 'performance'     // 性能问题
+  | 'custom';         // 自定义规则
+
+// 检测范围
+export type DetectionScope = 
+  | 'parameters'      // 仅检测输入参数
+  | 'output'          // 仅检测输出结果
+  | 'both';           // 检测输入和输出
+
+// 检测规则接口
+export interface DetectionRule {
+  id: string;
+  name: string;
+  description: string;
+  category: DetectionRuleCategory;
+  enabled: boolean;
+  
+  // 正则表达式规则
+  pattern: string;                    // 正则表达式模式
+  flags?: string;                     // 正则标志 (g, i, m, s, u, y)
+  scope: DetectionScope;              // 检测范围
+  
+  // 风险评估
+  riskLevel: SecurityRiskLevel;       // 风险等级
+  threatType: string;                 // 威胁类型
+  
+  // 匹配处理
+  captureGroups?: string[];           // 捕获组名称
+  maskSensitiveData?: boolean;        // 是否遮蔽敏感数据
+  maxMatches?: number;                // 最大匹配数量
+  
+  // 元数据
+  isBuiltin: boolean;                 // 是否为内置规则
+  createdAt: number;                  // 创建时间
+  updatedAt: number;                  // 更新时间
+  tags?: string[];                    // 标签
+  
+  // 自定义处理
+  customProcessor?: string;           // 自定义处理函数名
+  
+  // 建议和修复
+  recommendation?: string;            // 安全建议
+  remediation?: string;               // 修复建议
+  references?: string[];              // 参考链接
+}
+
+// 检测规则匹配结果
+export interface DetectionRuleMatch {
+  rule: DetectionRule;
+  matches: Array<{
+    fullMatch: string;              // 完整匹配
+    capturedGroups?: string[];      // 捕获组
+    startIndex: number;             // 开始位置
+    endIndex: number;               // 结束位置
+    context?: string;               // 上下文
+  }>;
+  maskedContent?: string;             // 遮蔽后的内容
+  severity: SecurityRiskLevel;        // 实际严重程度
+}
+
+// 规则集合接口
+export interface DetectionRuleSet {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  rules: DetectionRule[];
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+// 规则验证结果
+export interface RuleValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  testResults?: Array<{
+    input: string;
+    matches: boolean;
+    captured?: string[];
+  }>;
+}
+
+// 规则统计信息
+export interface RuleStatistics {
+  ruleId: string;
+  totalMatches: number;
+  lastMatched?: number;
+  averageMatchesPerDay: number;
+  riskDistribution: Record<SecurityRiskLevel, number>;
+}
+
+// 检测配置
+export interface PassiveDetectionConfig extends SecurityCheckConfig {
+  enabledRuleCategories: DetectionRuleCategory[];
+  customRules: DetectionRule[];
+  ruleSetIds: string[];                // 启用的规则集ID
+  maxConcurrentChecks: number;         // 最大并发检测数
+  timeoutMs: number;                   // 检测超时时间
+  enableStatistics: boolean;           // 是否启用统计
+  enableRealTimeNotification: boolean; // 实时通知
+  minRiskLevelForNotification: SecurityRiskLevel; // 通知的最小风险等级
 } 

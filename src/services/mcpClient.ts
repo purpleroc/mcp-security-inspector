@@ -11,9 +11,33 @@ import {
   InitializeResult,
   SecurityCheckResult,
   SecurityRiskLevel,
-  AuthConfig
+  AuthConfig,
+  SecurityCheckConfig
 } from '@/types/mcp';
 import { i18n } from '../i18n';
+
+// 导入被动检测相关类型
+export interface PassiveDetectionResult {
+  id: string;
+  timestamp: number;
+  type: 'tool' | 'resource' | 'prompt';
+  targetName: string;
+  parameters: Record<string, unknown>;
+  result: any;
+  riskLevel: SecurityRiskLevel;
+  threats: Array<{
+    type: string;
+    severity: SecurityRiskLevel;
+    description: string;
+    evidence?: string;
+  }>;
+  sensitiveDataLeaks: Array<{
+    type: string;
+    content: string;
+    severity: SecurityRiskLevel;
+  }>;
+  recommendation: string;
+}
 
 /**
  * MCP 客户端服务
@@ -33,7 +57,170 @@ export class MCPClient {
     timestamp: number;
   }>();
 
+  // 被动检测相关属性
+  private passiveDetectionEnabled = false;
+  private securityConfig: SecurityCheckConfig | null = null;
+  private passiveResults: PassiveDetectionResult[] = [];
+  private passiveDetectionCallbacks: ((result: PassiveDetectionResult) => void)[] = [];
+
   constructor() {}
+
+  /**
+   * 启用被动安全检测
+   */
+  public enablePassiveDetection(config: SecurityCheckConfig): void {
+    this.passiveDetectionEnabled = true;
+    this.securityConfig = config;
+  }
+
+  /**
+   * 禁用被动安全检测
+   */
+  public disablePassiveDetection(): void {
+    this.passiveDetectionEnabled = false;
+    this.securityConfig = null;
+  }
+
+  /**
+   * 添加被动检测结果监听器
+   */
+  public addPassiveDetectionListener(callback: (result: PassiveDetectionResult) => void): void {
+    this.passiveDetectionCallbacks.push(callback);
+  }
+
+  /**
+   * 移除被动检测结果监听器
+   */
+  public removePassiveDetectionListener(callback: (result: PassiveDetectionResult) => void): void {
+    this.passiveDetectionCallbacks = this.passiveDetectionCallbacks.filter(cb => cb !== callback);
+  }
+
+  /**
+   * 获取被动检测结果
+   */
+  public getPassiveDetectionResults(): PassiveDetectionResult[] {
+    return [...this.passiveResults];
+  }
+
+  /**
+   * 清空被动检测结果
+   */
+  public clearPassiveDetectionResults(): void {
+    this.passiveResults = [];
+  }
+
+  /**
+   * 执行被动安全检测
+   */
+  private async performPassiveDetection(
+    type: 'tool' | 'resource' | 'prompt',
+    targetName: string,
+    parameters: Record<string, unknown>,
+    result: any
+  ): Promise<void> {
+    if (!this.passiveDetectionEnabled || !this.securityConfig) {
+      return;
+    }
+
+    try {
+      // 使用新的检测引擎
+      const { DetectionEngine } = await import('./detectionEngine');
+      const detectionEngine = DetectionEngine.getInstance();
+
+      // 执行基于正则表达式的检测
+      const ruleMatches = await detectionEngine.detectThreats(parameters, result);
+
+      // 转换检测结果为被动检测结果格式
+      const threats: Array<{
+        type: string;
+        severity: SecurityRiskLevel;
+        description: string;
+        evidence?: string;
+      }> = [];
+      
+      const sensitiveDataLeaks: Array<{
+        type: string;
+        content: string;
+        severity: SecurityRiskLevel;
+      }> = [];
+
+      // 处理规则匹配结果
+      for (const match of ruleMatches) {
+        const rule = match.rule;
+        
+        // 添加威胁信息
+        for (const matchDetail of match.matches) {
+          threats.push({
+            type: rule.threatType,
+            severity: rule.riskLevel,
+            description: `${rule.name}: ${rule.description}`,
+            evidence: `匹配内容: "${matchDetail.fullMatch.substring(0, 100)}${matchDetail.fullMatch.length > 100 ? '...' : ''}" (位置: ${matchDetail.startIndex}-${matchDetail.endIndex})`
+          });
+        }
+
+        // 如果需要遮蔽敏感数据
+        if (rule.maskSensitiveData && match.maskedContent) {
+          sensitiveDataLeaks.push({
+            type: rule.threatType,
+            content: match.maskedContent,
+            severity: rule.riskLevel
+          });
+        }
+      }
+
+      // 计算整体风险等级
+      let maxRiskLevel: SecurityRiskLevel = 'low';
+      const allRisks = [...threats, ...sensitiveDataLeaks];
+      for (const risk of allRisks) {
+        const riskPriority = { low: 1, medium: 2, high: 3, critical: 4 };
+        if (riskPriority[risk.severity] > riskPriority[maxRiskLevel]) {
+          maxRiskLevel = risk.severity;
+        }
+      }
+
+      // 生成建议
+      let recommendation = '继续监控，保持当前安全措施';
+      if (maxRiskLevel === 'critical') {
+        recommendation = '发现严重安全风险，建议立即停止使用并检查';
+      } else if (maxRiskLevel === 'high') {
+        recommendation = '发现高风险问题，建议立即处理';
+      } else if (maxRiskLevel === 'medium') {
+        recommendation = '发现中等风险，建议加强安全措施';
+      } else if (threats.length > 0 || sensitiveDataLeaks.length > 0) {
+        recommendation = '发现潜在风险，建议进一步检查';
+      }
+
+      // 创建检测结果
+      const detectionResult: PassiveDetectionResult = {
+        id: `passive_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: Date.now(),
+        type,
+        targetName,
+        parameters,
+        result,
+        riskLevel: maxRiskLevel,
+        threats,
+        sensitiveDataLeaks,
+        recommendation
+      };
+
+      // 存储结果
+      this.passiveResults.unshift(detectionResult); // 新结果放在前面
+      
+      // 限制结果数量，避免内存占用过大
+      if (this.passiveResults.length > 100) {
+        this.passiveResults = this.passiveResults.slice(0, 100);
+      }
+
+      // 通知监听器
+      this.passiveDetectionCallbacks.forEach(callback => callback(detectionResult));
+
+      console.log(`[被动检测] ${type} ${targetName} - 风险等级: ${maxRiskLevel}`, detectionResult);
+
+    } catch (error) {
+      console.error('被动安全检测失败:', error);
+    }
+  }
 
   /**
    * 生成Basic认证字符串
@@ -767,7 +954,17 @@ export class MCPClient {
     };
 
     const response = await this.sendRequest(request);
-    return response.result as MCPToolResult;
+    const result = response.result as MCPToolResult;
+
+    // 触发被动安全检测
+    if (this.passiveDetectionEnabled) {
+      // 异步执行，不阻塞主流程
+      this.performPassiveDetection('tool', name, arguments_, result).catch(error => {
+        console.error('被动检测执行失败:', error);
+      });
+    }
+
+    return result;
   }
 
   /**
@@ -782,7 +979,17 @@ export class MCPClient {
     };
 
     const response = await this.sendRequest(request);
-    return response.result as MCPResourceContent;
+    const result = response.result as MCPResourceContent;
+
+    // 触发被动安全检测
+    if (this.passiveDetectionEnabled) {
+      // 异步执行，不阻塞主流程
+      this.performPassiveDetection('resource', uri, { uri }, result).catch(error => {
+        console.error('被动检测执行失败:', error);
+      });
+    }
+
+    return result;
   }
 
   /**
@@ -800,7 +1007,17 @@ export class MCPClient {
     };
 
     const response = await this.sendRequest(request);
-    return response.result;
+    const result = response.result;
+
+    // 触发被动安全检测
+    if (this.passiveDetectionEnabled) {
+      // 异步执行，不阻塞主流程
+      this.performPassiveDetection('prompt', name, arguments_ || {}, result).catch(error => {
+        console.error('被动检测执行失败:', error);
+      });
+    }
+
+    return result;
   }
 
   /**

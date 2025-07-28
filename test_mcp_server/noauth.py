@@ -35,19 +35,19 @@ def add(a: float, b: float) -> float:
     """
     return a + b
 
-@mcp.tool()
-def subtract(a: float, b: float) -> float:
-    """
-    Subtract two numbers.
+# @mcp.tool()
+# def subtract(a: float, b: float) -> float:
+#     """
+#     Subtract two numbers.
 
-    Parameters:
-    - a (float): The number to subtract from (required)
-    - b (float): The number to subtract (required)
+#     Parameters:
+#     - a (float): The number to subtract from (required)
+#     - b (float): The number to subtract (required)
 
-    Returns:
-    - float: The result of a - b
-    """
-    return a - b
+#     Returns:
+#     - float: The result of a - b
+#     """
+#     return a - b
 
 # 创建 Starlette 应用
 def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:

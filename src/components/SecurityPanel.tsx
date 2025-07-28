@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import {
   Card,
   Button,
@@ -31,7 +32,10 @@ import {
   SafetyCertificateOutlined,
   WarningOutlined,
   ExclamationCircleOutlined,
-  CheckCircleOutlined
+  CheckCircleOutlined,
+  EyeOutlined,
+  FileTextOutlined,
+  CloseCircleOutlined
 } from '@ant-design/icons';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
@@ -42,9 +46,11 @@ import {
   LLMConfig 
 } from '../types/mcp';
 import { useI18n } from '../hooks/useI18n';
-import { securityEngine } from '../services/securityEngine';
+import { securityEngine, SecurityLogEntry } from '../services/securityEngine';
 import { llmClient } from '../services/llmClient';
 import { getLLMConfigs } from '../utils/storage';
+import { PassiveSecurityTester } from './PassiveSecurityTester';
+import SecurityLogViewer from './SecurityLogViewer';
 
 const { Title, Text, Paragraph } = Typography;
 const { TabPane } = Tabs;
@@ -61,12 +67,15 @@ const SecurityPanel: React.FC = () => {
   const [currentReport, setCurrentReport] = useState<SecurityReport | null>(null);
   const [llmConfigs, setLLMConfigs] = useState<LLMConfig[]>([]);
   const [showSettings, setShowSettings] = useState(false);
+  const [securityLogs, setSecurityLogs] = useState<SecurityLogEntry[]>([]);
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
 
   // 默认配置
   const defaultConfig: SecurityCheckConfig = {
     enabled: true,
     llmConfigId: '',
-    checkLevel: 'standard',
+
     autoGenerate: true,
     maxTestCases: 5,
     timeout: 30
@@ -86,6 +95,22 @@ const SecurityPanel: React.FC = () => {
     
     return () => {
       window.removeEventListener('llmConfigUpdated', handleLLMConfigUpdate);
+    };
+  }, []);
+
+  // 添加日志监听器
+  useEffect(() => {
+    const handleNewLog = (log: SecurityLogEntry) => {
+      setSecurityLogs(prev => [...prev, log]);
+    };
+
+    securityEngine.addLogListener(handleNewLog);
+    
+    // 初始化时获取现有日志
+    setSecurityLogs(securityEngine.getLogs());
+
+    return () => {
+      securityEngine.removeLogListener(handleNewLog);
     };
   }, []);
 
@@ -123,6 +148,8 @@ const SecurityPanel: React.FC = () => {
       setIsScanning(true);
       setScanProgress(0);
       setScanMessage(t.security.preparingScan);
+      setSecurityLogs([]); // 清空之前的日志
+      setActiveTab('logs'); // 切换到日志标签页
 
       const report = await securityEngine.startComprehensiveScan(
         scanConfig,
@@ -133,10 +160,18 @@ const SecurityPanel: React.FC = () => {
       );
 
       setCurrentReport(report);
+      setActiveTab('overview'); // 扫描完成后切换回概览
       message.success(t.security.scanComplete);
     } catch (error) {
       console.error('安全扫描失败:', error);
-      message.error(`${t.security.scanFailed}: ${error instanceof Error ? error.message : '未知错误'}`);
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      
+      // 如果是用户取消的扫描，显示不同的消息
+      if (errorMessage.includes('取消') || errorMessage.includes('cancel')) {
+        message.info(t.security.scanCancelled);
+      } else {
+        message.error(`${t.security.scanFailed}: ${errorMessage}`);
+      }
     } finally {
       setIsScanning(false);
       setScanProgress(0);
@@ -145,11 +180,16 @@ const SecurityPanel: React.FC = () => {
   };
 
   const handleStopScan = () => {
-    securityEngine.cancelCurrentScan();
-    setIsScanning(false);
-    setScanProgress(0);
-    setScanMessage('');
-    message.info(t.security.scanCancelled);
+    try {
+      securityEngine.cancelCurrentScan();
+      setIsScanning(false);
+      setScanProgress(0);
+      setScanMessage('');
+      message.info(t.security.scanCancelled);
+    } catch (error) {
+      console.error('取消扫描时出错:', error);
+      message.error('取消扫描失败');
+    }
   };
 
   const handleExportReport = () => {
@@ -168,6 +208,137 @@ const SecurityPanel: React.FC = () => {
     message.success(t.security.reportExported);
   };
 
+  const handleExportLogs = () => {
+    const dataStr = JSON.stringify(securityLogs, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    
+    const exportFileDefaultName = `security-logs-${new Date().toISOString().split('T')[0]}.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+    
+    message.success(t.security.logsExported);
+  };
+
+  const handleClearLogs = () => {
+    setSecurityLogs([]);
+    securityEngine.clearLogs();
+    message.success(t.security.logsCleared);
+  };
+
+  const showRiskAnalysisGuide = () => {
+    Modal.info({
+      title: t.security.riskAnalysisGuide,
+      width: 900,
+      content: (
+        <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+          <Tabs>
+            <Tabs.TabPane tab={t.security.toolSecurity} key="tools">
+              <div>
+                <Title level={4}>{t.security.toolRisks}</Title>
+                <Alert 
+                  type="error" 
+                  showIcon 
+                  message={t.security.injectionRisk} 
+                  description={t.security.injectionDesc}
+                  style={{ marginBottom: 16 }}
+                />
+                <Alert 
+                  type="warning" 
+                  showIcon 
+                  message={t.security.privilegeRisk} 
+                  description={t.security.privilegeDesc}
+                  style={{ marginBottom: 16 }}
+                />
+                <Alert 
+                  type="info" 
+                  showIcon 
+                  message={t.security.infoLeakRisk} 
+                  description={t.security.infoLeakDesc}
+                  style={{ marginBottom: 16 }}
+                />
+                <Alert 
+                  type="warning" 
+                  showIcon 
+                  message={t.security.dosRisk} 
+                  description={t.security.dosDesc}
+                />
+              </div>
+            </Tabs.TabPane>
+            
+            <Tabs.TabPane tab={t.security.promptSecurity} key="prompts">
+              <div>
+                <Title level={4}>{t.security.promptRisks}</Title>
+                <Alert 
+                  type="error" 
+                  showIcon 
+                  message={t.security.promptInjectionRisk} 
+                  description={t.security.promptInjectionDesc}
+                  style={{ marginBottom: 16 }}
+                />
+                <Alert 
+                  type="warning" 
+                  showIcon 
+                  message={t.security.maliciousGuidanceRisk} 
+                  description={t.security.maliciousGuidanceDesc}
+                  style={{ marginBottom: 16 }}
+                />
+                <Alert 
+                  type="info" 
+                  showIcon 
+                  message={t.security.contextPollutionRisk} 
+                  description={t.security.contextPollutionDesc}
+                  style={{ marginBottom: 16 }}
+                />
+                <Alert 
+                  type="warning" 
+                  showIcon 
+                  message={t.security.privacyLeakRisk} 
+                  description={t.security.privacyLeakDesc}
+                />
+              </div>
+            </Tabs.TabPane>
+            
+            <Tabs.TabPane tab={t.security.resourceSecurity} key="resources">
+              <div>
+                <Title level={4}>{t.security.resourceRisks}</Title>
+                <Alert 
+                  type="error" 
+                  showIcon 
+                  message={t.security.pathTraversalRisk} 
+                  description={t.security.pathTraversalDesc}
+                  style={{ marginBottom: 16 }}
+                />
+                <Alert 
+                  type="warning" 
+                  showIcon 
+                  message={t.security.accessControlBypassRisk} 
+                  description={t.security.accessControlBypassDesc}
+                  style={{ marginBottom: 16 }}
+                />
+                <Alert 
+                  type="info" 
+                  showIcon 
+                  message={t.security.sensitiveDataExposureRisk} 
+                  description={t.security.sensitiveDataExposureDesc}
+                  style={{ marginBottom: 16 }}
+                />
+                <Alert 
+                  type="warning" 
+                  showIcon 
+                  message={t.security.contentInjectionRisk} 
+                  description={t.security.contentInjectionDesc}
+                />
+              </div>
+            </Tabs.TabPane>
+          </Tabs>
+        </div>
+      ),
+    });
+  };
+
   const getRiskLevelColor = (level: SecurityRiskLevel): string => {
     switch (level) {
       case 'critical': return '#ff4d4f';
@@ -178,14 +349,81 @@ const SecurityPanel: React.FC = () => {
     }
   };
 
-  const getRiskLevelIcon = (level: SecurityRiskLevel) => {
-    switch (level) {
-      case 'critical': return <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />;
-      case 'high': return <AlertOutlined style={{ color: '#ff7a45' }} />;
-      case 'medium': return <WarningOutlined style={{ color: '#ffa940' }} />;
-      case 'low': return <CheckCircleOutlined style={{ color: '#52c41a' }} />;
-      default: return <SafetyCertificateOutlined style={{ color: '#d9d9d9' }} />;
+  // 新增：从安全评估文本中提取风险等级
+  const extractRiskLevelFromAssessment = (assessment: string): SecurityRiskLevel | null => {
+    // 首先尝试解析JSON格式（新格式）
+    try {
+      const parsed = JSON.parse(assessment);
+      if (parsed.riskLevel && ['low', 'medium', 'high', 'critical'].includes(parsed.riskLevel)) {
+        return parsed.riskLevel as SecurityRiskLevel;
+      }
+    } catch (e) {
+      // JSON解析失败，继续使用文本解析
     }
+    
+    // 回退到文本解析（旧格式）
+    const lowerAssessment = assessment.toLowerCase();
+    
+    // 优先检查明确的无风险表述 - 更严格的判断
+    if (lowerAssessment.includes('无风险') || lowerAssessment.includes('no risk') || 
+        lowerAssessment.includes('无安全问题') || lowerAssessment.includes('no security issue') ||
+        (lowerAssessment.includes('安全') && lowerAssessment.includes('测试结果安全') && 
+         !lowerAssessment.includes('风险') && !lowerAssessment.includes('risk')) ||
+        (lowerAssessment.includes('安全') && lowerAssessment.includes('不存在安全风险') &&
+         !lowerAssessment.includes('风险') && !lowerAssessment.includes('risk'))) {
+      return 'low';
+    }
+    
+    // 明确的风险等级词汇
+    if (lowerAssessment.includes('严重风险') || lowerAssessment.includes('critical')) {
+      return 'critical';
+    }
+    if (lowerAssessment.includes('高风险') || lowerAssessment.includes('high')) {
+      return 'high';
+    }
+    if (lowerAssessment.includes('中风险') || lowerAssessment.includes('medium')) {
+      return 'medium';
+    }
+    if (lowerAssessment.includes('低风险') || lowerAssessment.includes('low')) {
+      return 'low';
+    }
+    
+    // 检查风险指示词
+    if (lowerAssessment.includes('存在风险') || lowerAssessment.includes('有风险') || 
+        lowerAssessment.includes('风险') || lowerAssessment.includes('risk')) {
+      // 如果提到风险，进一步判断风险等级
+      if (lowerAssessment.includes('严重') || lowerAssessment.includes('critical')) {
+        return 'critical';
+      }
+      if (lowerAssessment.includes('高') || lowerAssessment.includes('high')) {
+        return 'high';
+      }
+      if (lowerAssessment.includes('中') || lowerAssessment.includes('medium')) {
+        return 'medium';
+      }
+      // 如果只是提到风险但没有明确等级，默认为中风险
+      return 'medium';
+    }
+    
+    return null;
+  };
+
+  // 新增：获取风险等级的显示文本
+  const getRiskLevelText = (level: SecurityRiskLevel | null): string => {
+    if (!level) return '';
+    return t.security.riskLevelTags[level as keyof typeof t.security.riskLevelTags] || '';
+  };
+
+  // 新增：获取测试结果的状态颜色
+  const getTestResultBorderColor = (test: any): string => {
+    if (test.result?.error) {
+      return '#ff4d4f'; // 错误：红色
+    }
+    const riskLevel = extractRiskLevelFromAssessment(test.riskAssessment || '');
+    if (riskLevel) {
+      return getRiskLevelColor(riskLevel);
+    }
+    return '#d9d9d9'; // 默认：灰色
   };
 
   const toolColumns = [
@@ -198,9 +436,9 @@ const SecurityPanel: React.FC = () => {
       title: t.security.riskLevel,
       dataIndex: 'riskLevel',
       key: 'riskLevel',
+      align: 'center' as const,
       render: (level: SecurityRiskLevel) => (
         <Tag color={getRiskLevelColor(level)}>
-          {getRiskLevelIcon(level)}
           {t.security.riskLevels[level as keyof typeof t.security.riskLevels] || level}
         </Tag>
       ),
@@ -209,17 +447,20 @@ const SecurityPanel: React.FC = () => {
       title: t.security.vulnerabilityCount,
       dataIndex: 'vulnerabilities',
       key: 'vulnerabilityCount',
+      align: 'center' as const,
       render: (vulnerabilities: any[]) => vulnerabilities.length,
     },
     {
       title: t.security.testCaseCount,
       dataIndex: 'testResults',
       key: 'testCount',
+      align: 'center' as const,
       render: (testResults: any[]) => testResults.length,
     },
     {
       title: t.llm.actions,
       key: 'actions',
+      align: 'center' as const,
       render: (_: any, record: any) => (
         <Button type="link" onClick={() => showToolDetail(record)}>
           {t.security.viewDetails}
@@ -228,54 +469,327 @@ const SecurityPanel: React.FC = () => {
     },
   ];
 
+  // 渲染综合风险分析报告内容
+  const renderComprehensiveRiskAnalysisContent = (comprehensiveAnalysis: string | undefined) => {
+    if (!comprehensiveAnalysis) return null;
+
+    try {
+      // 尝试解析JSON格式的分析数据
+      const parsed = JSON.parse(comprehensiveAnalysis);
+      if (parsed.analysis) {
+        return (
+          <div style={{ marginBottom: 16 }}>
+            <Title level={5}>{t.security.comprehensiveRiskAnalysis || '综合风险分析报告'}</Title>
+            <div style={{
+              backgroundColor: '#f5f5f5',
+              padding: '12px',
+              borderRadius: '6px',
+              fontSize: '13px',
+              lineHeight: '1.5'
+            }}>
+              <ReactMarkdown
+                components={{
+                  h1: ({children}) => <h1 style={{fontSize: '16px', fontWeight: 'bold', margin: '8px 0'}}>{children}</h1>,
+                  h2: ({children}) => <h2 style={{fontSize: '15px', fontWeight: 'bold', margin: '8px 0'}}>{children}</h2>,
+                  h3: ({children}) => <h3 style={{fontSize: '14px', fontWeight: 'bold', margin: '6px 0'}}>{children}</h3>,
+                  h4: ({children}) => <h4 style={{fontSize: '13px', fontWeight: 'bold', margin: '6px 0'}}>{children}</h4>,
+                  h5: ({children}) => <h5 style={{fontSize: '12px', fontWeight: 'bold', margin: '4px 0'}}>{children}</h5>,
+                  h6: ({children}) => <h6 style={{fontSize: '12px', fontWeight: 'bold', margin: '4px 0'}}>{children}</h6>,
+                  p: ({children}) => <p style={{margin: '4px 0', fontSize: '13px'}}>{children}</p>,
+                  ul: ({children}) => <ul style={{margin: '4px 0', paddingLeft: '20px'}}>{children}</ul>,
+                  ol: ({children}) => <ol style={{margin: '4px 0', paddingLeft: '20px'}}>{children}</ol>,
+                  li: ({children}) => <li style={{margin: '2px 0', fontSize: '13px'}}>{children}</li>,
+                  strong: ({children}) => <strong style={{fontWeight: 'bold'}}>{children}</strong>,
+                  em: ({children}) => <em style={{fontStyle: 'italic'}}>{children}</em>,
+                  code: ({children}) => <code style={{
+                    backgroundColor: '#e6f7ff',
+                    padding: '2px 4px',
+                    borderRadius: '3px',
+                    fontFamily: 'monospace',
+                    fontSize: '12px'
+                  }}>{children}</code>,
+                  pre: ({children}) => <pre style={{
+                    backgroundColor: '#f0f0f0',
+                    padding: '8px',
+                    borderRadius: '4px',
+                    overflow: 'auto',
+                    fontSize: '12px',
+                    fontFamily: 'monospace'
+                  }}>{children}</pre>,
+                  blockquote: ({children}) => <blockquote style={{
+                    borderLeft: '3px solid #1890ff',
+                    paddingLeft: '8px',
+                    margin: '4px 0',
+                    color: '#666'
+                  }}>{children}</blockquote>
+                }}
+              >
+                {parsed.analysis}
+              </ReactMarkdown>
+            </div>
+          </div>
+        );
+      }
+    } catch (e) {
+      // 如果不是JSON格式，直接作为Markdown渲染
+      return (
+        <div style={{ marginBottom: 16 }}>
+          <Title level={5}>{t.security.comprehensiveRiskAnalysis || '综合风险分析报告'}</Title>
+          <div style={{
+            backgroundColor: '#f5f5f5',
+            padding: '12px',
+            borderRadius: '6px',
+            fontSize: '13px',
+            lineHeight: '1.5'
+          }}>
+            <ReactMarkdown
+              components={{
+                h1: ({children}) => <h1 style={{fontSize: '16px', fontWeight: 'bold', margin: '8px 0'}}>{children}</h1>,
+                h2: ({children}) => <h2 style={{fontSize: '15px', fontWeight: 'bold', margin: '8px 0'}}>{children}</h2>,
+                h3: ({children}) => <h3 style={{fontSize: '14px', fontWeight: 'bold', margin: '6px 0'}}>{children}</h3>,
+                h4: ({children}) => <h4 style={{fontSize: '13px', fontWeight: 'bold', margin: '6px 0'}}>{children}</h4>,
+                h5: ({children}) => <h5 style={{fontSize: '12px', fontWeight: 'bold', margin: '4px 0'}}>{children}</h5>,
+                h6: ({children}) => <h6 style={{fontSize: '12px', fontWeight: 'bold', margin: '4px 0'}}>{children}</h6>,
+                p: ({children}) => <p style={{margin: '4px 0', fontSize: '13px'}}>{children}</p>,
+                ul: ({children}) => <ul style={{margin: '4px 0', paddingLeft: '20px'}}>{children}</ul>,
+                ol: ({children}) => <ol style={{margin: '4px 0', paddingLeft: '20px'}}>{children}</ol>,
+                li: ({children}) => <li style={{margin: '2px 0', fontSize: '13px'}}>{children}</li>,
+                strong: ({children}) => <strong style={{fontWeight: 'bold'}}>{children}</strong>,
+                em: ({children}) => <em style={{fontStyle: 'italic'}}>{children}</em>,
+                code: ({children}) => <code style={{
+                  backgroundColor: '#e6f7ff',
+                  padding: '2px 4px',
+                  borderRadius: '3px',
+                  fontFamily: 'monospace',
+                  fontSize: '12px'
+                }}>{children}</code>,
+                pre: ({children}) => <pre style={{
+                  backgroundColor: '#f0f0f0',
+                  padding: '8px',
+                  borderRadius: '4px',
+                  overflow: 'auto',
+                  fontSize: '12px',
+                  fontFamily: 'monospace'
+                }}>{children}</pre>,
+                blockquote: ({children}) => <blockquote style={{
+                  borderLeft: '3px solid #1890ff',
+                  paddingLeft: '8px',
+                  margin: '4px 0',
+                  color: '#666'
+                }}>{children}</blockquote>
+              }}
+            >
+              {comprehensiveAnalysis}
+            </ReactMarkdown>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   const showToolDetail = (tool: any) => {
     Modal.info({
       title: `${t.security.toolSecurityAnalysis}: ${tool.toolName}`,
-      width: 800,
+      width: 900,
       content: (
         <div>
-          <Divider>{t.security.riskLevel}</Divider>
-          <Tag color={getRiskLevelColor(tool.riskLevel)}>
-            {getRiskLevelIcon(tool.riskLevel)}
-            {t.security.riskLevels[tool.riskLevel as keyof typeof t.security.riskLevels] || tool.riskLevel}
-          </Tag>
-          
-          {tool.vulnerabilities.length > 0 && (
-            <>
-              <Divider>{t.security.foundVulnerabilities}</Divider>
-              {tool.vulnerabilities.map((vuln: any, index: number) => (
-                <Alert
-                  key={index}
-                  type={vuln.severity === 'critical' || vuln.severity === 'high' ? 'error' : 'warning'}
-                  message={vuln.description}
-                  description={vuln.recommendation}
-                  style={{ marginBottom: 8 }}
-                />
-              ))}
-            </>
-          )}
+          <div style={{ marginBottom: 16 }}>
+            <Text strong>{t.security.riskLevel}: </Text>
+            <Tag color={getRiskLevelColor(tool.riskLevel)} style={{ 
+                               marginLeft: 4, 
+                               fontSize: '12px', 
+                               fontWeight: 'bold',
+                               textAlign: 'center',
+                               display: 'flex',
+                               alignItems: 'center',
+                               justifyContent: 'center'
+                             }}>
+              {t.security.riskLevels[tool.riskLevel as keyof typeof t.security.riskLevels] || tool.riskLevel}
+            </Tag>
+          </div>
+
+          {/* 综合风险分析报告 */}
+          {renderComprehensiveRiskAnalysisContent(currentReport?.comprehensiveRiskAnalysis)}
           
           {tool.testResults.length > 0 && (
-            <>
-              <Divider>{t.security.securityTestResults}</Divider>
-              {tool.testResults.map((test: any, index: number) => (
-                <Card key={index} size="small" style={{ marginBottom: 8 }}>
-                  <p><strong>{t.security.testCase}:</strong> {test.testCase}</p>
-                  <p><strong>{t.security.passStatus}:</strong> 
-                    <Tag color={test.passed ? 'success' : 'error'}>
-                      {test.passed ? t.security.passed : t.security.failed}
-                    </Tag>
-                  </p>
-                  <p><strong>{t.security.riskAssessmentTitle}:</strong> {test.riskAssessment}</p>
-                </Card>
-              ))}
-            </>
+            <div>
+              <Title level={5}>{t.security.securityTestResults}</Title>
+              <div style={{ marginBottom: 16 }}>
+                <Text type="secondary">
+                  {t.security.totalTestCases}: {tool.testResults.length}
+                </Text>
+              </div>
+              {tool.testResults.map((test: any, index: number) => {
+                const riskLevel = extractRiskLevelFromAssessment(test.riskAssessment || '');
+                const borderColor = getTestResultBorderColor(test);
+                
+                return (
+                  <Card 
+                    key={index} 
+                    size="small" 
+                    style={{ 
+                      marginBottom: 12,
+                      border: `2px solid ${borderColor}`,
+                      borderRadius: '8px',
+                      backgroundColor: test.result?.error ? '#fff2f0' : '#fafafa'
+                    }}
+                                         title={
+                       <Space>
+                         <Tag color="blue" style={{ fontSize: '12px' }}>
+                           #{index + 1}
+                         </Tag>
+                         <Text strong style={{ fontSize: '14px' }}>
+                           {test.testCase}
+                         </Text>
+                         {test.result?.error && (
+                           <Tag color="red" icon={<CloseCircleOutlined />}>
+                             {t.security.testFailed}
+                           </Tag>
+                         )}
+                       </Space>
+                     }
+                  >
+                    <div style={{ fontSize: '13px', marginBottom: 12 }}>
+                      <div style={{ marginBottom: 8 }}>
+                        <Text strong>{t.security.testParameters}:</Text>
+                      </div>
+                      <div style={{ 
+                        backgroundColor: '#f5f5f5', 
+                        padding: '8px 12px', 
+                        borderRadius: '6px',
+                        fontFamily: 'monospace',
+                        fontSize: '12px',
+                        border: '1px solid #e8e8e8'
+                      }}>
+                        {JSON.stringify(test.parameters, null, 2)}
+                      </div>
+                    </div>
+
+                    {test.result && (
+                      <div style={{ fontSize: '13px', marginBottom: 12 }}>
+                        <div style={{ marginBottom: 8 }}>
+                          <Text strong>{t.security.executionResult}:</Text>
+                        </div>
+                        <div style={{ 
+                          backgroundColor: test.result.error ? '#fff2f0' : '#f5f5f5', 
+                          padding: '8px 12px', 
+                          borderRadius: '6px',
+                          fontFamily: 'monospace',
+                          fontSize: '12px',
+                          maxHeight: '150px',
+                          overflow: 'auto',
+                          border: test.result.error ? '1px solid #ffccc7' : '1px solid #e8e8e8'
+                        }}>
+                          {test.result.error 
+                            ? `${t.security.errorPrefix}${test.result.error}`
+                            : JSON.stringify(test.result, null, 2)
+                          }
+                        </div>
+                      </div>
+                    )}
+
+                                         <div style={{ 
+                       fontSize: '13px',
+                       padding: '10px 12px',
+                       backgroundColor: riskLevel ? `${getRiskLevelColor(riskLevel)}25` : '#f0f0f0',
+                       borderRadius: '8px',
+                       border: `2px solid ${riskLevel ? getRiskLevelColor(riskLevel) : '#d9d9d9'}`,
+                       marginTop: '4px'
+                     }}>
+                       <Space>
+                         <Text strong style={{ 
+                           color: riskLevel ? getRiskLevelColor(riskLevel) : '#666',
+                           fontSize: '14px'
+                         }}>
+                           {t.security.securityAssessment}:
+                         </Text>
+                         {riskLevel && (
+                           <Tag 
+                             color={getRiskLevelColor(riskLevel)} 
+                           >
+                             {getRiskLevelText(riskLevel)}
+                           </Tag>
+                         )}
+                       </Space>
+                       <div style={{ 
+                         marginTop: 8, 
+                         color: riskLevel ? getRiskLevelColor(riskLevel) : '#666',
+                         fontWeight: 600,
+                         fontSize: '13px',
+                         lineHeight: '1.4'
+                       }}>
+                         {/* 提取并显示描述部分，而不是完整的JSON */}
+                         {(() => {
+                           // 首先尝试解析JSON格式（新格式）
+                           try {
+                             const parsed = JSON.parse(test.riskAssessment);
+                             // 需要加上描述和 evidence
+                             let msg = "";
+                             if (parsed.description) {
+                               msg += "风险描述：" + parsed.description;
+                             }
+                             if (parsed.evidence) {
+                               msg += " -- 风险证据：" + parsed.evidence;
+                             }
+                             return msg;
+                           } catch (e) {
+                             // JSON解析失败，继续使用原始文本
+                           }
+                           
+                           // 如果不是JSON格式或解析失败，使用原始文本
+                           return test.riskAssessment;
+                         })()}
+                       </div>
+                       
+                       {/* 为存在风险的测试用例显示改进建议 */}
+                       {riskLevel && riskLevel !== 'low' && (
+                         <div style={{ 
+                           marginTop: 12,
+                           padding: '8px 12px',
+                           backgroundColor: '#fff7e6',
+                           borderRadius: '6px',
+                           border: '1px solid #ffd591',
+                           borderLeft: '3px solid #fa8c16'
+                         }}>
+                           <Space>
+                             <Text strong style={{ 
+                               color: '#fa8c16',
+                               fontSize: '13px'
+                             }}>
+                               {t.security.recommendation}:
+                             </Text>
+                           </Space>
+                           <div style={{ 
+                             marginTop: 4, 
+                             color: '#666',
+                             fontSize: '12px',
+                             lineHeight: '1.4'
+                           }}>
+                             {/* 从JSON格式中提取recommendation */}
+                             {(() => {
+                               try {
+                                 const parsed = JSON.parse(test.riskAssessment);
+                                 if (parsed.recommendation) {
+                                   return parsed.recommendation;
+                                 }
+                               } catch (e) {
+                                 // JSON解析失败，忽略
+                               }
+                               
+                               // 默认建议
+                               return '建议加强相关安全措施，定期进行安全检测。';
+                             })()}
+                           </div>
+                         </div>
+                       )}
+                     </div>
+                  </Card>
+                );
+              })}
+            </div>
           )}
-          
-          <Divider>{t.security.llmAnalysisTitle}</Divider>
-          <Paragraph style={{ whiteSpace: 'pre-wrap' }}>
-            {tool.llmAnalysis}
-          </Paragraph>
         </div>
       ),
     });
@@ -291,6 +805,58 @@ const SecurityPanel: React.FC = () => {
       );
     }
 
+    // 收集严重和高风险问题
+    const criticalIssues: any[] = [];
+    const highRiskIssues: any[] = [];
+
+    // 从工具结果中收集问题
+    currentReport.toolResults.forEach(tool => {
+      tool.vulnerabilities.forEach(vuln => {
+        const issue = {
+          sourceType: 'tool',
+          source: tool.toolName,
+          ...vuln
+        };
+        if (vuln.severity === 'critical') {
+          criticalIssues.push(issue);
+        } else if (vuln.severity === 'high') {
+          highRiskIssues.push(issue);
+        }
+      });
+    });
+
+    // 从提示结果中收集问题
+    currentReport.promptResults.forEach(prompt => {
+      prompt.threats.forEach(threat => {
+        const issue = {
+          sourceType: 'prompt',
+          source: prompt.promptName,
+          ...threat
+        };
+        if (threat.severity === 'critical') {
+          criticalIssues.push(issue);
+        } else if (threat.severity === 'high') {
+          highRiskIssues.push(issue);
+        }
+      });
+    });
+
+    // 从资源结果中收集问题
+    currentReport.resourceResults.forEach(resource => {
+      resource.risks.forEach(risk => {
+        const issue = {
+          sourceType: 'resource',
+          source: resource.resourceUri,
+          ...risk
+        };
+        if (risk.severity === 'critical') {
+          criticalIssues.push(issue);
+        } else if (risk.severity === 'high') {
+          highRiskIssues.push(issue);
+        }
+      });
+    });
+
     return (
       <div>
         <Row gutter={16} style={{ marginBottom: 24 }}>
@@ -299,8 +865,7 @@ const SecurityPanel: React.FC = () => {
               <Statistic
                 title={t.security.overallRisk}
                 value={t.security.riskLevels[currentReport.overallRisk as keyof typeof t.security.riskLevels]}
-                prefix={getRiskLevelIcon(currentReport.overallRisk)}
-                valueStyle={{ color: getRiskLevelColor(currentReport.overallRisk) }}
+                valueStyle={{ color: getRiskLevelColor(currentReport.overallRisk), textAlign: 'center' }}
               />
             </Card>
           </Col>
@@ -310,7 +875,7 @@ const SecurityPanel: React.FC = () => {
                 title={t.security.totalIssues}
                 value={currentReport.summary.totalIssues}
                 prefix={<AlertOutlined />}
-                valueStyle={{ color: currentReport.summary.totalIssues > 0 ? '#ff4d4f' : '#52c41a' }}
+                valueStyle={{ color: currentReport.summary.totalIssues > 0 ? '#ff4d4f' : '#52c41a', textAlign: 'center' }}
               />
             </Card>
           </Col>
@@ -320,7 +885,7 @@ const SecurityPanel: React.FC = () => {
                 title={t.security.criticalIssues}
                 value={currentReport.summary.criticalIssues}
                 prefix={<ExclamationCircleOutlined />}
-                valueStyle={{ color: '#ff4d4f' }}
+                valueStyle={{ color: '#ff4d4f', textAlign: 'center' }}
               />
             </Card>
           </Col>
@@ -330,13 +895,13 @@ const SecurityPanel: React.FC = () => {
                 title={t.security.highIssues}
                 value={currentReport.summary.highIssues}
                 prefix={<WarningOutlined />}
-                valueStyle={{ color: '#ff7a45' }}
+                valueStyle={{ color: '#ff7a45', textAlign: 'center' }}
               />
             </Card>
           </Col>
         </Row>
 
-        <Row gutter={16}>
+        <Row gutter={16} style={{ marginBottom: 24 }}>
           <Col span={12}>
             <Card title={t.security.issueDist} size="small">
               <Space direction="vertical" style={{ width: '100%' }}>
@@ -363,17 +928,83 @@ const SecurityPanel: React.FC = () => {
             <Card title={t.security.recommendations} size="small">
               <Space direction="vertical">
                 {currentReport.recommendations.map((rec, index) => (
-                                     <Alert
-                     key={index}
-                     type="info"
-                     message={rec}
-                     showIcon
-                   />
+                  <Alert
+                    key={index}
+                    type="info"
+                    message={rec}
+                    showIcon
+                  />
                 ))}
               </Space>
             </Card>
           </Col>
         </Row>
+
+        {/* 严重问题详情 */}
+        {criticalIssues.length > 0 && (
+          <Row gutter={16} style={{ marginBottom: 24 }}>
+            <Col span={24}>
+              <Card title={`${t.security.criticalIssuesDetail} (${criticalIssues.length})`} size="small">
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  {criticalIssues.map((issue, index) => (
+                    <Alert
+                      key={index}
+                      type="error"
+                      showIcon
+                      message={
+                        <div>
+                          <Text strong>{issue.description}</Text>
+                          <div style={{ marginTop: 4, fontSize: '12px', color: '#666' }}>
+                            {t.security.source}: {issue.source} ({t.security.sourceTypes[issue.sourceType as keyof typeof t.security.sourceTypes]})
+                          </div>
+                        </div>
+                      }
+                      description={
+                        <div style={{ fontSize: '12px' }}>
+                          <div><strong>{t.security.riskType}:</strong> {issue.type}</div>
+                          <div><strong>{t.security.suggestion}:</strong> {issue.recommendation}</div>
+                        </div>
+                      }
+                    />
+                  ))}
+                </Space>
+              </Card>
+            </Col>
+          </Row>
+        )}
+
+        {/* 高风险问题详情 */}
+        {highRiskIssues.length > 0 && (
+          <Row gutter={16}>
+            <Col span={24}>
+              <Card title={`${t.security.highRiskIssuesDetail} (${highRiskIssues.length})`} size="small">
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  {highRiskIssues.map((issue, index) => (
+                    <Alert
+                      key={index}
+                      type="warning"
+                      showIcon
+                      message={
+                        <div>
+                          <Text strong>{issue.description}</Text>
+                          <div style={{ marginTop: 4, fontSize: '12px', color: '#666' }}>
+                            {t.security.source}: {issue.source} ({t.security.sourceTypes[issue.sourceType as keyof typeof t.security.sourceTypes]})
+                          </div>
+                        </div>
+                      }
+                      description={
+                        <div style={{ fontSize: '12px' }}>
+                          <div><strong>{t.security.riskType}:</strong> {issue.type}</div>
+                          <div><strong>{t.security.suggestion}:</strong> {issue.recommendation}</div>
+                        </div>
+                      }
+                    />
+                  ))}
+                </Space>
+              </Card>
+            </Col>
+          </Row>
+        )}
       </div>
     );
   };
@@ -431,13 +1062,7 @@ const SecurityPanel: React.FC = () => {
           </Select>
         </Form.Item>
         
-        <Form.Item label={t.security.scanLevel} name="checkLevel">
-          <Select>
-            <Select.Option value="basic">{t.security.basic}</Select.Option>
-            <Select.Option value="standard">{t.security.standard}</Select.Option>
-            <Select.Option value="deep">{t.security.deep}</Select.Option>
-          </Select>
-        </Form.Item>
+
         
         <Form.Item label={t.security.autoGenerateTests} name="autoGenerate" valuePropName="checked">
           <Switch />
@@ -467,10 +1092,22 @@ const SecurityPanel: React.FC = () => {
               <Tag color={connectionStatus === 'connected' ? 'green' : 'red'}>
                 {connectionStatus === 'connected' ? t.config.connectionStatus.connected : t.config.connectionStatus.disconnected}
               </Tag>
+              {securityLogs.length > 0 && (
+                <Tag color="blue">
+                  {t.security.logs}: {securityLogs.length} {t.security.logCount}
+                </Tag>
+              )}
             </Space>
           </Col>
           <Col>
             <Space>
+              <Button 
+                icon={<EyeOutlined />} 
+                onClick={showRiskAnalysisGuide}
+                type="dashed"
+              >
+                {t.security.riskGuide}
+              </Button>
               <Button 
                 icon={<SettingOutlined />} 
                 onClick={() => setShowSettings(true)}
@@ -483,6 +1120,14 @@ const SecurityPanel: React.FC = () => {
                   onClick={handleExportReport}
                 >
                   {t.security.exportReport}
+                </Button>
+              )}
+              {securityLogs.length > 0 && (
+                <Button 
+                  icon={<FileTextOutlined />} 
+                  onClick={handleExportLogs}
+                >
+                  {t.security.exportLogs}
                 </Button>
               )}
               {isScanning ? (
@@ -524,96 +1169,162 @@ const SecurityPanel: React.FC = () => {
 
       {/* 结果展示区 */}
       <Card>
-        <Tabs defaultActiveKey="overview">
-          <TabPane tab={t.security.overview} key="overview">
-            {renderOverview()}
-          </TabPane>
-          
-          <TabPane tab={t.security.toolSecurity} key="tools">
-            {currentReport ? (
-              <Table
-                dataSource={currentReport.toolResults}
-                columns={toolColumns}
-                rowKey="toolName"
-                pagination={{ pageSize: 10 }}
-              />
-            ) : (
-              <Empty description={t.security.noData} />
-            )}
-          </TabPane>
-          
-          <TabPane tab={t.security.promptSecurity} key="prompts">
-            {currentReport ? (
-              <Table
-                dataSource={currentReport.promptResults}
-                columns={[
-                  {
-                    title: t.security.promptName,
-                    dataIndex: 'promptName',
-                    key: 'promptName',
-                  },
-                  {
-                    title: t.security.riskLevel,
-                    dataIndex: 'riskLevel',
-                    key: 'riskLevel',
-                    render: (level: SecurityRiskLevel) => (
-                      <Tag color={getRiskLevelColor(level)}>
-                        {getRiskLevelIcon(level)}
-                        {t.security.riskLevels[level as keyof typeof t.security.riskLevels] || level}
-                      </Tag>
-                    ),
-                  },
-                  {
-                    title: t.security.threatCount,
-                    dataIndex: 'threats',
-                    key: 'threatCount',
-                    render: (threats: any[]) => threats.length,
-                  },
-                ]}
-                rowKey="promptName"
-                pagination={{ pageSize: 10 }}
-              />
-            ) : (
-              <Empty description={t.security.noData} />
-            )}
-          </TabPane>
-          
-          <TabPane tab={t.security.resourceSecurity} key="resources">
-            {currentReport ? (
-              <Table
-                dataSource={currentReport.resourceResults}
-                columns={[
-                  {
-                    title: t.security.resourceUri,
-                    dataIndex: 'resourceUri',
-                    key: 'resourceUri',
-                  },
-                  {
-                    title: t.security.riskLevel,
-                    dataIndex: 'riskLevel',
-                    key: 'riskLevel',
-                    render: (level: SecurityRiskLevel) => (
-                      <Tag color={getRiskLevelColor(level)}>
-                        {getRiskLevelIcon(level)}
-                        {t.security.riskLevels[level as keyof typeof t.security.riskLevels] || level}
-                      </Tag>
-                    ),
-                  },
-                  {
-                    title: t.security.riskCount,
-                    dataIndex: 'risks',
-                    key: 'riskCount',
-                    render: (risks: any[]) => risks.length,
-                  },
-                ]}
-                rowKey="resourceUri"
-                pagination={{ pageSize: 10 }}
-              />
-            ) : (
-              <Empty description={t.security.noData} />
-            )}
-          </TabPane>
-        </Tabs>
+        <Tabs 
+          activeKey={activeTab} 
+          onChange={setActiveTab}
+          items={[
+            {
+              key: 'overview',
+              label: t.security.overview,
+              children: renderOverview()
+            },
+            {
+              key: 'tools',
+              label: (
+                <Space>
+                  {t.security.toolSecurity}
+                  {currentReport && currentReport.toolResults.length > 0 && (
+                    <Tag color="blue">{currentReport.toolResults.length}</Tag>
+                  )}
+                </Space>
+              ),
+              children: currentReport ? (
+                <Table
+                  dataSource={currentReport.toolResults}
+                  columns={toolColumns}
+                  rowKey="toolName"
+                  pagination={{ pageSize: 10 }}
+                />
+              ) : (
+                <Empty description={t.security.noData} />
+              )
+            },
+            {
+              key: 'prompts',
+              label: (
+                <Space>
+                  {t.security.promptSecurity}
+                  {currentReport && currentReport.promptResults.length > 0 && (
+                    <Tag color="blue">{currentReport.promptResults.length}</Tag>
+                  )}
+                </Space>
+              ),
+              children: currentReport ? (
+                <Table
+                  dataSource={currentReport.promptResults}
+                  columns={[
+                    {
+                      title: t.security.promptName,
+                      dataIndex: 'promptName',
+                      key: 'promptName',
+                    },
+                    {
+                      title: t.security.riskLevel,
+                      dataIndex: 'riskLevel',
+                      key: 'riskLevel',
+                      align: 'center' as const,
+                      render: (level: SecurityRiskLevel) => (
+                        <Tag color={getRiskLevelColor(level)}>
+                          {t.security.riskLevels[level as keyof typeof t.security.riskLevels] || level}
+                        </Tag>
+                      ),
+                    },
+                    {
+                      title: t.security.threatCount,
+                      dataIndex: 'threats',
+                      key: 'threatCount',
+                      align: 'center' as const,
+                      render: (threats: any[]) => threats.length,
+                    },
+                  ]}
+                  rowKey="promptName"
+                  pagination={{ pageSize: 10 }}
+                />
+              ) : (
+                <Empty description={t.security.noData} />
+              )
+            },
+            {
+              key: 'resources',
+              label: (
+                <Space>
+                  {t.security.resourceSecurity}
+                  {currentReport && currentReport.resourceResults.length > 0 && (
+                    <Tag color="blue">{currentReport.resourceResults.length}</Tag>
+                  )}
+                </Space>
+              ),
+              children: currentReport ? (
+                <Table
+                  dataSource={currentReport.resourceResults}
+                  columns={[
+                    {
+                      title: t.security.resourceUri,
+                      dataIndex: 'resourceUri',
+                      key: 'resourceUri',
+                    },
+                    {
+                      title: t.security.riskLevel,
+                      dataIndex: 'riskLevel',
+                      key: 'riskLevel',
+                      align: 'center' as const,
+                      render: (level: SecurityRiskLevel) => (
+                        <Tag color={getRiskLevelColor(level)}>
+                          {t.security.riskLevels[level as keyof typeof t.security.riskLevels] || level}
+                        </Tag>
+                      ),
+                    },
+                    {
+                      title: t.security.riskCount,
+                      dataIndex: 'risks',
+                      key: 'riskCount',
+                      align: 'center' as const,
+                      render: (risks: any[]) => risks.length,
+                    },
+                  ]}
+                  rowKey="resourceUri"
+                  pagination={{ pageSize: 10 }}
+                />
+              ) : (
+                <Empty description={t.security.noData} />
+              )
+            },
+            {
+              key: 'passive',
+              label: (
+                <Space>
+                  <PlayCircleOutlined />
+                  被动检测
+                </Space>
+              ),
+              children: (
+                <PassiveSecurityTester
+                  config={scanConfig}
+                />
+              )
+            },
+            {
+              key: 'logs',
+              label: (
+                <Space>
+                  <FileTextOutlined />
+                  {t.security.detectionLogs}
+                                     {securityLogs.length > 0 && (
+                     <Tag color="blue">{securityLogs.length}</Tag>
+                   )}
+                </Space>
+              ),
+              children: (
+                <SecurityLogViewer
+                  logs={securityLogs}
+                  isScanning={isScanning}
+                  onClearLogs={handleClearLogs}
+                  onExportLogs={handleExportLogs}
+                />
+              )
+            }
+          ]}
+        />
       </Card>
 
       {renderSettings()}

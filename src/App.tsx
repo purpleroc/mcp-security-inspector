@@ -77,15 +77,15 @@ const App: React.FC = () => {
       ),
       children: <MCPExplorer />
     },
-        {
-      key: 'history',
+    {
+      key: 'security',
       label: (
         <span>
-          <HistoryOutlined />
-          {t.tabs.history}
+          <SafetyOutlined />
+          {t.tabs.security}
         </span>
       ),
-      children: <HistoryPanel />
+      children: <SecurityPanel />
     },
     {
       key: 'llm',
@@ -98,14 +98,14 @@ const App: React.FC = () => {
       children: <LLMConfig />
     },
     {
-      key: 'security',
+      key: 'history',
       label: (
         <span>
-          <SafetyOutlined />
-          {t.tabs.security}
+          <HistoryOutlined />
+          {t.tabs.history}
         </span>
       ),
-      children: <SecurityPanel />
+      children: <HistoryPanel />
     }
   ];
 
