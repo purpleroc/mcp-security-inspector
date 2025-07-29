@@ -122,7 +122,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
       
       if (realtimeEnabled) {
         message.info({
-          content: `检测到${getRiskLevelText(result.riskLevel)}风险: ${result.targetName}`,
+          content: `${t.security.passive.detectionTime} ${getRiskLevelText(result.riskLevel)} ${t.security.passive.threatLevel}: ${result.targetName}`,
           duration: 3
         });
       }
@@ -157,8 +157,8 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
       setRules(allRules);
       setFilteredRules(allRules);
     } catch (error) {
-      console.error('加载检测规则失败:', error);
-      message.error('加载检测规则失败');
+      console.error(t.security.passive.rulesManagement.loadRulesFailed, error);
+      message.error(t.security.passive.rulesManagement.loadRulesFailed);
     }
   };
 
@@ -238,11 +238,11 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
     if (isEnabled) {
       mcpClient.disablePassiveDetection();
       setIsEnabled(false);
-      message.success('被动检测已禁用');
+      message.success(t.security.passive.disabled);
     } else {
       mcpClient.enablePassiveDetection(config);
       setIsEnabled(true);
-      message.success('被动检测已启用');
+      message.success(t.security.passive.enabled);
     }
   };
 
@@ -252,7 +252,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
     setResults([]);
     setFilteredResults([]);
     setStats({ total: 0, critical: 0, high: 0, medium: 0, low: 0, today: 0, thisHour: 0 });
-    message.success('检测记录已清空');
+    message.success(t.security.passive.clearRecords);
   };
 
   // 导出结果
@@ -267,7 +267,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
     linkElement.setAttribute('download', exportFileDefaultName);
     linkElement.click();
     
-    message.success('检测结果已导出');
+    message.success(t.security.passive.exportResults);
   };
 
   // 获取风险等级相关样式和文本
@@ -281,15 +281,13 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
     }
   };
 
-
-
   const getRiskLevelText = (level: SecurityRiskLevel): string => {
     switch (level) {
-      case 'critical': return '严重';
-      case 'high': return '高';
-      case 'medium': return '中';
-      case 'low': return '低';
-      default: return '未知';
+      case 'critical': return t.security.riskLevels.critical;
+      case 'high': return t.security.riskLevels.high;
+      case 'medium': return t.security.riskLevels.medium;
+      case 'low': return t.security.riskLevels.low;
+      default: return 'Unknown';
     }
   };
 
@@ -304,9 +302,9 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
 
   const getTypeText = (type: string) => {
     switch (type) {
-      case 'tool': return '工具调用';
-      case 'resource': return '资源访问';
-      case 'prompt': return '提示处理';
+      case 'tool': return t.security.passive.toolCall;
+      case 'resource': return t.security.passive.resourceAccess;
+      case 'prompt': return t.security.passive.promptProcessing;
       default: return type;
     }
   };
@@ -365,31 +363,31 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
 
       if (isEditingRule) {
         detectionEngine.updateRule(ruleData);
-        message.success('规则更新成功');
+        message.success(t.security.passive.rulesManagement.ruleUpdated);
       } else {
         detectionEngine.addCustomRule(ruleData);
-        message.success('规则创建成功');
+        message.success(t.security.passive.rulesManagement.ruleCreated);
       }
 
       await loadRules();
       setShowRuleEditor(false);
     } catch (error) {
-      message.error(`保存规则失败: ${(error as Error).message}`);
+      message.error(t.security.passive.rulesManagement.saveRuleFailed.replace('{error}', (error as Error).message));
     }
   };
 
   const handleDeleteRule = (ruleId: string) => {
     Modal.confirm({
-      title: '确认删除',
-      content: '确定要删除这个规则吗？此操作不可撤销。',
+      title: t.security.passive.rulesManagement.confirmDelete,
+      content: t.security.passive.rulesManagement.confirmDeleteDesc,
       onOk: async () => {
         try {
           const detectionEngine = DetectionEngine.getInstance();
           detectionEngine.removeRule(ruleId);
           await loadRules();
-          message.success('规则删除成功');
+          message.success(t.security.passive.rulesManagement.ruleDeleted);
         } catch (error) {
-          message.error(`删除规则失败: ${(error as Error).message}`);
+          message.error(t.security.passive.rulesManagement.deleteRuleFailed.replace('{error}', (error as Error).message));
         }
       }
     });
@@ -400,15 +398,15 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
       const detectionEngine = DetectionEngine.getInstance();
       detectionEngine.toggleRule(ruleId, enabled);
       await loadRules();
-      message.success(`规则已${enabled ? '启用' : '禁用'}`);
+      message.success(enabled ? t.security.passive.rulesManagement.ruleEnabled : t.security.passive.rulesManagement.ruleDisabled);
     } catch (error) {
-      message.error(`切换规则状态失败: ${(error as Error).message}`);
+      message.error(t.security.passive.rulesManagement.toggleRuleFailed.replace('{error}', (error as Error).message));
     }
   };
 
   const handleTestRule = async () => {
     if (!testInput.trim()) {
-      message.warning('请输入测试内容');
+      message.warning(t.security.passive.rulesManagement.testRuleWarning);
       return;
     }
 
@@ -436,33 +434,33 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
           const matches = regex.test(testInput);
           matchResult = {
             isMatched: matches,
-            message: matches ? '规则匹配了输入内容' : '规则未匹配输入内容'
+            message: matches ? t.security.passive.rulesManagement.testSuccess : t.security.passive.rulesManagement.testComplete
           };
           
           // 显示测试结果消息
           if (matches) {
-            message.success('测试成功：规则匹配了输入内容');
+            message.success(t.security.passive.rulesManagement.testSuccess);
           } else {
-            message.info('测试完成：规则未匹配输入内容');
+            message.info(t.security.passive.rulesManagement.testComplete);
           }
         } catch (error) {
           matchResult = {
             isMatched: false,
-            message: '正则表达式执行失败'
+            message: t.security.passive.rulesManagement.regexExecutionFailed
           };
-          message.error('正则表达式执行失败');
+          message.error(t.security.passive.rulesManagement.regexExecutionFailed);
         }
       } else if (!validation.valid) {
         // 规则无效时，不进行匹配测试
         matchResult = null;
-        message.error('规则语法错误，请检查后重试');
+        message.error(t.security.passive.rulesManagement.ruleSyntaxErrorDesc);
       }
 
       setTestResults(validation);
       setTestMatchResult(matchResult);
 
     } catch (error) {
-      message.error('测试规则失败');
+      message.error(t.security.passive.rulesManagement.testRuleFailed);
     }
   };
 
@@ -470,22 +468,22 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
     let selectedExportType = 'all';
     
     Modal.confirm({
-      title: '选择导出类型',
+      title: t.security.passive.rulesManagement.selectExportType,
       content: (
         <div>
-          <p>请选择要导出的规则类型：</p>
+          <p>{t.security.passive.rulesManagement.exportTypeDesc}</p>
           <Radio.Group 
             defaultValue="all" 
             onChange={(e) => { selectedExportType = e.target.value; }}
           >
             <div style={{ marginBottom: 8 }}>
-              <Radio value="all">所有规则（包括内置规则）</Radio>
+              <Radio value="all">{t.security.passive.rulesManagement.allRules}</Radio>
             </div>
             <div style={{ marginBottom: 8 }}>
-              <Radio value="custom">仅自定义规则</Radio>
+              <Radio value="custom">{t.security.passive.rulesManagement.customRulesOnly}</Radio>
             </div>
             <div style={{ marginBottom: 8 }}>
-              <Radio value="enabled">仅启用的规则</Radio>
+              <Radio value="enabled">{t.security.passive.rulesManagement.enabledRulesOnly}</Radio>
             </div>
           </Radio.Group>
         </div>
@@ -493,8 +491,8 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
       onOk: () => {
         performExport(selectedExportType);
       },
-      okText: '导出',
-      cancelText: '取消'
+      okText: t.security.passive.rulesManagement.export,
+      cancelText: t.security.passive.rulesManagement.cancel
     });
   };
 
@@ -523,7 +521,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
       }
 
       if (rulesToExport.length === 0) {
-        message.warning('没有符合条件的规则可导出');
+        message.warning(t.security.passive.rulesManagement.noRulesToExport);
         return;
       }
 
@@ -535,24 +533,24 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
       linkElement.setAttribute('download', fileName);
       linkElement.click();
       
-      message.success(`成功导出 ${rulesToExport.length} 条规则`);
+      message.success(t.security.passive.rulesManagement.exportSuccess.replace('{count}', rulesToExport.length.toString()));
     } catch (error) {
-      message.error('导出规则失败');
+      message.error(t.security.passive.rulesManagement.export);
     }
   };
 
   const handleImportRules = () => {
     Modal.confirm({
-      title: '导入检测规则',
+      title: t.security.passive.rulesManagement.importRulesDesc,
       width: 700,
       content: (
         <div>
           <Alert
             type="info"
-            message="规则格式说明"
+            message={t.security.passive.rulesManagement.importRulesFormat}
             description={
               <div>
-                <p>请选择包含规则数组的JSON文件。文件格式示例：</p>
+                <p>{t.security.passive.rulesManagement.importRulesExample}</p>
                 <div style={{ 
                   backgroundColor: '#f5f5f5', 
                   padding: '12px', 
@@ -566,37 +564,37 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
 {`[
   {
     "id": "custom_rule_001",
-    "name": "自定义密码检测",
-    "description": "检测密码泄漏模式",
+    "name": "Custom Password Detection",
+    "description": "Detect password leakage patterns",
     "category": "privacy",
     "enabled": true,
     "pattern": "(password|pwd)\\\\s*[:=]\\\\s*([^\\\\s]+)",
     "flags": "gi",
     "scope": "both",
     "riskLevel": "high",
-    "threatType": "密码泄漏",
+    "threatType": "Password Leakage",
     "captureGroups": ["password"],
     "maskSensitiveData": true,
     "maxMatches": 5,
     "isBuiltin": false,
     "tags": ["password", "credentials"],
-    "recommendation": "立即更换密码",
-    "remediation": "使用安全的密码存储方式",
+    "recommendation": "Change password immediately",
+    "remediation": "Use secure password storage methods",
     "references": ["https://owasp.org/..."]
   }
 ]`}
                 </div>
                 <div style={{ marginTop: 8, fontSize: '12px', color: '#666' }}>
-                  <p><strong>必填字段：</strong>id, name, description, pattern, category, riskLevel, threatType</p>
-                  <p><strong>分类：</strong>security(安全)、privacy(隐私)、compliance(合规)、data_quality(质量)、performance(性能)</p>
-                  <p><strong>风险等级：</strong>critical(严重)、high(高)、medium(中)、low(低)</p>
-                  <p><strong>检测范围：</strong>parameters(仅输入)、output(仅输出)、both(全部)</p>
+                  <p><strong>{t.security.passive.rulesManagement.requiredFields}</strong></p>
+                  <p><strong>{t.security.passive.rulesManagement.categories}</strong></p>
+                  <p><strong>{t.security.passive.rulesManagement.riskLevels}</strong></p>
+                  <p><strong>{t.security.passive.rulesManagement.detectionScopes}</strong></p>
                 </div>
               </div>
             }
             style={{ marginBottom: 16 }}
           />
-          <p>点击确定选择要导入的JSON文件：</p>
+          <p>{t.security.passive.rulesManagement.clickToSelectFile}</p>
         </div>
       ),
       onOk: () => {
@@ -618,33 +616,33 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
               try {
                 importedData = JSON.parse(content);
               } catch (parseError) {
-                throw new Error('JSON格式错误，请检查文件格式');
+                throw new Error(t.security.passive.rulesManagement.jsonFormatError);
               }
 
               // 验证是否为数组
               if (!Array.isArray(importedData)) {
-                throw new Error('文件必须包含规则数组，请检查文件格式');
+                throw new Error(t.security.passive.rulesManagement.mustBeArray);
               }
 
               if (importedData.length === 0) {
-                message.warning('文件中没有找到规则');
+                message.warning(t.security.passive.rulesManagement.noRulesFound);
                 return;
               }
 
               // 导入规则
               detectionEngine.importRules(content);
               await loadRules();
-              message.success(`成功导入 ${importedData.length} 条规则`);
+              message.success(t.security.passive.rulesManagement.importSuccess.replace('{count}', importedData.length.toString()));
             } catch (error) {
-              message.error(`导入规则失败: ${(error as Error).message}`);
+              message.error(t.security.passive.rulesManagement.importFailed.replace('{error}', (error as Error).message));
             }
           };
           reader.readAsText(file);
         };
         input.click();
       },
-      okText: '选择文件',
-      cancelText: '取消'
+      okText: t.security.passive.rulesManagement.selectFile,
+      cancelText: t.security.passive.rulesManagement.cancel
     });
   };
 
@@ -656,7 +654,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
         <Col span={6}>
           <Card>
             <Statistic
-              title="总检测次数"
+              title={t.security.passive.totalDetections}
               value={stats.total}
               prefix={<SecurityScanOutlined />}
               valueStyle={{ color: '#1890ff' }}
@@ -666,7 +664,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
         <Col span={6}>
           <Card>
             <Statistic
-              title="严重风险"
+              title={t.security.passive.criticalRisks}
               value={stats.critical}
               prefix={<ExclamationCircleOutlined />}
               valueStyle={{ color: '#ff4d4f' }}
@@ -676,7 +674,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
         <Col span={6}>
           <Card>
             <Statistic
-              title="今日检测"
+              title={t.security.passive.todayDetections}
               value={stats.today}
               prefix={<ClockCircleOutlined />}
               valueStyle={{ color: '#52c41a' }}
@@ -686,7 +684,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
         <Col span={6}>
           <Card>
             <Statistic
-              title="当前小时"
+              title={t.security.passive.currentHour}
               value={stats.thisHour}
               prefix={<ScanOutlined />}
               valueStyle={{ color: '#ffa940' }}
@@ -700,7 +698,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
         <Row gutter={16} align="middle">
           <Col flex={1}>
             <Search
-              placeholder="搜索目标名称或威胁描述..."
+              placeholder={t.security.passive.searchTargetNamePlaceholder}
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               style={{ width: '100%' }}
@@ -710,33 +708,33 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
           
           <Col>
             <Space>
-              <Text>风险等级:</Text>
+              <Text>{t.security.passive.riskLevelFilter}</Text>
               <Select
                 value={filterLevel}
                 onChange={setFilterLevel}
                 style={{ width: 120 }}
               >
-                <Option value="all">全部</Option>
-                <Option value="critical">严重</Option>
-                <Option value="high">高</Option>
-                <Option value="medium">中</Option>
-                <Option value="low">低</Option>
+                <Option value="all">{t.security.passive.allLevels}</Option>
+                <Option value="critical">{t.security.riskLevels.critical}</Option>
+                <Option value="high">{t.security.riskLevels.high}</Option>
+                <Option value="medium">{t.security.riskLevels.medium}</Option>
+                <Option value="low">{t.security.riskLevels.low}</Option>
               </Select>
             </Space>
           </Col>
           
           <Col>
             <Space>
-              <Text>调用类型:</Text>
+              <Text>{t.security.passive.callTypeFilter}</Text>
               <Select
                 value={filterType}
                 onChange={setFilterType}
                 style={{ width: 120 }}
               >
-                <Option value="all">全部</Option>
-                <Option value="tool">工具</Option>
-                <Option value="resource">资源</Option>
-                <Option value="prompt">提示</Option>
+                <Option value="all">{t.security.passive.allTypes}</Option>
+                <Option value="tool">{t.security.passive.toolCall}</Option>
+                <Option value="resource">{t.security.passive.resourceAccess}</Option>
+                <Option value="prompt">{t.security.passive.promptProcessing}</Option>
               </Select>
             </Space>
           </Col>
@@ -749,10 +747,9 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
           image={<SecurityScanOutlined style={{ fontSize: 64, color: '#d9d9d9' }} />}
           description={
             <div>
-              <Title level={4}>被动检测未启用</Title>
+              <Title level={4}>{t.security.passive.notEnabled}</Title>
               <Paragraph>
-                启用被动检测后，系统将自动监控您的MCP操作并进行安全分析，
-                包括工具调用、资源访问和提示处理的安全检测。
+                {t.security.passive.notEnabledDesc}
               </Paragraph>
             </div>
           }
@@ -762,11 +759,9 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
           image={<ScanOutlined style={{ fontSize: 64, color: '#1890ff' }} />}
           description={
             <div>
-              <Title level={4}>等待检测结果</Title>
+              <Title level={4}>{t.security.passive.waitingResults}</Title>
               <Paragraph>
-                被动检测已启用，正在监控您的MCP操作...
-                <br />
-                当您使用工具、访问资源或处理提示时，检测结果将在此显示。
+                {t.security.passive.waitingResultsDesc}
               </Paragraph>
             </div>
           }
@@ -775,12 +770,12 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
         <div>
           <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text>
-              显示 {filteredResults.length} / {results.length} 条检测记录
-              {searchText && ` (搜索: "${searchText}")`}
+              {t.security.passive.showRecords.replace('{count}', filteredResults.length.toString()).replace('{total}', results.length.toString())}
+              {searchText && t.security.passive.searchResults.replace('{search}', searchText)}
             </Text>
             
             <Space>
-              <Tooltip title={realtimeEnabled ? '禁用实时通知' : '启用实时通知'}>
+              <Tooltip title={realtimeEnabled ? t.security.passive.disableRealtimeNotification : t.security.passive.enableRealtimeNotification}>
                 <Button
                   type="text"
                   icon={realtimeEnabled ? <BugOutlined /> : <BugOutlined style={{ opacity: 0.5 }} />}
@@ -788,7 +783,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                 />
               </Tooltip>
               
-              <Tooltip title="刷新">
+              <Tooltip title={t.security.passive.refresh}>
                 <Button
                   type="text"
                   icon={<ReloadOutlined />}
@@ -811,7 +806,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
               pageSize: 20,
               showSizeChanger: true,
               showQuickJumper: true,
-              showTotal: (total) => `共 ${total} 条记录`,
+              showTotal: (total) => `Total ${total} records`,
             }}
             scroll={{ x: 800 }}
           />
@@ -824,14 +819,14 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
   const renderRulesManagement = () => {
     const ruleColumns = [
       {
-        title: '规则名称',
+        title: t.security.passive.rulesManagement.ruleName,
         dataIndex: 'name',
         key: 'name',
         width: 200,
         render: (name: string, record: DetectionRule) => (
           <div>
             <Text strong style={{ display: 'flex', alignItems: 'center' }}>
-              {record.isBuiltin && <Tag color="blue" style={{ marginRight: 4, fontSize: '11px' }}>内置</Tag>}
+              {record.isBuiltin && <Tag color="blue" style={{ marginRight: 4, fontSize: '11px' }}>{t.security.passive.rulesManagement.builtin}</Tag>}
               {name}
             </Text>
             <Text type="secondary" style={{ fontSize: '12px' }}>{record.description}</Text>
@@ -839,25 +834,25 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
         ),
       },
       {
-        title: '分类',
+        title: t.security.passive.rulesManagement.category,
         dataIndex: 'category',
         key: 'category',
         width: 100,
         render: (category: DetectionRuleCategory) => {
           const categoryMap = {
-            security: { color: '#ff4d4f', text: '安全' },
-            privacy: { color: '#fa8c16', text: '隐私' },
-            compliance: { color: '#1890ff', text: '合规' },
-            data_quality: { color: '#52c41a', text: '质量' },
-            performance: { color: '#722ed1', text: '性能' },
-            custom: { color: '#8c8c8c', text: '自定义' }
+            security: { color: '#ff4d4f', text: t.security.passive.rulesManagement.security },
+            privacy: { color: '#fa8c16', text: t.security.passive.rulesManagement.privacy },
+            compliance: { color: '#1890ff', text: t.security.passive.rulesManagement.compliance },
+            data_quality: { color: '#52c41a', text: t.security.passive.rulesManagement.dataQuality },
+            performance: { color: '#722ed1', text: t.security.passive.rulesManagement.performance },
+            custom: { color: '#8c8c8c', text: t.security.passive.rulesManagement.custom }
           };
           const config = categoryMap[category] || categoryMap.custom;
           return <Tag color={config.color}>{config.text}</Tag>;
         },
       },
       {
-        title: '风险等级',
+        title: t.security.passive.rulesManagement.riskLevel,
         dataIndex: 'riskLevel',
         key: 'riskLevel',
         width: 100,
@@ -868,21 +863,21 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
         ),
       },
       {
-        title: '作用域',
+        title: t.security.passive.rulesManagement.scope,
         dataIndex: 'scope',
         key: 'scope',
         width: 80,
         render: (scope: DetectionScope) => {
           const scopeMap = {
-            parameters: '输入',
-            output: '输出',
-            both: '全部'
+            parameters: t.security.passive.rulesManagement.input,
+            output: t.security.passive.rulesManagement.output,
+            both: t.security.passive.rulesManagement.both
           };
           return <Tag>{scopeMap[scope]}</Tag>;
         },
       },
       {
-        title: '状态',
+        title: t.security.passive.rulesManagement.status,
         dataIndex: 'enabled',
         key: 'enabled',
         width: 80,
@@ -895,12 +890,12 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
         ),
       },
       {
-        title: '操作',
+        title: t.security.passive.rulesManagement.actions,
         key: 'actions',
         width: 120,
         render: (_: any, record: DetectionRule) => (
           <Space size="small">
-            <Tooltip title="编辑">
+            <Tooltip title={t.security.passive.rulesManagement.edit}>
               <Button
                 type="text"
                 size="small"
@@ -909,7 +904,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
               />
             </Tooltip>
             {!record.isBuiltin && (
-              <Tooltip title="删除">
+              <Tooltip title={t.security.passive.rulesManagement.delete}>
                 <Button
                   type="text"
                   size="small"
@@ -933,7 +928,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
               <Row gutter={16} align="middle">
                 <Col flex={1}>
                   <Search
-                    placeholder="搜索规则名称、描述或标签..."
+                    placeholder={t.security.passive.rulesManagement.searchRulesPlaceholder}
                     value={ruleSearchText}
                     onChange={(e) => setRuleSearchText(e.target.value)}
                     style={{ width: '100%' }}
@@ -946,13 +941,13 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                     onChange={setRuleFilterCategory}
                     style={{ width: 120 }}
                   >
-                    <Option value="all">全部分类</Option>
-                    <Option value="security">安全</Option>
-                    <Option value="privacy">隐私</Option>
-                    <Option value="compliance">合规</Option>
-                    <Option value="data_quality">质量</Option>
-                    <Option value="performance">性能</Option>
-                    <Option value="custom">自定义</Option>
+                    <Option value="all">{t.security.passive.rulesManagement.allCategories}</Option>
+                    <Option value="security">{t.security.passive.rulesManagement.security}</Option>
+                    <Option value="privacy">{t.security.passive.rulesManagement.privacy}</Option>
+                    <Option value="compliance">{t.security.passive.rulesManagement.compliance}</Option>
+                    <Option value="data_quality">{t.security.passive.rulesManagement.dataQuality}</Option>
+                    <Option value="performance">{t.security.passive.rulesManagement.performance}</Option>
+                    <Option value="custom">{t.security.passive.rulesManagement.custom}</Option>
                   </Select>
                 </Col>
               </Row>
@@ -965,19 +960,19 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                   icon={<SettingOutlined />}
                   onClick={handleCreateRule}
                 >
-                  新建规则
+                  {t.security.passive.rulesManagement.newRule}
                 </Button>
                 <Button 
                   icon={<DownloadOutlined />}
                   onClick={handleExportRules}
                 >
-                  导出规则
+                  {t.security.passive.rulesManagement.exportRules}
                 </Button>
                 <Button 
                   icon={<DownloadOutlined />}
                   onClick={handleImportRules}
                 >
-                  导入规则
+                  {t.security.passive.rulesManagement.importRules}
                 </Button>
               </Space>
             </Col>
@@ -989,7 +984,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
           <Col span={6}>
             <Card>
               <Statistic
-                title="总规则数"
+                title={t.security.passive.rulesManagement.totalRules}
                 value={rules.length}
                 prefix={<SettingOutlined />}
                 valueStyle={{ color: '#1890ff' }}
@@ -999,7 +994,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
           <Col span={6}>
             <Card>
               <Statistic
-                title="启用规则"
+                title={t.security.passive.rulesManagement.enabledRules}
                 value={rules.filter(r => r.enabled).length}
                 prefix={<CheckCircleOutlined />}
                 valueStyle={{ color: '#52c41a' }}
@@ -1009,7 +1004,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
           <Col span={6}>
             <Card>
               <Statistic
-                title="内置规则"
+                title={t.security.passive.rulesManagement.builtinRules}
                 value={rules.filter(r => r.isBuiltin).length}
                 prefix={<SecurityScanOutlined />}
                 valueStyle={{ color: '#722ed1' }}
@@ -1019,7 +1014,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
           <Col span={6}>
             <Card>
               <Statistic
-                title="自定义规则"
+                title={t.security.passive.rulesManagement.customRules}
                 value={rules.filter(r => !r.isBuiltin).length}
                 prefix={<BugOutlined />}
                 valueStyle={{ color: '#fa8c16' }}
@@ -1032,8 +1027,8 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
         <Card>
           <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text>
-              显示 {filteredRules.length} / {rules.length} 条规则
-              {ruleSearchText && ` (搜索: "${ruleSearchText}")`}
+              {t.security.passive.rulesManagement.showRules.replace('{count}', filteredRules.length.toString()).replace('{total}', rules.length.toString())}
+              {ruleSearchText && t.security.passive.searchResults.replace('{search}', ruleSearchText)}
             </Text>
           </div>
           
@@ -1046,7 +1041,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
               pageSize: 20,
               showSizeChanger: true,
               showQuickJumper: true,
-              showTotal: (total) => `共 ${total} 条规则`,
+              showTotal: (total) => `Total ${total} rules`,
             }}
             scroll={{ x: 800 }}
             expandable={{
@@ -1071,7 +1066,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                   <Row gutter={16}>
                     <Col span={12}>
                       <div style={{ marginBottom: 12 }}>
-                        <Text strong>正则表达式:</Text>
+                        <Text strong>{t.security.passive.rulesManagement.regularExpression}:</Text>
                         <div style={{ 
                           fontFamily: 'monospace', 
                           backgroundColor: '#f5f5f5', 
@@ -1084,12 +1079,12 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                         </div>
                       </div>
                       <div style={{ marginBottom: 12 }}>
-                        <Text strong>威胁类型:</Text>
+                        <Text strong>{t.security.passive.rulesManagement.threatType}:</Text>
                         <div>{record.threatType}</div>
                       </div>
                       {record.tags && record.tags.length > 0 && (
                         <div>
-                          <Text strong>标签:</Text>
+                          <Text strong>{t.security.passive.rulesManagement.tags}:</Text>
                           <div style={{ marginTop: '4px' }}>
                             {record.tags.map(tag => (
                               <Tag key={tag} style={{ fontSize: '11px' }}>{tag}</Tag>
@@ -1101,18 +1096,18 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                     <Col span={12}>
                       {record.recommendation && (
                         <div style={{ marginBottom: 12 }}>
-                          <Text strong>安全建议:</Text>
+                          <Text strong>{t.security.passive.rulesManagement.securityRecommendation}</Text>
                           <div style={{ fontSize: '12px', color: '#666' }}>{record.recommendation}</div>
                         </div>
                       )}
                       {record.remediation && (
                         <div style={{ marginBottom: 12 }}>
-                          <Text strong>修复建议:</Text>
+                          <Text strong>{t.security.passive.rulesManagement.remediationSuggestion}</Text>
                           <div style={{ fontSize: '12px', color: '#666' }}>{record.remediation}</div>
                         </div>
                       )}
                       <div>
-                        <Text strong>更新时间:</Text>
+                        <Text strong>{t.security.passive.rulesManagement.updateTime}</Text>
                         <div style={{ fontSize: '12px', color: '#666' }}>
                           {new Date(record.updatedAt).toLocaleString()}
                         </div>
@@ -1127,13 +1122,13 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
 
       {/* 规则编辑器Modal */}
       <Modal
-        title={isEditingRule ? '编辑规则' : '新建规则'}
+        title={isEditingRule ? t.security.passive.rulesManagement.edit : t.security.passive.rulesManagement.newRule}
         open={showRuleEditor}
         onCancel={() => setShowRuleEditor(false)}
         onOk={handleSaveRule}
         width={800}
-        okText="保存"
-        cancelText="取消"
+        okText={t.common.save}
+        cancelText={t.common.cancel}
       >
         <Form
           form={ruleForm}
@@ -1151,50 +1146,50 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item
-                label="规则名称"
+                label={t.security.passive.rulesManagement.ruleName}
                 name="name"
-                rules={[{ required: true, message: '请输入规则名称' }]}
+                rules={[{ required: true, message: t.security.passive.rulesManagement.ruleName }]}
               >
-                <Input placeholder="请输入规则名称" />
+                <Input placeholder={t.security.passive.rulesManagement.ruleName} />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item
-                label="威胁类型"
+                label={t.security.passive.rulesManagement.threatType}
                 name="threatType"
-                rules={[{ required: true, message: '请输入威胁类型' }]}
+                rules={[{ required: true, message: t.security.passive.rulesManagement.threatType }]}
               >
-                <Input placeholder="如：命令注入、XSS攻击等" />
+                <Input placeholder={t.security.passive.rulesManagement.threatTypePlaceholder} />
               </Form.Item>
             </Col>
           </Row>
 
           <Form.Item
-            label="规则描述"
+            label={t.security.passive.rulesManagement.ruleDescription}
             name="description"
-            rules={[{ required: true, message: '请输入规则描述' }]}
+            rules={[{ required: true, message: t.security.passive.rulesManagement.ruleDescription }]}
           >
             <TextArea 
               rows={2} 
-              placeholder="请简要描述此规则的检测目标和作用" 
+              placeholder={t.security.passive.rulesManagement.ruleDescription} 
             />
           </Form.Item>
 
           <Form.Item
             label={
               <Space>
-                正则表达式
-                <Tooltip title="用于匹配威胁模式的正则表达式，支持JavaScript正则语法">
+                {t.security.passive.rulesManagement.regularExpression}
+                <Tooltip title={t.security.passive.rulesManagement.regularExpressionTooltip}>
                   <QuestionCircleOutlined />
                 </Tooltip>
               </Space>
             }
             name="pattern"
-            rules={[{ required: true, message: '请输入正则表达式' }]}
+            rules={[{ required: true, message: t.security.passive.rulesManagement.regularExpression }]}
           >
             <TextArea 
               rows={3} 
-              placeholder="请输入正则表达式模式，如：(password|pwd)\\s*[:=]\\s*([^\\s]+)" 
+              placeholder={t.security.passive.rulesManagement.regularExpressionPlaceholder} 
               style={{ fontFamily: 'monospace' }}
             />
           </Form.Item>
@@ -1202,41 +1197,41 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
           <Row gutter={16}>
             <Col span={8}>
               <Form.Item
-                label="分类"
+                label={t.security.passive.rulesManagement.category}
                 name="category"
               >
                 <Select>
-                  <Option value="security">安全威胁</Option>
-                  <Option value="privacy">隐私泄漏</Option>
-                  <Option value="compliance">合规检查</Option>
-                  <Option value="data_quality">数据质量</Option>
-                  <Option value="performance">性能问题</Option>
-                  <Option value="custom">自定义</Option>
+                  <Option value="security">{t.security.passive.rulesManagement.security}</Option>
+                  <Option value="privacy">{t.security.passive.rulesManagement.privacy}</Option>
+                  <Option value="compliance">{t.security.passive.rulesManagement.compliance}</Option>
+                  <Option value="data_quality">{t.security.passive.rulesManagement.dataQuality}</Option>
+                  <Option value="performance">{t.security.passive.rulesManagement.performance}</Option>
+                  <Option value="custom">{t.security.passive.rulesManagement.custom}</Option>
                 </Select>
               </Form.Item>
             </Col>
             <Col span={8}>
               <Form.Item
-                label="风险等级"
+                label={t.security.passive.rulesManagement.riskLevel}
                 name="riskLevel"
               >
                 <Select>
-                  <Option value="critical">严重</Option>
-                  <Option value="high">高</Option>
-                  <Option value="medium">中</Option>
-                  <Option value="low">低</Option>
+                  <Option value="critical">{t.security.riskLevels.critical}</Option>
+                  <Option value="high">{t.security.riskLevels.high}</Option>
+                  <Option value="medium">{t.security.riskLevels.medium}</Option>
+                  <Option value="low">{t.security.riskLevels.low}</Option>
                 </Select>
               </Form.Item>
             </Col>
             <Col span={8}>
               <Form.Item
-                label="检测范围"
+                label={t.security.passive.rulesManagement.scope}
                 name="scope"
               >
                 <Select>
-                  <Option value="parameters">仅输入参数</Option>
-                  <Option value="output">仅输出结果</Option>
-                  <Option value="both">输入和输出</Option>
+                  <Option value="parameters">{t.security.passive.rulesManagement.input}</Option>
+                  <Option value="output">{t.security.passive.rulesManagement.output}</Option>
+                  <Option value="both">{t.security.passive.rulesManagement.both}</Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -1245,15 +1240,15 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
           <Row gutter={16}>
             <Col span={8}>
               <Form.Item
-                label="正则标志"
+                label={t.security.passive.rulesManagement.flags}
                 name="flags"
               >
-                <Input placeholder="如：gi (全局、忽略大小写)" />
+                <Input placeholder={t.security.passive.rulesManagement.flagsPlaceholder} />
               </Form.Item>
             </Col>
             <Col span={8}>
               <Form.Item
-                label="最大匹配数"
+                label={t.security.passive.rulesManagement.maxMatches}
                 name="maxMatches"
               >
                 <Input type="number" min={1} max={100} />
@@ -1261,7 +1256,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
             </Col>
             <Col span={8}>
               <Form.Item name="enabled" valuePropName="checked">
-                <Checkbox>启用规则</Checkbox>
+                <Checkbox>{t.security.passive.rulesManagement.enableRule}</Checkbox>
               </Form.Item>
             </Col>
           </Row>
@@ -1269,70 +1264,70 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="maskSensitiveData" valuePropName="checked">
-                <Checkbox>遮蔽敏感数据</Checkbox>
+                <Checkbox>{t.security.passive.rulesManagement.maskSensitiveData}</Checkbox>
               </Form.Item>
             </Col>
           </Row>
 
           <Form.Item
-            label="捕获组名称"
+            label={t.security.passive.rulesManagement.captureGroups}
             name="captureGroups"
-            extra="如果正则表达式包含捕获组，请用逗号分隔各组的名称"
+            extra={t.security.passive.rulesManagement.captureGroupsExtra}
           >
-            <Input placeholder="如：password,username" />
+            <Input placeholder={t.security.passive.rulesManagement.captureGroupsPlaceholder} />
           </Form.Item>
 
           <Form.Item
-            label="标签"
+            label={t.security.passive.rulesManagement.tags}
             name="tags"
-            extra="用逗号分隔多个标签，便于规则分类和搜索"
+            extra={t.security.passive.rulesManagement.tagsExtra}
           >
-            <Input placeholder="如：injection,sql,database" />
+            <Input placeholder={t.security.passive.rulesManagement.tagsPlaceholder} />
           </Form.Item>
 
           <Form.Item
-            label="安全建议"
+            label={t.security.passive.rulesManagement.securityAdvice}
             name="recommendation"
           >
             <TextArea 
               rows={2} 
-              placeholder="当检测到威胁时给用户的安全建议" 
+              placeholder={t.security.passive.rulesManagement.securityAdvicePlaceholder} 
             />
           </Form.Item>
 
           <Form.Item
-            label="修复建议"
+            label={t.security.passive.rulesManagement.remediationAdvice}
             name="remediation"
           >
             <TextArea 
               rows={2} 
-              placeholder="具体的修复措施和最佳实践" 
+              placeholder={t.security.passive.rulesManagement.remediationAdvicePlaceholder} 
             />
           </Form.Item>
 
           <Form.Item
-            label="参考资料"
+            label={t.security.passive.rulesManagement.references}
             name="references"
-            extra="每行一个URL，提供相关的安全知识和资料链接"
+            extra={t.security.passive.rulesManagement.referencesExtra}
           >
             <TextArea 
               rows={2} 
-              placeholder="https://owasp.org/..." 
+              placeholder={t.security.passive.rulesManagement.referencesPlaceholder} 
             />
           </Form.Item>
 
           {/* 规则测试区域 */}
-          <Divider>规则测试</Divider>
+          <Divider>{t.security.passive.rulesManagement.ruleTest}</Divider>
           
           <Form.Item
-            label="测试输入"
-            extra="输入一些文本来测试你的正则表达式是否能正确匹配"
+            label={t.security.passive.rulesManagement.testInput}
+            extra={t.security.passive.rulesManagement.testInputExtra}
           >
             <TextArea
               rows={3}
               value={testInput}
               onChange={(e) => setTestInput(e.target.value)}
-              placeholder="输入测试内容..."
+              placeholder={t.security.passive.rulesManagement.testInputPlaceholder}
             />
           </Form.Item>
 
@@ -1342,22 +1337,22 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                 icon={<BugOutlined />} 
                 onClick={handleTestRule}
               >
-                测试规则
+                {t.security.passive.rulesManagement.testRule}
               </Button>
               
               {testMatchResult && (
                 <div>
                   {testMatchResult.isMatched ? (
-                    <Tag color="green" icon={<CheckCircleOutlined />}>已匹配</Tag>
+                    <Tag color="green" icon={<CheckCircleOutlined />}>{t.security.passive.rulesManagement.matched}</Tag>
                   ) : (
-                    <Tag color="red" icon={<ExclamationCircleOutlined />}>未匹配</Tag>
+                    <Tag color="red" icon={<ExclamationCircleOutlined />}>{t.security.passive.rulesManagement.notMatched}</Tag>
                   )}
                 </div>
               )}
               
               {testResults && !testResults.valid && (
                 <div>
-                  <Tag color="orange" icon={<WarningOutlined />}>规则语法错误</Tag>
+                  <Tag color="orange" icon={<WarningOutlined />}>{t.security.passive.rulesManagement.ruleSyntaxError}</Tag>
                 </div>
               )}
             </Space>
@@ -1366,7 +1361,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
           {testResults && !testResults.valid && (
             <Alert
               type="error"
-              message="规则验证失败"
+              message={t.security.passive.rulesManagement.ruleValidationFailed}
               description={
                 <ul style={{ margin: 0, paddingLeft: 20 }}>
                   {testResults.errors.map((error, index) => (
@@ -1381,7 +1376,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
           {testResults && testResults.warnings && testResults.warnings.length > 0 && (
             <Alert
               type="warning"
-              message="注意事项"
+              message={t.security.passive.rulesManagement.notes}
               description={
                 <ul style={{ margin: 0, paddingLeft: 20 }}>
                   {testResults.warnings.map((warning, index) => (
@@ -1397,7 +1392,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
 
       {/* 详情抽屉 */}
       <Drawer
-        title="检测详情"
+        title={t.security.passive.details}
         placement="right"
         onClose={() => setShowDetail(false)}
         open={showDetail}
@@ -1411,7 +1406,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                 dot={<ClockCircleOutlined />}
               >
                 <div>
-                  <Text strong>检测时间</Text>
+                  <Text strong>{t.security.passive.detectionTime}</Text>
                   <div>{new Date(selectedResult.timestamp).toLocaleString()}</div>
                 </div>
               </Timeline.Item>
@@ -1421,7 +1416,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                 dot={getTypeIcon(selectedResult.type)}
               >
                 <div>
-                  <Text strong>调用类型</Text>
+                  <Text strong>{t.security.passive.callType}</Text>
                   <div>{getTypeText(selectedResult.type)}</div>
                 </div>
               </Timeline.Item>
@@ -1431,7 +1426,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                 dot={<AlertOutlined />}
               >
                 <div>
-                  <Text strong>目标名称</Text>
+                  <Text strong>{t.security.passive.targetName}</Text>
                   <div>{selectedResult.targetName}</div>
                 </div>
               </Timeline.Item>
@@ -1441,7 +1436,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                 dot={<WarningOutlined />}
               >
                 <div>
-                  <Text strong>风险等级</Text>
+                  <Text strong>{t.security.riskLevel}</Text>
                   <div>
                     <Tag color={getRiskLevelColor(selectedResult.riskLevel)}>
                       {getRiskLevelText(selectedResult.riskLevel)}
@@ -1451,7 +1446,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
               </Timeline.Item>
             </Timeline>
 
-            <Divider>威胁详情</Divider>
+            <Divider>{t.security.passive.threatDetails}</Divider>
             
             {selectedResult.threats.map((threat, index) => (
               <Card 
@@ -1464,7 +1459,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                 
                 {threat.evidence && (
                   <div>
-                    <Text strong>证据:</Text>
+                    <Text strong>{t.security.passive.evidence}</Text>
                     <div style={{ 
                       backgroundColor: '#f5f5f5', 
                       padding: '8px', 
@@ -1479,7 +1474,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                 )}
                 
                 <div style={{ marginTop: 12 }}>
-                  <Text strong>威胁等级:</Text>
+                  <Text strong>{t.security.passive.threatLevel}</Text>
                   <Tag color={getRiskLevelColor(threat.severity)} style={{ marginLeft: 8 }}>
                     {getRiskLevelText(threat.severity)}
                   </Tag>
@@ -1489,7 +1484,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
 
             {selectedResult.sensitiveDataLeaks.length > 0 && (
               <>
-                <Divider>敏感数据泄漏</Divider>
+                <Divider>{t.security.passive.sensitiveDataLeaks}</Divider>
                 {selectedResult.sensitiveDataLeaks.map((leak, index) => (
                   <Alert
                     key={index}
@@ -1497,7 +1492,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                     message={leak.type}
                     description={
                       <div>
-                        <div>内容: {leak.content}</div>
+                        <div>{t.security.passive.content} {leak.content}</div>
                         <Tag color={getRiskLevelColor(leak.severity)} style={{ marginTop: 4 }}>
                           {getRiskLevelText(leak.severity)}
                         </Tag>
@@ -1518,7 +1513,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
   // 表格列定义
   const columns = [
     {
-      title: '时间',
+      title: t.security.passive.detectionTime,
       dataIndex: 'timestamp',
       key: 'timestamp',
       width: 120,
@@ -1532,7 +1527,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
       ),
     },
     {
-      title: '类型',
+      title: t.security.passive.callType,
       dataIndex: 'type',
       key: 'type',
       width: 100,
@@ -1544,7 +1539,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
       ),
     },
     {
-      title: '目标',
+      title: t.security.passive.targetName,
       dataIndex: 'targetName',
       key: 'targetName',
       ellipsis: true,
@@ -1555,7 +1550,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
       ),
     },
     {
-      title: '风险等级',
+      title: t.security.riskLevel,
       dataIndex: 'riskLevel',
       key: 'riskLevel',
       width: 100,
@@ -1566,7 +1561,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
       ),
     },
     {
-      title: '威胁数量',
+      title: t.security.passive.threatCount,
       dataIndex: 'threats',
       key: 'threatCount',
       width: 80,
@@ -1575,7 +1570,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
       ),
     },
     {
-      title: '敏感数据',
+      title: t.security.passive.sensitiveData,
       dataIndex: 'sensitiveDataLeaks',
       key: 'sensitiveCount',
       width: 80,
@@ -1584,7 +1579,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
       ),
     },
     {
-      title: '操作',
+      title: t.security.passive.rulesManagement.actions,
       key: 'actions',
       width: 80,
       render: (_: any, record: PassiveDetectionResult) => (
@@ -1596,7 +1591,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
             setShowDetail(true);
           }}
         >
-          详情
+          {t.security.passive.details}
         </Button>
       ),
     },
@@ -1612,17 +1607,17 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
               <div>
                 <Title level={4} style={{ margin: 0, display: 'flex', alignItems: 'center' }}>
                   <ScanOutlined style={{ marginRight: 8, color: '#1890ff' }} />
-                  被动安全监控
+                  {t.security.passive.title}
                 </Title>
-                <Text type="secondary">实时监控MCP调用，自动检测安全风险</Text>
+                <Text type="secondary">{t.security.passive.subtitle}</Text>
               </div>
               
               <div>
                 <Switch
                   checked={isEnabled}
                   onChange={handleToggleDetection}
-                  checkedChildren={<><ScanOutlined style={{ marginRight: 4 }} />监控中</>}
-                  unCheckedChildren="已停止"
+                  checkedChildren={<><ScanOutlined style={{ marginRight: 4 }} />{t.security.passive.monitoring}</>}
+                  unCheckedChildren={t.security.passive.stopped}
                 />
               </div>
             </Space>
@@ -1636,7 +1631,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                     icon={<DownloadOutlined />} 
                     onClick={handleExportResults}
                   >
-                    导出结果
+                    {t.security.passive.exportResults}
                   </Button>
                   
                   <Button 
@@ -1645,7 +1640,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                     type="text"
                     danger
                   >
-                    清空记录
+                    {t.security.passive.clearRecords}
                   </Button>
                 </>
               )}
@@ -1665,7 +1660,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
               label: (
                 <Space>
                   <ScanOutlined />
-                  实时监控
+                  {t.security.passive.realtimeMonitoring}
                   {results.length > 0 && (
                     <Badge count={results.length} style={{ backgroundColor: '#1890ff' }} />
                   )}
@@ -1678,7 +1673,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
               label: (
                 <Space>
                   <SettingOutlined />
-                  检测规则
+                  {t.security.passive.detectionRules}
                   <Badge count={rules.filter(r => r.enabled).length} style={{ backgroundColor: '#52c41a' }} />
                 </Space>
               ),

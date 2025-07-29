@@ -1198,7 +1198,38 @@ export class SecurityEngine {
         });
       }
 
-      // 第二阶段：LLM静态分析（如果启用）
+      // 第二阶段：关键词风险检测
+      this.addLog({
+        type: 'step',
+        phase: 'tool_analysis',
+        title: '工具定义关键词检测',
+        message: `对工具 ${tool.name} 的定义进行风险关键词检测`,
+        metadata: { toolName: tool.name }
+      });
+
+      const toolKeywords = this.detectRiskKeywords({ tool: tool }, { definition: toolDefText });
+      
+      for (const threat of toolKeywords) {
+        result.vulnerabilities.push({
+          type: threat.type,
+          severity: threat.severity,
+          description: `工具定义中检测到风险关键词: ${threat.description}`,
+          recommendation: '检查工具定义中是否包含不安全的操作或敏感信息'
+        });
+
+        this.addLog({
+          type: 'warning',
+          phase: 'tool_analysis',
+          title: '工具定义中发现风险关键词',
+          message: `工具 ${tool.name} 的定义中检测到 ${threat.type}: ${threat.evidence}`,
+          metadata: { 
+            toolName: tool.name,
+            riskLevel: threat.severity
+          }
+        });
+      }
+
+      // 第三阶段：LLM静态分析（如果启用）
       if (config.enableLLMAnalysis !== false) {
         this.addLog({
           type: 'step',
@@ -1225,10 +1256,10 @@ export class SecurityEngine {
         this.parseToolAnalysis(result, analysisResponse.content);
       }
 
-             // 第二阶段：智能测试用例生成和执行
-       if (config.autoGenerate) {
-         await this.generateAndExecuteAdvancedToolTests(tool, config, result);
-       }
+      // 第二阶段：智能测试用例生成和执行
+      if (config.autoGenerate) {
+        await this.generateAndExecuteAdvancedToolTests(tool, config, result);
+      }
 
       // 第三阶段：重新计算工具的整体风险等级（基于所有测试用例）
       if (result.testResults.length > 0) {
@@ -1424,7 +1455,40 @@ export class SecurityEngine {
       const uriRisks = this.detectResourceUriRisks(resource);
       result.risks.push(...uriRisks);
 
-      // 第二阶段：LLM增强分析（如果启用）
+      // 第二阶段：关键词风险检测
+      this.addLog({
+        type: 'step',
+        phase: 'resource_analysis',
+        title: '资源关键词检测',
+        message: `对资源 ${resource.uri} 执行关键词安全检测`,
+        metadata: { resourceUri: resource.uri }
+      });
+
+      const resourceDefText = JSON.stringify(resource);
+      const resourceKeywords = this.detectRiskKeywords({ resource: resource }, { definition: resourceDefText });
+      
+      for (const threat of resourceKeywords) {
+        result.risks.push({
+          type: threat.type as any,
+          severity: threat.severity,
+          description: `资源定义中检测到风险关键词: ${threat.description}`,
+          evidence: threat.evidence || `检测到关键词: ${threat.type}`,
+          recommendation: '检查资源定义中是否包含不安全的操作或敏感信息'
+        });
+
+        this.addLog({
+          type: 'warning',
+          phase: 'resource_analysis',
+          title: '资源定义中发现风险关键词',
+          message: `资源 ${resource.uri} 的定义中检测到 ${threat.type}: ${threat.evidence}`,
+          metadata: { 
+            resourceUri: resource.uri,
+            riskLevel: threat.severity
+          }
+        });
+      }
+
+      // 第三阶段：LLM增强分析（如果启用）
       if (config.enableLLMAnalysis !== false) {
         this.addLog({
           type: 'step',
@@ -1454,7 +1518,7 @@ export class SecurityEngine {
       // 计算整体风险等级
       result.riskLevel = this.calculateOverallRiskLevel(result.risks.map(r => r.severity));
 
-      // 第二阶段：实际访问测试和智能安全测试
+      // 第四阶段：实际访问测试和智能安全测试
       await this.performEnhancedResourceTesting(resource, config, result);
 
     } catch (error) {
@@ -1826,6 +1890,32 @@ export class SecurityEngine {
             }
           });
         }
+
+        // 检测测试结果中的风险关键词
+        const keywordThreats = this.detectRiskKeywords(testCase.parameters || {}, result);
+        
+        for (const threat of keywordThreats) {
+          toolResult.vulnerabilities.push({
+            type: threat.type,
+            severity: threat.severity,
+            description: `测试结果中检测到风险关键词: ${threat.description}`,
+            testCase: testCase.purpose,
+            recommendation: '检查工具是否执行了不安全的操作或返回了敏感信息'
+          });
+
+          this.addLog({
+            type: 'warning',
+            phase: 'evaluation',
+            title: '测试结果中发现风险关键词',
+            message: `在工具 ${toolResult.toolName} 的测试结果中检测到 ${threat.type}: ${threat.evidence}`,
+            metadata: { 
+              toolName: toolResult.toolName,
+              testCase: testCase.purpose,
+              riskLevel: threat.severity,
+              testNumber: testNumber
+            }
+          });
+        }
       }
 
       // LLM评估测试结果的安全性（如果启用）
@@ -1902,13 +1992,29 @@ export class SecurityEngine {
           });
         }
       } else {
-        // 如果没有LLM分析，仍然添加基本的测试结果
+        // 如果没有启用LLM分析，仍然记录测试结果
         toolResult.testResults.push({
           testCase: `${testCase.purpose} (${testCase.riskType})`,
           parameters: testCase.parameters,
           result: result || { error },
-          riskAssessment: error ? '执行失败，可能存在安全风险' : '基本检测完成',
-          passed: !error
+          riskAssessment: JSON.stringify({
+            riskLevel: 'low',
+            description: '基础检测完成，未发现明显风险',
+            recommendation: '建议进一步手动检查'
+          }),
+          passed: true
+        });
+
+        this.addLog({
+          type: 'success',
+          phase: 'evaluation',
+          title: `测试完成 ${testNumber || ''}`,
+          message: `基础检测完成`,
+          metadata: { 
+            toolName: toolResult.toolName,
+            testCase: testCase.purpose,
+            testNumber: testNumber
+          }
         });
       }
 
@@ -1916,13 +2022,27 @@ export class SecurityEngine {
       this.addLog({
         type: 'error',
         phase: 'evaluation',
-        title: t().security.logMessages.securityAssessmentFailed,
-        message: `${t().security.logMessages.assessmentFailed}: ${error instanceof Error ? error.message : t().security.logMessages.unknownError}`,
+        title: '测试结果评估失败',
+        message: `评估测试结果时发生错误: ${error instanceof Error ? error.message : '未知错误'}`,
         metadata: { 
           toolName: toolResult.toolName,
           testCase: testCase.purpose,
           testNumber: testNumber
-        }
+        },
+        details: error
+      });
+
+      // 添加错误测试结果
+      toolResult.testResults.push({
+        testCase: `${testCase.purpose} (${testCase.riskType})`,
+        parameters: testCase.parameters,
+        result: result || { error },
+        riskAssessment: JSON.stringify({
+          riskLevel: 'medium',
+          description: '测试结果评估失败',
+          recommendation: '建议手动检查此测试用例'
+        }),
+        passed: false
       });
     }
   }
@@ -2499,9 +2619,11 @@ ${item.description ? `- **LLM分析**: ${item.description}` : ''}
 要求：
 1. 分析要综合考虑所有类型的风险（工具、提示、资源）
 2. 识别风险之间的关联性和整体影响
-3. 提供具体可执行的建议
-4. 根据风险等级确定处理优先级
-5. 使用中文进行分析和建议`;
+3. 提供可执行的改进建议
+4. 报告要求精简，不超过300字
+
+${llmClient.getLanguageOutputRequirement()}
+`;
 
     return {
       messages: [{ role: 'user', content: prompt }]

@@ -597,21 +597,124 @@ const SecurityPanel: React.FC = () => {
         <div>
           <div style={{ marginBottom: 16 }}>
             <Text strong>{t.security.riskLevel}: </Text>
-            <Tag color={getRiskLevelColor(tool.riskLevel)} style={{ 
-                               marginLeft: 4, 
-                               fontSize: '12px', 
-                               fontWeight: 'bold',
-                               textAlign: 'center',
-                               display: 'flex',
-                               alignItems: 'center',
-                               justifyContent: 'center'
-                             }}>
+            <Tag color={getRiskLevelColor(tool.riskLevel)}>
               {t.security.riskLevels[tool.riskLevel as keyof typeof t.security.riskLevels] || tool.riskLevel}
             </Tag>
           </div>
 
-          {/* 综合风险分析报告 */}
+                    {/* 综合风险分析报告 */}
           {renderComprehensiveRiskAnalysisContent(currentReport?.comprehensiveRiskAnalysis)}
+
+          {/* 输出llm静态评测结果 */}
+          {tool.llmAnalysis && (
+            <div style={{ marginBottom: 16 }}>
+              <Title level={5}>{t.security.llmStaticAnalysis}</Title>
+              <div style={{
+                backgroundColor: '#f0f8ff',
+                padding: '12px',
+                borderRadius: '6px',
+                border: '1px solid #bae7ff'
+              }}>
+                {(() => {
+                  try {
+                    const analysis = typeof tool.llmAnalysis === 'string' 
+                      ? JSON.parse(tool.llmAnalysis) 
+                      : tool.llmAnalysis;
+                    
+                    return (
+                      <div>
+                        {/* 风险等级 */}
+                        <div style={{ marginBottom: 16 }}>
+                          <Space>
+                            <Text strong>{t.security.riskLevel}:</Text>
+                            <Tag color={getRiskLevelColor(analysis.riskLevel)}>
+                              {t.security.riskLevels[analysis.riskLevel as keyof typeof t.security.riskLevels] || analysis.riskLevel}
+                            </Tag>
+                          </Space>
+                        </div>
+                        
+                        {/* 漏洞列表 */}
+                        {analysis.vulnerabilities && analysis.vulnerabilities.length > 0 && (
+                          <div>
+                            <Text strong style={{ display: 'block', marginBottom: 12 }}>
+                              {t.security.vulnerabilities} ({analysis.vulnerabilities.length}):
+                            </Text>
+                            {analysis.vulnerabilities.map((vuln: any, index: number) => (
+                              <Card 
+                                key={index}
+                                size="small" 
+                                style={{ 
+                                  marginBottom: 8,
+                                  border: `2px solid ${getRiskLevelColor(vuln.severity)}`,
+                                  borderRadius: '6px'
+                                }}
+                              >
+                                <div style={{ fontSize: '13px' }}>
+                                  <div style={{ marginBottom: 8 }}>
+                                    <Space>
+                                      <Text strong>{t.security.testCategory}:</Text>
+                                      <Tag color="blue">{vuln.type}</Tag>
+                                    </Space>
+                                  </div>
+                                  
+                                  <div style={{ marginBottom: 8 }}>
+                                    <Space>
+                                      <Text strong>{t.security.securityLevel}:</Text>
+                                      <Tag color={getRiskLevelColor(vuln.severity)}>
+                                        {t.security.riskLevels[vuln.severity as keyof typeof t.security.riskLevels] || vuln.severity}
+                                      </Tag>
+                                    </Space>
+                                  </div>
+                                  
+                                  <div style={{ marginBottom: 8 }}>
+                                    <Text strong>{t.security.description}:</Text>
+                                    <div style={{ 
+                                      marginTop: 4,
+                                      color: '#666',
+                                      fontSize: '12px',
+                                      lineHeight: '1.4'
+                                    }}>
+                                      {vuln.description}
+                                    </div>
+                                  </div>
+                                  
+                                  <div>
+                                    <Text strong>{t.security.recommendation}:</Text>
+                                    <div style={{ 
+                                      marginTop: 4,
+                                      color: '#666',
+                                      fontSize: '12px',
+                                      lineHeight: '1.4'
+                                    }}>
+                                      {vuln.recommendation}
+                                    </div>
+                                  </div>
+                                </div>
+                              </Card>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  } catch (error) {
+                    // 如果解析失败，显示原始内容
+                    return (
+                      <div style={{ 
+                        fontFamily: 'monospace',
+                        fontSize: '12px',
+                        whiteSpace: 'pre-wrap'
+                      }}>
+                        {typeof tool.llmAnalysis === 'string' 
+                          ? tool.llmAnalysis 
+                          : JSON.stringify(tool.llmAnalysis, null, 2)
+                        }
+                      </div>
+                    );
+                  }
+                })()}
+              </div>
+            </div>
+          )}          
           
           {tool.testResults.length > 0 && (
             <div>
@@ -643,6 +746,12 @@ const SecurityPanel: React.FC = () => {
                          <Text strong style={{ fontSize: '14px' }}>
                            {test.testCase}
                          </Text>
+                         {/* LLM智能测评标识 */}
+                         {test.source === 'llm_generated' && (
+                           <Tag color="orange" style={{ fontSize: '11px' }}>
+                             LLM智能测评
+                           </Tag>
+                         )}
                          {test.result?.error && (
                            <Tag color="red" icon={<CloseCircleOutlined />}>
                              {t.security.testFailed}
@@ -661,12 +770,15 @@ const SecurityPanel: React.FC = () => {
                         borderRadius: '6px',
                         fontFamily: 'monospace',
                         fontSize: '12px',
-                        border: '1px solid #e8e8e8'
+                        border: '1px solid #e8e8e8',
+                        maxHeight: '120px',
+                        overflow: 'auto'
                       }}>
                         {JSON.stringify(test.parameters, null, 2)}
                       </div>
                     </div>
 
+                    {/* 输出结果展示 */}
                     {test.result && (
                       <div style={{ fontSize: '13px', marginBottom: 12 }}>
                         <div style={{ marginBottom: 8 }}>
@@ -690,7 +802,7 @@ const SecurityPanel: React.FC = () => {
                       </div>
                     )}
 
-                                         <div style={{ 
+                    <div style={{ 
                        fontSize: '13px',
                        padding: '10px 12px',
                        backgroundColor: riskLevel ? `${getRiskLevelColor(riskLevel)}25` : '#f0f0f0',
@@ -698,92 +810,94 @@ const SecurityPanel: React.FC = () => {
                        border: `2px solid ${riskLevel ? getRiskLevelColor(riskLevel) : '#d9d9d9'}`,
                        marginTop: '4px'
                      }}>
-                       <Space>
-                         <Text strong style={{ 
-                           color: riskLevel ? getRiskLevelColor(riskLevel) : '#666',
-                           fontSize: '14px'
-                         }}>
-                           {t.security.securityAssessment}:
-                         </Text>
-                         {riskLevel && (
-                           <Tag 
-                             color={getRiskLevelColor(riskLevel)} 
-                           >
-                             {getRiskLevelText(riskLevel)}
-                           </Tag>
-                         )}
-                       </Space>
-                       <div style={{ 
-                         marginTop: 8, 
-                         color: riskLevel ? getRiskLevelColor(riskLevel) : '#666',
-                         fontWeight: 600,
-                         fontSize: '13px',
-                         lineHeight: '1.4'
-                       }}>
-                         {/* 提取并显示描述部分，而不是完整的JSON */}
+
+                       <div style={{ fontSize: '13px' }}>
                          {(() => {
-                           // 首先尝试解析JSON格式（新格式）
                            try {
                              const parsed = JSON.parse(test.riskAssessment);
-                             // 需要加上描述和 evidence
-                             let msg = "";
-                             if (parsed.description) {
-                               msg += "风险描述：" + parsed.description;
-                             }
-                             if (parsed.evidence) {
-                               msg += " -- 风险证据：" + parsed.evidence;
-                             }
-                             return msg;
+                             return (
+                               <div>
+                                 {/* 测试类别 */}
+                                 <div style={{ marginBottom: 8 }}>
+                                   <Space>
+                                     <Text strong>{t.security.testCategory}:</Text>
+                                     <Tag color="blue">{test.testCase || 'unknown'}</Tag>
+                                   </Space>
+                                 </div>
+                                 
+                                 {/* 安全等级 */}
+                                 <div style={{ marginBottom: 8 }}>
+                                   <Space>
+                                     <Text strong>{t.security.securityLevel}:</Text>
+                                     <Tag color={getRiskLevelColor(parsed.riskLevel)}>
+                                       {t.security.riskLevels[parsed.riskLevel as keyof typeof t.security.riskLevels] || parsed.riskLevel}
+                                     </Tag>
+                                   </Space>
+                                 </div>
+                                 
+                                 {/* 风险描述 */}
+                                 {parsed.description && (
+                                   <div style={{ marginBottom: 8 }}>
+                                     <Text strong>风险描述:</Text>
+                                     <div style={{ 
+                                       marginTop: 4,
+                                       color: '#666',
+                                       fontSize: '12px',
+                                       lineHeight: '1.4'
+                                     }}>
+                                       {parsed.description}
+                                     </div>
+                                   </div>
+                                 )}
+                                 
+                                 {/* 风险证据 */}
+                                 {parsed.evidence && (
+                                   <div style={{ marginBottom: 8 }}>
+                                     <Text strong>风险证据:</Text>
+                                     <div style={{ 
+                                       marginTop: 4,
+                                       color: '#666',
+                                       fontSize: '12px',
+                                       lineHeight: '1.4'
+                                     }}>
+                                       {parsed.evidence}
+                                     </div>
+                                   </div>
+                                 )}
+                                 
+                                 {/* 改进建议 */}
+                                 {parsed.recommendation && (
+                                   <div>
+                                     <Text strong>{t.security.recommendation}:</Text>
+                                     <div style={{ 
+                                       marginTop: 4,
+                                       color: '#666',
+                                       fontSize: '12px',
+                                       lineHeight: '1.4'
+                                     }}>
+                                       {parsed.recommendation}
+                                     </div>
+                                   </div>
+                                 )}
+                               </div>
+                             );
                            } catch (e) {
-                             // JSON解析失败，继续使用原始文本
+                             // JSON解析失败，回退到原始文本显示
+                             return (
+                               <div style={{ 
+                                 color: riskLevel ? getRiskLevelColor(riskLevel) : '#666',
+                                 fontWeight: 600,
+                                 fontSize: '13px',
+                                 lineHeight: '1.4'
+                               }}>
+                                 {test.riskAssessment}
+                               </div>
+                             );
                            }
-                           
-                           // 如果不是JSON格式或解析失败，使用原始文本
-                           return test.riskAssessment;
                          })()}
                        </div>
                        
-                       {/* 为存在风险的测试用例显示改进建议 */}
-                       {riskLevel && riskLevel !== 'low' && (
-                         <div style={{ 
-                           marginTop: 12,
-                           padding: '8px 12px',
-                           backgroundColor: '#fff7e6',
-                           borderRadius: '6px',
-                           border: '1px solid #ffd591',
-                           borderLeft: '3px solid #fa8c16'
-                         }}>
-                           <Space>
-                             <Text strong style={{ 
-                               color: '#fa8c16',
-                               fontSize: '13px'
-                             }}>
-                               {t.security.recommendation}:
-                             </Text>
-                           </Space>
-                           <div style={{ 
-                             marginTop: 4, 
-                             color: '#666',
-                             fontSize: '12px',
-                             lineHeight: '1.4'
-                           }}>
-                             {/* 从JSON格式中提取recommendation */}
-                             {(() => {
-                               try {
-                                 const parsed = JSON.parse(test.riskAssessment);
-                                 if (parsed.recommendation) {
-                                   return parsed.recommendation;
-                                 }
-                               } catch (e) {
-                                 // JSON解析失败，忽略
-                               }
-                               
-                               // 默认建议
-                               return '建议加强相关安全措施，定期进行安全检测。';
-                             })()}
-                           </div>
-                         </div>
-                       )}
+
                      </div>
                   </Card>
                 );
@@ -1294,7 +1408,7 @@ const SecurityPanel: React.FC = () => {
               label: (
                 <Space>
                   <PlayCircleOutlined />
-                  被动检测
+                  {t.security.passive.title}
                 </Space>
               ),
               children: (

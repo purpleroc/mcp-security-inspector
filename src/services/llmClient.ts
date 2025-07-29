@@ -1,5 +1,6 @@
 import { LLMConfig, LLMRequest, LLMResponse } from '../types/mcp';
 import { getLLMConfigs, callLLM } from '../utils/storage';
+import { getCurrentLanguage } from '../i18n';
 
 /**
  * LLM客户端服务
@@ -17,6 +18,29 @@ export class LLMClientService {
       LLMClientService.instance = new LLMClientService();
     }
     return LLMClientService.instance;
+  }
+
+  /**
+   * 获取当前语言设置
+   */
+  private getCurrentLanguage(): string {
+    return getCurrentLanguage();
+  }
+
+  /**
+   * 生成语言感知的输出要求
+   */
+  public getLanguageOutputRequirement(): string {
+    const currentLanguage = this.getCurrentLanguage();
+    
+    if (currentLanguage === 'zh-CN') {
+      return `
+重要：请用中文回复，除json数据外，其他内容使用中文。
+`;
+    } else {
+      return `
+Important: Please respond in English, all field names and descriptions should be in English.`;
+    }
   }
 
   /**
@@ -120,6 +144,8 @@ export class LLMClientService {
     let systemPrompt = '';
     let userPrompt = '';
 
+    const languageRequirement = this.getLanguageOutputRequirement();
+
     switch (type) {
       case 'tool':
         systemPrompt = `你是一个MCP工具安全分析专家。请分析给定的MCP工具，识别潜在的安全风险。
@@ -151,7 +177,9 @@ export class LLMClientService {
 - injection: 注入攻击风险
 - privilege: 权限提升风险
 - leak: 信息泄露风险
-- access: 访问控制问题`;
+- access: 访问控制问题
+
+${languageRequirement}`;
 
         userPrompt = `请分析以下MCP工具的安全性：
 
@@ -193,7 +221,9 @@ export class LLMClientService {
 - injection: 提示注入攻击
 - manipulation: 恶意操纵和引导  
 - leak: 信息泄露风险
-- malicious: 其他恶意行为`;
+- malicious: 其他恶意行为
+
+${languageRequirement}`;
 
         userPrompt = `请分析以下MCP提示的安全性：
 
@@ -235,7 +265,9 @@ export class LLMClientService {
 - traversal: 路径遍历攻击
 - access: 访问控制问题
 - leak: 信息泄露风险
-- injection: 内容注入攻击`;
+- injection: 内容注入攻击
+
+${languageRequirement}`;
 
         userPrompt = `请分析以下MCP资源的安全性：
 
@@ -267,6 +299,8 @@ MIME类型: ${target.mimeType || '未知'}
    * 生成增强的提示安全分析提示词
    */
   public generateEnhancedPromptSecurityAnalysis(prompt: any, configId: string): LLMRequest {
+    const languageRequirement = this.getLanguageOutputRequirement();
+    
     const systemPrompt = `你是一个专业的提示注入和AI安全专家。请对给定的MCP提示进行全面的安全风险分析。
 
 分析维度：
@@ -317,7 +351,9 @@ MIME类型: ${target.mimeType || '未知'}
 - injection: 提示注入攻击
 - manipulation: 恶意操纵和引导  
 - leak: 信息泄露风险
-- malicious: 其他恶意行为`;
+- malicious: 其他恶意行为
+
+${languageRequirement}`;
 
     const userPrompt = `请分析以下MCP提示的安全性：
 
@@ -346,6 +382,8 @@ MIME类型: ${target.mimeType || '未知'}
    * 生成增强的资源安全分析提示词
    */
   public generateEnhancedResourceSecurityAnalysis(resource: any, configId: string): LLMRequest {
+    const languageRequirement = this.getLanguageOutputRequirement();
+    
     const systemPrompt = `你是一个专业的资源访问安全专家。请对给定的MCP资源进行全面的安全风险分析。
 
 分析维度：
@@ -401,7 +439,9 @@ MIME类型: ${target.mimeType || '未知'}
 - traversal: 路径遍历攻击
 - access: 访问控制问题
 - leak: 信息泄露风险
-- injection: 内容注入攻击`;
+- injection: 内容注入攻击
+
+${languageRequirement}`;
 
     const userPrompt = `请分析以下MCP资源的安全性：
 
@@ -432,6 +472,8 @@ MIME类型: ${resource.mimeType || '未知'}
    * 生成智能提示测试用例
    */
   public generatePromptSecurityTests(prompt: any, maxTestCases: number, configId: string): LLMRequest {
+    const languageRequirement = this.getLanguageOutputRequirement();
+    
     const systemPrompt = `你是一个提示注入测试专家。请为给定的MCP提示生成针对性的安全测试用例。
 
 测试类型包括：
@@ -463,7 +505,9 @@ MIME类型: ${resource.mimeType || '未知'}
 - 风险判定标准
 - 攻击成功的迹象
 
-返回JSON格式的测试用例列表。`;
+返回JSON格式的测试用例列表。
+
+${languageRequirement}`;
 
     const userPrompt = `请为以下MCP提示生成安全测试用例：
 
@@ -492,6 +536,8 @@ MIME类型: ${resource.mimeType || '未知'}
    * 生成智能资源测试用例
    */
   public generateResourceSecurityTests(resource: any, maxTestCases: number, configId: string): LLMRequest {
+    const languageRequirement = this.getLanguageOutputRequirement();
+    
     const systemPrompt = `你是一个资源访问安全测试专家。请为给定的MCP资源生成针对性的安全测试用例。
 
 测试类型包括：
@@ -528,7 +574,9 @@ MIME类型: ${resource.mimeType || '未知'}
 - 风险判定标准
 - 攻击成功的迹象
 
-返回JSON格式的测试用例列表。`;
+返回JSON格式的测试用例列表。
+
+${languageRequirement}`;
 
     const userPrompt = `请为以下MCP资源生成安全测试用例：
 
@@ -554,46 +602,11 @@ MIME类型: ${resource.mimeType || '未知'}
   }
 
   /**
-   * 生成测试用例生成提示词
-   */
-  public generateTestCasePrompt(tool: any): LLMRequest {
-    const systemPrompt = `你是一个MCP工具测试用例生成专家。请为给定的工具生成全面的测试用例，包括：
-
-1. 正常用例：验证工具基本功能
-2. 边界用例：测试参数边界和极值
-3. 异常用例：测试错误处理
-4. 安全用例：测试潜在的安全漏洞
-
-每个测试用例应包含：
-- 测试目的
-- 输入参数
-- 预期行为
-- 风险等级
-
-请以JSON格式返回测试用例列表。`;
-
-    const userPrompt = `请为以下MCP工具生成测试用例：
-
-工具名称: ${tool.name}
-工具描述: ${tool.description || '无描述'}
-输入参数定义: ${JSON.stringify(tool.inputSchema, null, 2)}
-
-请生成5-10个不同类型的测试用例。`;
-
-    return {
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.3,
-      maxTokens: 1500
-    };
-  }
-
-  /**
    * 生成智能安全测试用例（增强版）
    */
   public generateAdvancedSecurityTestCases(tool: any, maxTestCases: number,configId: string): LLMRequest {
+    const languageRequirement = this.getLanguageOutputRequirement();
+    
     const systemPrompt = `你是一个专业的安全测试专家，专门为MCP工具生成全面的安全测试用例。
 
 重要安全原则：
@@ -620,7 +633,9 @@ MIME类型: ${resource.mimeType || '未知'}
 - 对于字符串参数，测试特殊字符和注入模式
 - 对于布尔参数，测试权限相关的场景
 
-返回格式为JSON数组，确保生成 **${maxTestCases}** 个不同类型的安全测试用例。`;
+返回格式为JSON数组，确保生成 **${maxTestCases}** 个不同类型的安全测试用例，确保生成的JSON可被JSON.parse解析。
+
+${languageRequirement}`;
 
     const userPrompt = `请为以下MCP工具生成安全的测试用例：
 
@@ -662,6 +677,8 @@ MIME类型: ${resource.mimeType || '未知'}
     error?: string,
     configId?: string
   ): LLMRequest {
+    const languageRequirement = this.getLanguageOutputRequirement();
+    
     const systemPrompt = `你是一个安全测试结果分析专家。请根据测试用例的预期行为和判定条件，分析实际的执行结果是否存在安全风险。
 
 分析时请考虑：
@@ -670,6 +687,7 @@ MIME类型: ${resource.mimeType || '未知'}
 3. 执行是否产生了预期外的副作用
 4. 是否存在注入攻击成功的迹象
 5. 权限控制是否被绕过
+6. 需要确定测试用例是否存在安全风险，并给出风险等级，无危害的测试用例，风险等级为low
 
 请严格按照以下JSON格式返回结果：
 {
@@ -686,7 +704,9 @@ MIME类型: ${resource.mimeType || '未知'}
   - high: 高风险，存在明确的安全威胁
   - critical: 严重风险，存在可被立即利用的安全漏洞
 - 所有字段都必须提供，不能为空
-- 只返回JSON格式，不要其他内容`;
+- 只返回JSON格式，不要其他内容
+
+${languageRequirement}`;
 
     const userPrompt = `请分析以下安全测试的执行结果：
 
