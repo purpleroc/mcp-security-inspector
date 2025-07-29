@@ -476,22 +476,4 @@ export interface RuleValidationResult {
 }
 
 // 规则统计信息
-export interface RuleStatistics {
-  ruleId: string;
-  totalMatches: number;
-  lastMatched?: number;
-  averageMatchesPerDay: number;
-  riskDistribution: Record<SecurityRiskLevel, number>;
-}
-
-// 检测配置
-export interface PassiveDetectionConfig extends SecurityCheckConfig {
-  enabledRuleCategories: DetectionRuleCategory[];
-  customRules: DetectionRule[];
-  ruleSetIds: string[];                // 启用的规则集ID
-  maxConcurrentChecks: number;         // 最大并发检测数
-  timeoutMs: number;                   // 检测超时时间
-  enableStatistics: boolean;           // 是否启用统计
-  enableRealTimeNotification: boolean; // 实时通知
-  minRiskLevelForNotification: SecurityRiskLevel; // 通知的最小风险等级
-} 
+ 

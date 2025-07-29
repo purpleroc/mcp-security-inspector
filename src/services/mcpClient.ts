@@ -1085,8 +1085,7 @@ export class MCPClient {
     }
 
     try {
-      console.log('发送MCP请求到:', endpoint);
-      // console.log('请求内容:', JSON.stringify(request, null, 2));
+      console.log('发送MCP请求到:', endpoint, JSON.stringify(request, null, 2));
       
       const response = await fetch(endpoint, {
         method: 'POST',
