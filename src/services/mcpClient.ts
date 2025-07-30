@@ -69,6 +69,7 @@ export class MCPClient {
    * 启用被动安全检测
    */
   public enablePassiveDetection(config: SecurityCheckConfig): void {
+    console.log('[MCPClient] 启用被动检测:', config);
     this.passiveDetectionEnabled = true;
     this.securityConfig = config;
   }
@@ -77,6 +78,7 @@ export class MCPClient {
    * 禁用被动安全检测
    */
   public disablePassiveDetection(): void {
+    console.log('[MCPClient] 禁用被动检测');
     this.passiveDetectionEnabled = false;
     this.securityConfig = null;
   }
@@ -118,17 +120,21 @@ export class MCPClient {
     parameters: Record<string, unknown>,
     result: any
   ): Promise<void> {
+    console.log(`[被动检测] 开始执行: type=${type}, targetName=${targetName}`);
     if (!this.passiveDetectionEnabled || !this.securityConfig) {
+      console.log(`[被动检测] 跳过执行: passiveDetectionEnabled=${this.passiveDetectionEnabled}, securityConfig=${!!this.securityConfig}`);
       return;
     }
 
     try {
+      console.log(`[被动检测] 开始检测引擎调用`);
       // 使用新的检测引擎
       const { DetectionEngine } = await import('./detectionEngine');
       const detectionEngine = DetectionEngine.getInstance();
 
       // 执行基于正则表达式的检测
       const ruleMatches = await detectionEngine.detectThreats(parameters, result);
+      console.log(`[被动检测] 检测完成，找到 ${ruleMatches.length} 个规则匹配`);
 
       // 转换检测结果为被动检测结果格式
       const threats: Array<{
@@ -957,11 +963,14 @@ export class MCPClient {
     const result = response.result as MCPToolResult;
 
     // 触发被动安全检测
+    console.log(`[被动检测] 检查状态: passiveDetectionEnabled=${this.passiveDetectionEnabled}, securityConfig=${!!this.securityConfig}`);
     if (this.passiveDetectionEnabled) {
       // 异步执行，不阻塞主流程
       this.performPassiveDetection('tool', name, arguments_, result).catch(error => {
         console.error('被动检测执行失败:', error);
       });
+    } else {
+      console.log('[被动检测] 被动检测未启用');
     }
 
     return result;

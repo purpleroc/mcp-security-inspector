@@ -474,7 +474,8 @@ MIME类型: ${resource.mimeType || '未知'}
   public generatePromptSecurityTests(prompt: any, maxTestCases: number, configId: string): LLMRequest {
     const languageRequirement = this.getLanguageOutputRequirement();
     
-    const systemPrompt = `你是一个提示注入测试专家。请为给定的MCP提示生成针对性的安全测试用例。
+    const userPrompt = `
+你是一个提示注入测试专家。请为给定的MCP提示生成针对性的安全测试用例。
 
 测试类型包括：
 
@@ -504,18 +505,23 @@ MIME类型: ${resource.mimeType || '未知'}
 - 预期的安全行为
 - 风险判定标准
 - 攻击成功的迹象
-
-返回JSON格式的测试用例列表。
-
-${languageRequirement}`;
-
-    const userPrompt = `请为以下MCP提示生成安全测试用例：
+    
+请为以下MCP提示生成安全测试用例：
 
 提示名称: ${prompt.name}
 提示描述: ${prompt.description || '无描述'}
 参数列表: ${JSON.stringify(prompt.arguments || [], null, 2)}
 
-请生成${maxTestCases}个不同类型的安全测试用例。`;
+## 安全要求
+1. 绝对禁止生成任何可能造成系统损害的测试用例。（比如：删除文件、删除数据库、删除系统等）
+2. 所有测试参数必须是安全的，不会对系统造成实际危害
+3. 测试参数应该便于从返回结果中判断是否存在安全问题
+4. 重点关注输入验证、边界检查、权限控制等逻辑层面的安全问题
+5. 测试参数应该根据工具的实际功能和参数架构来设计，确保测试的有效性
+6. 确保生成的JSON为正确的JSON格式。不要出现nan、undefined、null等字段。
+
+请严格遵守安全要求，生成${maxTestCases}个不同测试目的的安全测试用例，JSON格式输出测试用例列表。
+${languageRequirement}`;
 
     // 获取LLM配置
     const config = this.getConfigById(configId);
@@ -524,7 +530,6 @@ ${languageRequirement}`;
 
     return {
       messages: [
-        { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
       temperature,
@@ -538,7 +543,8 @@ ${languageRequirement}`;
   public generateResourceSecurityTests(resource: any, maxTestCases: number, configId: string): LLMRequest {
     const languageRequirement = this.getLanguageOutputRequirement();
     
-    const systemPrompt = `你是一个资源访问安全测试专家。请为给定的MCP资源生成针对性的安全测试用例。
+    const userPrompt = `
+你是一个资源访问安全测试专家。请为给定的MCP资源生成针对性的安全测试用例。
 
 测试类型包括：
 
@@ -567,24 +573,24 @@ ${languageRequirement}`;
    - 频繁访问测试
    - 资源枯竭测试
 
-每个测试用例应包含：
-- 测试类型和目的
-- 具体的测试URI或参数
-- 预期的安全行为
-- 风险判定标准
-- 攻击成功的迹象
 
-返回JSON格式的测试用例列表。
-
-${languageRequirement}`;
-
-    const userPrompt = `请为以下MCP资源生成安全测试用例：
+## 安全要求
+1. 绝对禁止生成任何可能造成系统损害的测试用例。（比如：删除文件、删除数据库、删除系统等）
+2. 所有测试参数必须是安全的，不会对系统造成实际危害
+3. 测试参数应该便于从返回结果中判断是否存在安全问题
+4. 重点关注输入验证、边界检查、权限控制等逻辑层面的安全问题
+5. 测试参数应该根据工具的实际功能和参数架构来设计，确保测试的有效性
+6. 确保生成的JSON为正确的JSON格式。不要出现nan、undefined、null等字段。
+    
+请为以下MCP资源生成安全测试用例：
 
 资源URI: ${resource.uri}
 资源名称: ${resource.name || '未指定'}
 资源类型: ${resource.mimeType || '未知'}
 
-请生成${maxTestCases}个不同类型的安全测试用例。`;
+
+请严格遵守安全要求，生成${maxTestCases}个不同测试目的的安全测试用例，JSON格式输出测试用例列表。
+${languageRequirement}`;
 
     // 获取LLM配置
     const config = this.getConfigById(configId);
@@ -593,7 +599,6 @@ ${languageRequirement}`;
 
     return {
       messages: [
-        { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
       temperature,
@@ -604,51 +609,76 @@ ${languageRequirement}`;
   /**
    * 生成智能安全测试用例（增强版）
    */
-  public generateAdvancedSecurityTestCases(tool: any, maxTestCases: number,configId: string): LLMRequest {
+  public generateAdvancedToolTestCases(tool: any, maxTestCases: number,configId: string): LLMRequest {
     const languageRequirement = this.getLanguageOutputRequirement();
     
     const systemPrompt = `你是一个专业的安全测试专家，专门为MCP工具生成全面的安全测试用例。
 
-重要安全原则：
-1. 绝对禁止生成任何可能造成系统损害的命令（如rm -rf、format、delete等）
-2. 所有测试参数必须是安全的，不会对系统造成实际危害
-3. 测试参数应该便于从返回结果中判断是否存在安全问题
-4. 重点关注输入验证、边界检查、权限控制等逻辑层面的安全问题
-5. 测试参数应该根据工具的实际功能和参数架构来设计，确保测试的有效性
+## 严格禁止的危险命令和操作
+以下命令和操作绝对禁止在任何测试用例中出现：
+- 文件删除命令：rm, del, delete, unlink, rmdir, remove
+- 系统操作命令：shutdown, reboot, restart, poweroff, halt
+- 网络操作命令：ifconfig down, ip link down, netstat, iptables
+- 进程操作命令：kill, pkill, killall, taskkill
+- 数据库操作命令：DROP, DELETE, TRUNCATE, DROP DATABASE
+- 权限提升命令：sudo, su, runas, elevate
+- 系统信息收集：cat /etc/passwd, cat /etc/shadow, whoami, id
+- 网络扫描命令：nmap, ping, telnet, nc, netcat
+- 任何包含路径遍历的测试：../../../, ..\\\\..\\\\..\\\\
+- 超长输入测试：超过1000字符的输入
+- 特殊字符注入：<script>, javascript:, data:, vbscript:
+- 命令注入测试：; rm -rf, | rm -rf, && rm -rf, || rm -rf
+- 任何可能导致系统损害的测试用例
 
-请根据工具的功能和参数架构分析潜在的安全风险，并生成对应的测试用例。每个测试用例应包含：
-
-1. riskType：风险类型（injection/validation/privilege/disclosure/dos）
+## 安全测试用例要求
+每个测试用例应包含：
+1. riskType：风险类型
 2. purpose：测试目的的简短描述
-3. parameters：根据工具参数架构设计的测试参数
+3. parameters：根据工具参数架构设计的测试参数（必须是安全的）
 4. expectedBehavior：期望的安全行为
 5. judgmentCriteria：如何从返回结果判断是否存在风险
 6. riskLevel：风险等级（low/medium/high/critical）
 7. riskDescription：风险描述
 
-测试用例设计原则：
-- 参数应该符合工具的实际参数架构
-- 根据工具描述推断其功能，设计相应的测试场景
-- 对于数值参数，测试边界值和异常值
-- 对于字符串参数，测试特殊字符和注入模式
-- 对于布尔参数，测试权限相关的场景
+## 测试用例设计原则
+- 参数必须符合工具的实际参数架构
+- 所有测试参数必须是安全的，不会对系统造成实际危害
+- 测试参数应该便于从返回结果中判断是否存在安全问题
+- 确保生成的JSON为正确的JSON格式，不要出现nan、undefined、null等字段
+- 只测试逻辑层面的安全问题，不测试可能造成系统损害的物理操作
+- 不需要考虑边界测试、超长输入类测试
 
-返回格式为JSON数组，确保生成 **${maxTestCases}** 个不同类型的安全测试用例，确保生成的JSON可被JSON.parse解析。
+## 示例安全测试用例
+{
+  "riskType": "输入验证",
+  "purpose": "测试空字符串输入处理",
+  "parameters": {"input": ""},
+  "expectedBehavior": "应该返回错误或空结果",
+  "judgmentCriteria": "检查是否正确处理空输入",
+  "riskLevel": "low",
+  "riskDescription": "空输入可能导致未预期的行为"
+}
 
-${languageRequirement}`;
-
-    const userPrompt = `请为以下MCP工具生成安全的测试用例：
+请为以下MCP工具生成安全的测试用例：
 
 工具名称: ${tool.name}
 工具描述: ${tool.description || '无描述'}
-输入参数架构: ${JSON.stringify(tool.inputSchema, null, 2)}
+输入参数架构: ${JSON.stringify(tool.inputSchema, null)}
 
-请根据工具描述和参数架构，生成符合实际功能的测试用例。确保测试参数与工具的参数定义匹配。`;
+返回格式为JSON数组，严格按照安全要求，确保生成 **${maxTestCases}** 个不同测试目的的安全测试用例。
+
+${languageRequirement}
+`;
+
+    const userPrompt = `请严格按照上述安全要求，为MCP工具生成测试用例。绝对不要生成任何可能造成系统损害的测试用例。`;
 
     // 获取LLM配置
     const config = this.getConfigById(configId);
     const temperature = config?.temperature ?? 0.2;
     const maxTokens = config?.maxTokens ?? 2500;
+
+    console.log(systemPrompt);
+    console.log(userPrompt);
 
     return {
       messages: [
@@ -658,6 +688,29 @@ ${languageRequirement}`;
       temperature: temperature,
       maxTokens: maxTokens
     };
+  }
+
+  /**
+   * 解析MCP结果中的content数组并合并成字符串
+   */
+  private parseMCPResultContent(actualResult: any): string {
+    if (!actualResult) return '';
+    
+    // 如果actualResult有content数组，解析并合并
+    if (actualResult.content && Array.isArray(actualResult.content)) {
+      return actualResult.content
+        .map((item: any) => {
+          if (item.type === 'text' && item.text) {
+            return item.text;
+          }
+          return '';
+        })
+        .filter((text: string) => text.length > 0)
+        .join('\n');
+    }
+    
+    // 如果没有content数组，直接返回JSON字符串
+    return JSON.stringify(actualResult, null, 2);
   }
 
   /**
@@ -681,13 +734,19 @@ ${languageRequirement}`;
     
     const systemPrompt = `你是一个安全测试结果分析专家。请根据测试用例的预期行为和判定条件，分析实际的执行结果是否存在安全风险。
 
-分析时请考虑：
-1. 实际结果是否符合预期的安全行为
-2. 错误消息是否泄露了敏感信息
-3. 执行是否产生了预期外的副作用
-4. 是否存在注入攻击成功的迹象
-5. 权限控制是否被绕过
-6. 需要确定测试用例是否存在安全风险，并给出风险等级，无危害的测试用例，风险等级为low
+分析时请重点考虑：
+1. **测试目的 (purpose)**: ${testCase.purpose}
+2. **期望行为 (expectedBehavior)**: ${testCase.expectedBehavior}
+3. **判定条件 (judgmentCriteria)**: ${testCase.judgmentCriteria}
+4. **风险描述 (riskDescription)**: ${testCase.riskDescription}
+
+具体分析要点：
+- 实际结果是否符合预期的安全行为
+- 错误消息是否泄露了敏感信息
+- 执行是否产生了预期外的副作用
+- 是否存在注入攻击成功的迹象
+- 权限控制是否被绕过
+- 根据判定条件判断是否存在安全风险
 
 请严格按照以下JSON格式返回结果：
 {
@@ -708,6 +767,9 @@ ${languageRequirement}`;
 
 ${languageRequirement}`;
 
+    // 解析actualResult中的content数组
+    const parsedResult = this.parseMCPResultContent(actualResult);
+
     const userPrompt = `请分析以下安全测试的执行结果：
 
 测试用例信息：
@@ -717,11 +779,12 @@ ${languageRequirement}`;
 - 期望行为：${testCase.expectedBehavior}
 - 判定条件：${testCase.judgmentCriteria}
 - 预期风险等级：${testCase.riskLevel}
+- 风险描述：${testCase.riskDescription}
 
 实际执行结果：
-结果：${JSON.stringify(actualResult, null, 2)}
+${error ? `错误信息：${error}` : `结果：${parsedResult}`}
 
-请根据上述信息进行安全性评估，严格按照指定的JSON格式返回结果。`;
+请根据上述信息，特别是测试目的、期望行为、判定条件和风险描述，进行详细的安全性评估，严格按照指定的JSON格式返回结果。`;
 
     // 获取LLM配置
     const config = configId ? this.getConfigById(configId) : null;

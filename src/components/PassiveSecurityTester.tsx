@@ -70,15 +70,24 @@ const { Panel } = Collapse;
 
 interface PassiveSecurityDisplayProps {
   config: SecurityCheckConfig;
+  onNewPassiveResult?: (result: PassiveDetectionResult) => void;
+  enabled?: boolean; // 外部控制的开关状态
+  onEnabledChange?: (enabled: boolean) => void; // 开关状态变化回调
 }
 
 export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
-  config
+  config,
+  onNewPassiveResult,
+  enabled,
+  onEnabledChange
 }) => {
   const { t } = useI18n();
   
   // 状态管理
   const [isEnabled, setIsEnabled] = useState(false);
+  
+  // 使用外部传入的enabled状态，如果没有传入则使用内部状态
+  const isMonitoringEnabled = enabled !== undefined ? enabled : isEnabled;
   const [results, setResults] = useState<PassiveDetectionResult[]>([]);
   const [filteredResults, setFilteredResults] = useState<PassiveDetectionResult[]>([]);
   const [searchText, setSearchText] = useState('');
@@ -125,6 +134,11 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
           content: `${t.security.passive.detectionTime} ${getRiskLevelText(result.riskLevel)} ${t.security.passive.threatLevel}: ${result.targetName}`,
           duration: 3
         });
+      }
+      
+      // 通知父组件新的被动检测结果
+      if (onNewPassiveResult) {
+        onNewPassiveResult(result);
       }
       
       // 更新统计信息
@@ -233,16 +247,16 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
     setFilteredRules(filtered);
   }, [rules, ruleSearchText, ruleFilterCategory]);
 
-  // 切换被动检测状态
+  // 切换被动检测状态（现在由外部控制）
   const handleToggleDetection = () => {
-    if (isEnabled) {
-      mcpClient.disablePassiveDetection();
-      setIsEnabled(false);
-      message.success(t.security.passive.disabled);
+    const newEnabled = !isMonitoringEnabled;
+    
+    // 如果有外部控制，调用外部回调
+    if (onEnabledChange) {
+      onEnabledChange(newEnabled);
     } else {
-      mcpClient.enablePassiveDetection(config);
-      setIsEnabled(true);
-      message.success(t.security.passive.enabled);
+      // 否则使用内部状态
+      setIsEnabled(newEnabled);
     }
   };
 
@@ -1661,14 +1675,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                 <Text type="secondary">{t.security.passive.subtitle}</Text>
               </div>
               
-              <div>
-                <Switch
-                  checked={isEnabled}
-                  onChange={handleToggleDetection}
-                  checkedChildren={<><ScanOutlined style={{ marginRight: 4 }} />{t.security.passive.monitoring}</>}
-                  unCheckedChildren={t.security.passive.stopped}
-                />
-              </div>
+
             </Space>
           </Col>
           

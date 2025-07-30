@@ -1,6 +1,31 @@
 // MCP协议类型定义
 
 /**
+ * 被动检测结果
+ */
+export interface PassiveDetectionResult {
+  id: string;
+  timestamp: number;
+  type: 'tool' | 'resource' | 'prompt';
+  targetName: string;
+  parameters: Record<string, unknown>;
+  result: any;
+  riskLevel: SecurityRiskLevel;
+  threats: Array<{
+    type: string;
+    severity: SecurityRiskLevel;
+    description: string;
+    evidence?: string;
+  }>;
+  sensitiveDataLeaks: Array<{
+    type: string;
+    content: string;
+    severity: SecurityRiskLevel;
+  }>;
+  recommendation: string;
+}
+
+/**
  * JSON-RPC 2.0 消息基础接口
  */
 export interface JSONRPCMessage {
@@ -332,6 +357,13 @@ export interface PromptSecurityResult {
     evidence: string;
     recommendation: string;
   }>;
+  testResults?: Array<{
+    testCase: string;
+    parameters: Record<string, unknown>;
+    result: any;
+    riskAssessment: string;
+    passed: boolean;
+  }>;
   llmAnalysis: string;
   timestamp: number;
 }
@@ -379,6 +411,23 @@ export interface SecurityReport {
   };
   recommendations: string[];
   comprehensiveRiskAnalysis?: string; // LLM生成的综合风险分析报告
+}
+
+/**
+ * 安全检测历史记录
+ */
+export interface SecurityHistoryRecord {
+  id: string;
+  serverName: string;
+  serverConfig: MCPServerConfig;
+  timestamp: number;
+  scanType: 'active' | 'passive';
+  report: SecurityReport | null;
+  passiveResults?: PassiveDetectionResult[];
+  status: 'completed' | 'failed' | 'cancelled';
+  errorMessage?: string;
+  duration?: number; // 扫描持续时间（毫秒）
+  config: SecurityCheckConfig;
 } 
 
 /**

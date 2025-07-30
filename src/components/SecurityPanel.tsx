@@ -35,7 +35,9 @@ import {
   CheckCircleOutlined,
   EyeOutlined,
   FileTextOutlined,
-  CloseCircleOutlined
+  CloseCircleOutlined,
+  HistoryOutlined,
+  ScanOutlined
 } from '@ant-design/icons';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
@@ -48,9 +50,11 @@ import {
 import { useI18n } from '../hooks/useI18n';
 import { securityEngine, SecurityLogEntry } from '../services/securityEngine';
 import { llmClient } from '../services/llmClient';
-import { getLLMConfigs } from '../utils/storage';
+import { getLLMConfigs, securityHistoryStorage } from '../utils/storage';
 import { PassiveSecurityTester } from './PassiveSecurityTester';
 import SecurityLogViewer from './SecurityLogViewer';
+import SecurityHistoryPanel from './SecurityHistoryPanel';
+import { mcpClient, PassiveDetectionResult } from '../services/mcpClient';
 
 const { Title, Text, Paragraph } = Typography;
 const { TabPane } = Tabs;
@@ -59,6 +63,7 @@ const SecurityPanel: React.FC = () => {
   const { t } = useI18n();
   const [form] = Form.useForm();
   const connectionStatus = useSelector((state: RootState) => state.mcp.connectionStatus);
+  const serverConfig = useSelector((state: RootState) => state.mcp.serverConfig);
   
   // 状态管理
   const [isScanning, setIsScanning] = useState(false);
@@ -70,18 +75,44 @@ const SecurityPanel: React.FC = () => {
   const [securityLogs, setSecurityLogs] = useState<SecurityLogEntry[]>([]);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
+  
+  // 被动检测结果状态
+  const [passiveResults, setPassiveResults] = useState<PassiveDetectionResult[]>([]);
+  
+  // 检测历史相关状态
+  const [securityHistory, setSecurityHistory] = useState<any[]>([]);
+  
+  // 被动扫描开关状态
+  const [passiveMonitoringEnabled, setPassiveMonitoringEnabled] = useState(false);
+  
+  // 过滤状态
+  const [toolRiskFilter, setToolRiskFilter] = useState<SecurityRiskLevel | 'all'>('all');
+  const [toolScanTypeFilter, setToolScanTypeFilter] = useState<'all' | 'active' | 'passive'>('all');
+  const [promptRiskFilter, setPromptRiskFilter] = useState<SecurityRiskLevel | 'all'>('all');
+  const [promptScanTypeFilter, setPromptScanTypeFilter] = useState<'all' | 'active' | 'passive'>('all');
+  const [resourceRiskFilter, setResourceRiskFilter] = useState<SecurityRiskLevel | 'all'>('all');
+  const [resourceScanTypeFilter, setResourceScanTypeFilter] = useState<'all' | 'active' | 'passive'>('all');
 
   // 默认配置
   const defaultConfig: SecurityCheckConfig = {
     enabled: true,
     llmConfigId: '',
-
     autoGenerate: true,
+    enableLLMAnalysis: true,
     maxTestCases: 5,
     timeout: 30
   };
 
   const [scanConfig, setScanConfig] = useState<SecurityCheckConfig>(defaultConfig);
+
+  // 同步被动监控状态到MCPClient
+  useEffect(() => {
+    if (passiveMonitoringEnabled) {
+      mcpClient.enablePassiveDetection(scanConfig);
+    } else {
+      mcpClient.disablePassiveDetection();
+    }
+  }, [passiveMonitoringEnabled, scanConfig]);
 
   useEffect(() => {
     loadLLMConfigs();
@@ -98,6 +129,17 @@ const SecurityPanel: React.FC = () => {
     };
   }, []);
 
+  // 监听连接状态变化，连接新MCP时清空安全测试结果
+  useEffect(() => {
+    if (connectionStatus === 'connecting') {
+      // 清空当前的安全测试结果
+      setCurrentReport(null);
+      setPassiveResults([]);
+      setSecurityLogs([]);
+      setActiveTab('overview');
+    }
+  }, [connectionStatus]);
+
   // 添加日志监听器
   useEffect(() => {
     const handleNewLog = (log: SecurityLogEntry) => {
@@ -113,6 +155,157 @@ const SecurityPanel: React.FC = () => {
       securityEngine.removeLogListener(handleNewLog);
     };
   }, []);
+
+  // 添加被动检测结果监听器
+  useEffect(() => {
+    const handleNewPassiveResult = (result: PassiveDetectionResult) => {
+      setPassiveResults(prev => [result, ...prev.slice(0, 499)]); // 保持最新500条
+    };
+
+    mcpClient.addPassiveDetectionListener(handleNewPassiveResult);
+    
+    // 初始化时获取现有被动检测结果
+    setPassiveResults(mcpClient.getPassiveDetectionResults());
+
+    return () => {
+      mcpClient.removePassiveDetectionListener(handleNewPassiveResult);
+    };
+  }, []);
+
+  // 将被动检测结果转换为主动扫描结果格式的适配器
+  const convertPassiveToActiveFormat = () => {
+    const toolResults: any[] = [];
+    const promptResults: any[] = [];
+    const resourceResults: any[] = [];
+
+    passiveResults.forEach(result => {
+      const threats = result.threats || [];
+      const convertedResult = {
+        toolName: result.targetName,
+        promptName: result.targetName,
+        resourceUri: result.targetName,
+        riskLevel: result.riskLevel,
+        timestamp: result.timestamp,
+        threats: threats.map(threat => ({
+          type: threat.type,
+          severity: threat.severity,
+          description: threat.description,
+          evidence: threat.evidence || '',
+          recommendation: result.recommendation
+        })),
+        vulnerabilities: threats.map(threat => ({
+          type: threat.type,
+          severity: threat.severity,
+          description: threat.description,
+          recommendation: result.recommendation
+        })),
+        risks: threats.map(threat => ({
+          type: threat.type,
+          severity: threat.severity,
+          description: threat.description,
+          evidence: threat.evidence || '',
+          recommendation: result.recommendation
+        })),
+        testResults: [], // 被动检测没有测试结果
+        accessTests: [], // 被动检测没有访问测试
+        llmAnalysis: '', // 被动检测没有LLM分析
+        isPassive: true,
+        passiveData: result
+      };
+
+      if (result.type === 'tool') {
+        toolResults.push(convertedResult);
+      } else if (result.type === 'prompt') {
+        promptResults.push(convertedResult);
+      } else if (result.type === 'resource') {
+        resourceResults.push(convertedResult);
+      }
+    });
+
+    return { toolResults, promptResults, resourceResults };
+  };
+
+  // 获取合并后的结果（主动扫描 + 被动检测）
+  const getMergedResults = () => {
+    const passiveFormatted = convertPassiveToActiveFormat();
+    
+    const mergedResults = {
+      toolResults: [
+        ...(currentReport?.toolResults || []).map(item => ({ ...item, isPassive: false })),
+        ...passiveFormatted.toolResults
+      ],
+      promptResults: [
+        ...(currentReport?.promptResults || []).map(item => ({ ...item, isPassive: false })),
+        ...passiveFormatted.promptResults
+      ],
+      resourceResults: [
+        ...(currentReport?.resourceResults || []).map(item => ({ ...item, isPassive: false })),
+        ...passiveFormatted.resourceResults
+      ]
+    };
+
+    return mergedResults;
+  };
+
+  // 过滤结果函数
+  const filterResults = (results: any[], riskLevelFilter: SecurityRiskLevel | 'all', scanTypeFilter: 'all' | 'active' | 'passive') => {
+    return results.filter(item => {
+      // 风险等级过滤
+      const riskMatch = riskLevelFilter === 'all' || item.riskLevel === riskLevelFilter;
+      
+      // 扫描类型过滤
+      const scanMatch = scanTypeFilter === 'all' || 
+        (scanTypeFilter === 'active' && !item.isPassive) ||
+        (scanTypeFilter === 'passive' && item.isPassive);
+      
+      return riskMatch && scanMatch;
+    });
+  };
+
+  // 渲染过滤组件
+  const renderFilterPanel = (
+    riskFilter: SecurityRiskLevel | 'all',
+    setRiskFilter: (value: SecurityRiskLevel | 'all') => void,
+    scanTypeFilter: 'all' | 'active' | 'passive',
+    setScanTypeFilter: (value: 'all' | 'active' | 'passive') => void
+  ) => (
+    <Card style={{ marginBottom: 16 }} size="small">
+      <Row gutter={16} align="middle">
+        <Col>
+          <Space>
+            <Text>风险等级:</Text>
+            <Select
+              value={riskFilter}
+              onChange={setRiskFilter}
+              style={{ width: 120 }}
+              size="small"
+            >
+              <Select.Option value="all">全部</Select.Option>
+              <Select.Option value="critical">严重</Select.Option>
+              <Select.Option value="high">高危</Select.Option>
+              <Select.Option value="medium">中等</Select.Option>
+              <Select.Option value="low">低危</Select.Option>
+            </Select>
+          </Space>
+        </Col>
+        <Col>
+          <Space>
+            <Text>扫描类型:</Text>
+            <Select
+              value={scanTypeFilter}
+              onChange={setScanTypeFilter}
+              style={{ width: 120 }}
+              size="small"
+            >
+              <Select.Option value="all">全部</Select.Option>
+              <Select.Option value="active">主动扫描</Select.Option>
+              <Select.Option value="passive">被动检测</Select.Option>
+            </Select>
+          </Space>
+        </Col>
+      </Row>
+    </Card>
+  );
 
   const loadLLMConfigs = () => {
     try {
@@ -148,6 +341,10 @@ const SecurityPanel: React.FC = () => {
       setIsScanning(true);
       setScanProgress(0);
       setScanMessage(t.security.preparingScan);
+      
+      // 只清空主动扫描结果，保留被动检测结果
+      setCurrentReport(null);
+      // 不清空被动检测结果：setPassiveResults([]);
       setSecurityLogs([]); // 清空之前的日志
       setActiveTab('logs'); // 切换到日志标签页
 
@@ -161,10 +358,44 @@ const SecurityPanel: React.FC = () => {
 
       setCurrentReport(report);
       setActiveTab('overview'); // 扫描完成后切换回概览
-      message.success(t.security.scanComplete);
+      
+      // 保存检测历史记录
+      const historyRecord = {
+        id: report.id,
+        serverName: serverConfig?.name || 'MCP Server',
+        serverConfig: serverConfig,
+        timestamp: Date.now(),
+        scanType: 'active' as const,
+        report: report,
+        status: 'completed' as const,
+        duration: Date.now() - (report.timestamp || Date.now()),
+        config: scanConfig
+      };
+      saveSecurityHistory(historyRecord);
+      
+      // 显示完成消息，如果有被动检测结果也提示
+      const completionMessage = passiveResults.length > 0 
+        ? `${t.security.scanComplete}，当前还有 ${passiveResults.length} 条被动检测结果`
+        : t.security.scanComplete;
+      message.success(completionMessage);
     } catch (error) {
       console.error('安全扫描失败:', error);
       const errorMessage = error instanceof Error ? error.message : '未知错误';
+      
+      // 保存失败的检测历史记录
+      const historyRecord = {
+        id: `failed_${Date.now()}`,
+        serverName: serverConfig?.name || 'MCP Server',
+        serverConfig: serverConfig,
+        timestamp: Date.now(),
+        scanType: 'active' as const,
+        report: null,
+        status: errorMessage.includes('取消') || errorMessage.includes('cancel') ? 'cancelled' as const : 'failed' as const,
+        errorMessage: errorMessage,
+        duration: Date.now() - (Date.now() - 1000), // 估算持续时间
+        config: scanConfig
+      };
+      saveSecurityHistory(historyRecord);
       
       // 如果是用户取消的扫描，显示不同的消息
       if (errorMessage.includes('取消') || errorMessage.includes('cancel')) {
@@ -226,6 +457,113 @@ const SecurityPanel: React.FC = () => {
     setSecurityLogs([]);
     securityEngine.clearLogs();
     message.success(t.security.logsCleared);
+  };
+
+  // 保存检测历史记录
+  const saveSecurityHistory = (record: any) => {
+    try {
+      securityHistoryStorage.addSecurityRecord(record);
+      message.success('检测结果已保存到历史记录');
+    } catch (error) {
+      console.error('保存检测历史失败:', error);
+      message.error('保存检测历史失败');
+    }
+  };
+
+  // 手动保存当前检测结果（支持主动扫描和被动检测的合并结果）
+  const handleSaveCurrentResults = () => {
+    // 检查是否有任何检测结果
+    const hasActiveResults = currentReport !== null;
+    const hasPassiveResults = passiveResults.length > 0;
+    
+    if (!hasActiveResults && !hasPassiveResults) {
+      message.warning('暂无检测结果可保存');
+      return;
+    }
+
+    // 创建合并的检测记录
+    const mergedResults = getMergedResults();
+    const combinedReport = {
+      id: `combined_${Date.now()}`,
+      serverName: serverConfig?.name || 'MCP Server',
+      timestamp: Date.now(),
+      overallRisk: currentReport?.overallRisk || 'low',
+      toolResults: mergedResults.toolResults,
+      promptResults: mergedResults.promptResults,
+      resourceResults: mergedResults.resourceResults,
+      summary: {
+        totalIssues: (currentReport?.summary.totalIssues || 0) + passiveResults.length,
+        criticalIssues: (currentReport?.summary.criticalIssues || 0) + passiveResults.filter(r => r.riskLevel === 'critical').length,
+        highIssues: (currentReport?.summary.highIssues || 0) + passiveResults.filter(r => r.riskLevel === 'high').length,
+        mediumIssues: (currentReport?.summary.mediumIssues || 0) + passiveResults.filter(r => r.riskLevel === 'medium').length,
+        lowIssues: (currentReport?.summary.lowIssues || 0) + passiveResults.filter(r => r.riskLevel === 'low').length
+      },
+      recommendations: currentReport?.recommendations || [],
+      comprehensiveRiskAnalysis: currentReport?.comprehensiveRiskAnalysis,
+      // 添加检测类型信息
+      scanTypes: {
+        hasActiveScan: hasActiveResults,
+        hasPassiveDetection: hasPassiveResults,
+        activeScanTimestamp: currentReport?.timestamp,
+        passiveDetectionCount: passiveResults.length
+      }
+    };
+
+    const historyRecord = {
+      id: `combined_${Date.now()}`,
+      serverName: serverConfig?.name || 'MCP Server',
+      serverConfig: serverConfig,
+      timestamp: Date.now(),
+      scanType: 'combined' as const,
+      report: combinedReport,
+      status: 'completed' as const,
+      duration: 0, // 手动保存无法确定持续时间
+      config: scanConfig,
+      // 添加详细信息
+      details: {
+        activeScanReport: currentReport,
+        passiveDetectionResults: passiveResults,
+        totalPassiveResults: passiveResults.length
+      }
+    };
+
+    saveSecurityHistory(historyRecord);
+    
+    // 显示保存成功的详细信息
+    const resultTypes = [];
+    if (hasActiveResults) resultTypes.push('主动扫描');
+    if (hasPassiveResults) resultTypes.push('被动检测');
+    
+    message.success(`已保存${resultTypes.join('和')}结果到历史记录`);
+  };
+
+  // 恢复检测历史记录（支持主动扫描和合并结果）
+  const handleRestoreHistoryRecord = (record: any) => {
+    if (record.scanType === 'active' && record.report) {
+      // 恢复主动扫描结果
+      setCurrentReport(record.report);
+      setActiveTab('overview');
+      message.success('已恢复主动扫描结果');
+    } else if (record.scanType === 'combined' && record.report) {
+      // 恢复合并的检测结果
+      setCurrentReport(record.report);
+      
+      // 如果有被动检测结果，也恢复它们
+      if (record.details?.passiveDetectionResults) {
+        setPassiveResults(record.details.passiveDetectionResults);
+      }
+      
+      setActiveTab('overview');
+      message.success('已恢复合并检测结果');
+    } else {
+      message.warning('仅支持恢复主动扫描或合并检测结果');
+    }
+  };
+
+  // 处理新的被动检测结果
+  const handleNewPassiveResult = (result: PassiveDetectionResult) => {
+    // 被动检测结果不再自动保存到历史记录
+    // 只有主动扫描结果才会保存到历史记录
   };
 
   const showRiskAnalysisGuide = () => {
@@ -431,6 +769,16 @@ const SecurityPanel: React.FC = () => {
       title: t.security.toolName,
       dataIndex: 'toolName',
       key: 'toolName',
+      render: (name: string, record: any) => (
+        <Space>
+          <span>{name}</span>
+          {record.isPassive ? (
+            <Tag color="blue">被动检测</Tag>
+          ) : (
+            <Tag color="green">主动扫描</Tag>
+          )}
+        </Space>
+      ),
     },
     {
       title: t.security.riskLevel,
@@ -448,14 +796,41 @@ const SecurityPanel: React.FC = () => {
       dataIndex: 'vulnerabilities',
       key: 'vulnerabilityCount',
       align: 'center' as const,
-      render: (vulnerabilities: any[]) => vulnerabilities.length,
+      render: (vulnerabilities: any[], record: any) => {
+        if (record.isPassive) {
+          return record.threats?.length || 0;
+        }
+        
+        let totalVulnerabilities = vulnerabilities?.length || 0;
+        
+        // 如果有LLM静态分析，也计算其中的漏洞数量
+        if (record.llmAnalysis) {
+          try {
+            const analysis = typeof record.llmAnalysis === 'string' 
+              ? JSON.parse(record.llmAnalysis) 
+              : record.llmAnalysis;
+            if (analysis.vulnerabilities && Array.isArray(analysis.vulnerabilities)) {
+              totalVulnerabilities += analysis.vulnerabilities.length;
+            }
+          } catch (error) {
+            // 解析失败时忽略
+          }
+        }
+        
+        return totalVulnerabilities;
+      },
     },
     {
       title: t.security.testCaseCount,
       dataIndex: 'testResults',
       key: 'testCount',
       align: 'center' as const,
-      render: (testResults: any[]) => testResults.length,
+      render: (testResults: any[], record: any) => {
+        if (record.isPassive) {
+          return 0; // 被动检测没有测试用例
+        }
+        return testResults?.length || 0;
+      },
     },
     {
       title: t.llm.actions,
@@ -596,11 +971,155 @@ const SecurityPanel: React.FC = () => {
       content: (
         <div>
           <div style={{ marginBottom: 16 }}>
-            <Text strong>{t.security.riskLevel}: </Text>
-            <Tag color={getRiskLevelColor(tool.riskLevel)}>
-              {t.security.riskLevels[tool.riskLevel as keyof typeof t.security.riskLevels] || tool.riskLevel}
-            </Tag>
+            <Space>
+              <Text strong>{t.security.riskLevel}: </Text>
+              <Tag color={getRiskLevelColor(tool.riskLevel)}>
+                {t.security.riskLevels[tool.riskLevel as keyof typeof t.security.riskLevels] || tool.riskLevel}
+              </Tag>
+              {tool.isPassive ? (
+                <Tag color="blue">被动检测</Tag>
+              ) : (
+                <Tag color="green">主动扫描</Tag>
+              )}
+            </Space>
+            {tool.isPassive && tool.timestamp && (
+              <div style={{ marginTop: 8, fontSize: '12px', color: '#666' }}>
+                <Text>检测时间: {new Date(tool.timestamp).toLocaleString()}</Text>
+              </div>
+            )}
+            
+            {/* 显示调用参数 */}
+            {(tool.isPassive && tool.passiveData && tool.passiveData.parameters) || 
+             (!tool.isPassive && tool.testResults && tool.testResults.length > 0 && tool.testResults[0].parameters) ? (
+              <div style={{ marginTop: 16 }}>
+                <Title level={5}>调用参数</Title>
+                <div style={{
+                  backgroundColor: '#f5f5f5',
+                  padding: '12px',
+                  borderRadius: '6px',
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  border: '1px solid #e8e8e8',
+                  maxHeight: '200px',
+                  overflow: 'auto'
+                }}>
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                    {tool.isPassive 
+                      ? JSON.stringify(tool.passiveData.parameters, null, 2)
+                      : JSON.stringify(tool.testResults[0].parameters, null, 2)
+                    }
+                  </pre>
+                </div>
+              </div>
+            ) : null}
+
+            {/* 显示返回结果 */}
+            {(tool.isPassive && tool.passiveData && tool.passiveData.result) || 
+             (!tool.isPassive && tool.testResults && tool.testResults.length > 0 && tool.testResults[0].result) ? (
+              <div style={{ marginTop: 16 }}>
+                <Title level={5}>返回结果</Title>
+                <div style={{
+                  backgroundColor: '#f0f8ff',
+                  padding: '12px',
+                  borderRadius: '6px',
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  border: '1px solid #bae7ff',
+                  maxHeight: '200px',
+                  overflow: 'auto'
+                }}>
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                    {tool.isPassive 
+                      ? JSON.stringify(tool.passiveData.result, null, 2)
+                      : JSON.stringify(tool.testResults[0].result, null, 2)
+                    }
+                  </pre>
+                </div>
+              </div>
+            ) : null}
           </div>
+
+          {/* 显示被动检测威胁详情 */}
+          {tool.isPassive && tool.threats && tool.threats.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <Title level={5}>被动检测威胁详情</Title>
+              <div style={{ marginBottom: 16 }}>
+                <Text type="secondary">
+                  检测到的威胁数量: {tool.threats.length}
+                </Text>
+              </div>
+              {tool.threats.map((threat: any, index: number) => (
+                <Card 
+                  key={index} 
+                  size="small" 
+                  style={{ 
+                    marginBottom: 12,
+                    border: `2px solid ${getRiskLevelColor(threat.severity)}`,
+                    borderRadius: '8px',
+                    backgroundColor: '#fafafa'
+                  }}
+                  title={
+                    <Space>
+                      <Tag color="blue" style={{ fontSize: '12px' }}>
+                        #{index + 1}
+                      </Tag>
+                      <Text strong style={{ fontSize: '14px' }}>
+                        {threat.type}
+                      </Text>
+                      <Tag color={getRiskLevelColor(threat.severity)}>
+                        {t.security.riskLevels[threat.severity as keyof typeof t.security.riskLevels] || threat.severity}
+                      </Tag>
+                    </Space>
+                  }
+                >
+                  <div style={{ fontSize: '13px', marginBottom: 12 }}>
+                    <div style={{ marginBottom: 8 }}>
+                      <Text strong>威胁描述:</Text>
+                      <div style={{ 
+                        marginTop: 4,
+                        color: '#666',
+                        fontSize: '12px',
+                        lineHeight: '1.4'
+                      }}>
+                        {threat.description}
+                      </div>
+                    </div>
+                    
+                    {threat.evidence && (
+                      <div style={{ marginBottom: 8 }}>
+                        <Text strong>威胁证据:</Text>
+                        <div style={{ 
+                          backgroundColor: '#f5f5f5', 
+                          padding: '8px 12px', 
+                          borderRadius: '6px',
+                          fontFamily: 'monospace',
+                          fontSize: '12px',
+                          border: '1px solid #e8e8e8',
+                          maxHeight: '120px',
+                          overflow: 'auto',
+                          marginTop: 4
+                        }}>
+                          {threat.evidence}
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div>
+                      <Text strong>安全建议:</Text>
+                      <div style={{ 
+                        marginTop: 4,
+                        color: '#666',
+                        fontSize: '12px',
+                        lineHeight: '1.4'
+                      }}>
+                        {threat.recommendation}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
 
           {/* 输出llm静态评测结果 */}
           {tool.llmAnalysis && (
@@ -913,10 +1432,72 @@ const SecurityPanel: React.FC = () => {
       content: (
         <div>
           <div style={{ marginBottom: 16 }}>
-            <Text strong>{t.security.riskLevel}: </Text>
-            <Tag color={getRiskLevelColor(prompt.riskLevel)}>
-              {t.security.riskLevels[prompt.riskLevel as keyof typeof t.security.riskLevels] || prompt.riskLevel}
-            </Tag>
+            <Space>
+              <Text strong>{t.security.riskLevel}: </Text>
+              <Tag color={getRiskLevelColor(prompt.riskLevel)}>
+                {t.security.riskLevels[prompt.riskLevel as keyof typeof t.security.riskLevels] || prompt.riskLevel}
+              </Tag>
+              {prompt.isPassive ? (
+                <Tag color="blue">被动检测</Tag>
+              ) : (
+                <Tag color="green">主动扫描</Tag>
+              )}
+            </Space>
+            {prompt.isPassive && prompt.timestamp && (
+              <div style={{ marginTop: 8, fontSize: '12px', color: '#666' }}>
+                <Text>检测时间: {new Date(prompt.timestamp).toLocaleString()}</Text>
+              </div>
+            )}
+            
+            {/* 显示调用参数 */}
+            {(prompt.isPassive && prompt.passiveData && prompt.passiveData.parameters) || 
+             (!prompt.isPassive && prompt.threats && prompt.threats.length > 0 && prompt.threats[0].evidence) ? (
+              <div style={{ marginTop: 16 }}>
+                <Title level={5}>调用参数</Title>
+                <div style={{
+                  backgroundColor: '#f5f5f5',
+                  padding: '12px',
+                  borderRadius: '6px',
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  border: '1px solid #e8e8e8',
+                  maxHeight: '200px',
+                  overflow: 'auto'
+                }}>
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                    {prompt.isPassive 
+                      ? JSON.stringify(prompt.passiveData.parameters, null, 2)
+                      : prompt.threats[0].evidence
+                    }
+                  </pre>
+                </div>
+              </div>
+            ) : null}
+
+            {/* 显示返回结果 */}
+            {(prompt.isPassive && prompt.passiveData && prompt.passiveData.result) || 
+             (!prompt.isPassive && prompt.threats && prompt.threats.length > 0 && prompt.threats[0].evidence) ? (
+              <div style={{ marginTop: 16 }}>
+                <Title level={5}>返回结果</Title>
+                <div style={{
+                  backgroundColor: '#f0f8ff',
+                  padding: '12px',
+                  borderRadius: '6px',
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  border: '1px solid #bae7ff',
+                  maxHeight: '200px',
+                  overflow: 'auto'
+                }}>
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                    {prompt.isPassive 
+                      ? JSON.stringify(prompt.passiveData.result, null, 2)
+                      : prompt.threats[0].evidence
+                    }
+                  </pre>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {/* 显示威胁信息 */}
@@ -1125,12 +1706,155 @@ const SecurityPanel: React.FC = () => {
       content: (
         <div>
           <div style={{ marginBottom: 16 }}>
-            <Text strong>{t.security.riskLevel}: </Text>
-            <Tag color={getRiskLevelColor(resource.riskLevel)}>
-              {t.security.riskLevels[resource.riskLevel as keyof typeof t.security.riskLevels] || resource.riskLevel}
-            </Tag>
+            <Space>
+              <Text strong>{t.security.riskLevel}: </Text>
+              <Tag color={getRiskLevelColor(resource.riskLevel)}>
+                {t.security.riskLevels[resource.riskLevel as keyof typeof t.security.riskLevels] || resource.riskLevel}
+              </Tag>
+              {resource.isPassive ? (
+                <Tag color="blue">被动检测</Tag>
+              ) : (
+                <Tag color="green">主动扫描</Tag>
+              )}
+            </Space>
+            {resource.isPassive && resource.timestamp && (
+              <div style={{ marginTop: 8, fontSize: '12px', color: '#666' }}>
+                <Text>检测时间: {new Date(resource.timestamp).toLocaleString()}</Text>
+              </div>
+            )}
+            
+            {/* 显示调用参数 */}
+            {(resource.isPassive && resource.passiveData && resource.passiveData.parameters) || 
+             (!resource.isPassive && resource.risks && resource.risks.length > 0 && resource.risks[0].evidence) ? (
+              <div style={{ marginTop: 16 }}>
+                <Title level={5}>调用参数</Title>
+                <div style={{
+                  backgroundColor: '#f5f5f5',
+                  padding: '12px',
+                  borderRadius: '6px',
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  border: '1px solid #e8e8e8',
+                  maxHeight: '200px',
+                  overflow: 'auto'
+                }}>
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                    {resource.isPassive 
+                      ? JSON.stringify(resource.passiveData.parameters, null, 2)
+                      : resource.risks[0].evidence
+                    }
+                  </pre>
+                </div>
+              </div>
+            ) : null}
+
+            {/* 显示返回结果 */}
+            {(resource.isPassive && resource.passiveData && resource.passiveData.result) || 
+             (!resource.isPassive && resource.risks && resource.risks.length > 0 && resource.risks[0].evidence) ? (
+              <div style={{ marginTop: 16 }}>
+                <Title level={5}>返回结果</Title>
+                <div style={{
+                  backgroundColor: '#f0f8ff',
+                  padding: '12px',
+                  borderRadius: '6px',
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  border: '1px solid #bae7ff',
+                  maxHeight: '200px',
+                  overflow: 'auto'
+                }}>
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                    {resource.isPassive 
+                      ? JSON.stringify(resource.passiveData.result, null, 2)
+                      : resource.risks[0].evidence
+                    }
+                  </pre>
+                </div>
+              </div>
+            ) : null}
           </div>
 
+          {/* 显示主要风险列表 */}
+          {resource.risks && resource.risks.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <Title level={5}>主要风险列表</Title>
+              <div style={{ marginBottom: 16 }}>
+                <Text type="secondary">
+                  总风险数: {resource.risks.length}
+                </Text>
+              </div>
+              {resource.risks.map((risk: any, index: number) => (
+                <Card 
+                  key={index} 
+                  size="small" 
+                  style={{ 
+                    marginBottom: 12,
+                    border: `2px solid ${getRiskLevelColor(risk.severity)}`,
+                    borderRadius: '8px',
+                    backgroundColor: '#fafafa'
+                  }}
+                  title={
+                    <Space>
+                      <Tag color="blue" style={{ fontSize: '12px' }}>
+                        #{index + 1}
+                      </Tag>
+                      <Text strong style={{ fontSize: '14px' }}>
+                        {risk.type}
+                      </Text>
+                      <Tag color={getRiskLevelColor(risk.severity)}>
+                        {t.security.riskLevels[risk.severity as keyof typeof t.security.riskLevels] || risk.severity}
+                      </Tag>
+                    </Space>
+                  }
+                >
+                  <div style={{ fontSize: '13px', marginBottom: 12 }}>
+                    <div style={{ marginBottom: 8 }}>
+                      <Text strong>{t.security.description}:</Text>
+                      <div style={{ 
+                        marginTop: 4,
+                        color: '#666',
+                        fontSize: '12px',
+                        lineHeight: '1.4'
+                      }}>
+                        {risk.description}
+                      </div>
+                    </div>
+                    
+                    {risk.evidence && (
+                      <div style={{ marginBottom: 8 }}>
+                        <Text strong>风险证据:</Text>
+                        <div style={{ 
+                          backgroundColor: '#f5f5f5', 
+                          padding: '8px 12px', 
+                          borderRadius: '6px',
+                          fontFamily: 'monospace',
+                          fontSize: '12px',
+                          border: '1px solid #e8e8e8',
+                          maxHeight: '120px',
+                          overflow: 'auto',
+                          marginTop: 4
+                        }}>
+                          {risk.evidence}
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div>
+                      <Text strong>{t.security.recommendation}:</Text>
+                      <div style={{ 
+                        marginTop: 4,
+                        color: '#666',
+                        fontSize: '12px',
+                        lineHeight: '1.4'
+                      }}>
+                        {risk.recommendation}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
 
           {/* 显示访问测试结果 */}
           {resource.accessTests && resource.accessTests.length > 0 && (
@@ -1199,7 +1923,6 @@ const SecurityPanel: React.FC = () => {
               ))}
             </div>
           )}
-
 
           {/* 输出llm静态评测结果 */}
           {resource.llmAnalysis && (
@@ -1318,42 +2041,76 @@ const SecurityPanel: React.FC = () => {
   };
 
   const renderOverview = () => {
-    if (!currentReport) {
-      return (
-        <Empty 
-          description={t.security.noData}
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-        />
-      );
-    }
-
     // 收集严重和高风险问题
     const criticalIssues: any[] = [];
     const highRiskIssues: any[] = [];
 
-    // 从工具结果中收集问题
-    currentReport.toolResults.forEach(tool => {
-      tool.vulnerabilities.forEach(vuln => {
-        const issue = {
-          sourceType: 'tool',
-          source: tool.toolName,
-          ...vuln
-        };
-        if (vuln.severity === 'critical') {
-          criticalIssues.push(issue);
-        } else if (vuln.severity === 'high') {
-          highRiskIssues.push(issue);
-        }
+    // 从主动扫描结果中收集问题
+    if (currentReport) {
+      // 从工具结果中收集问题
+      currentReport.toolResults.forEach(tool => {
+        tool.vulnerabilities.forEach(vuln => {
+          const issue = {
+            sourceType: 'tool',
+            source: tool.toolName,
+            scanType: 'active',
+            ...vuln
+          };
+          if (vuln.severity === 'critical') {
+            criticalIssues.push(issue);
+          } else if (vuln.severity === 'high') {
+            highRiskIssues.push(issue);
+          }
+        });
       });
-    });
 
-    // 从提示结果中收集问题
-    currentReport.promptResults.forEach(prompt => {
-      prompt.threats.forEach(threat => {
+      // 从提示结果中收集问题
+      currentReport.promptResults.forEach(prompt => {
+        prompt.threats.forEach(threat => {
+          const issue = {
+            sourceType: 'prompt',
+            source: prompt.promptName,
+            scanType: 'active',
+            ...threat
+          };
+          if (threat.severity === 'critical') {
+            criticalIssues.push(issue);
+          } else if (threat.severity === 'high') {
+            highRiskIssues.push(issue);
+          }
+        });
+      });
+
+      // 从资源结果中收集问题
+      currentReport.resourceResults.forEach(resource => {
+        resource.risks.forEach(risk => {
+          const issue = {
+            sourceType: 'resource',
+            source: resource.resourceUri,
+            scanType: 'active',
+            ...risk
+          };
+          if (risk.severity === 'critical') {
+            criticalIssues.push(issue);
+          } else if (risk.severity === 'high') {
+            highRiskIssues.push(issue);
+          }
+        });
+      });
+    }
+
+    // 从被动检测结果中收集问题
+    passiveResults.forEach(result => {
+      result.threats.forEach(threat => {
         const issue = {
-          sourceType: 'prompt',
-          source: prompt.promptName,
-          ...threat
+          sourceType: result.type,
+          source: result.targetName,
+          scanType: 'passive',
+          description: threat.description,
+          type: threat.type,
+          severity: threat.severity,
+          recommendation: result.recommendation,
+          timestamp: result.timestamp
         };
         if (threat.severity === 'critical') {
           criticalIssues.push(issue);
@@ -1363,41 +2120,167 @@ const SecurityPanel: React.FC = () => {
       });
     });
 
-    // 从资源结果中收集问题
-    currentReport.resourceResults.forEach(resource => {
-      resource.risks.forEach(risk => {
-        const issue = {
-          sourceType: 'resource',
-          source: resource.resourceUri,
-          ...risk
-        };
-        if (risk.severity === 'critical') {
-          criticalIssues.push(issue);
-        } else if (risk.severity === 'high') {
-          highRiskIssues.push(issue);
-        }
-      });
-    });
+    // 计算统计数据
+    const activeStats = currentReport ? {
+      totalIssues: currentReport.summary.totalIssues,
+      criticalIssues: currentReport.summary.criticalIssues,
+      highIssues: currentReport.summary.highIssues,
+      mediumIssues: currentReport.summary.mediumIssues,
+      lowIssues: currentReport.summary.lowIssues
+    } : {
+      totalIssues: 0,
+      criticalIssues: 0,
+      highIssues: 0,
+      mediumIssues: 0,
+      lowIssues: 0
+    };
+
+    // 计算被动检测统计数据
+    const passiveStats = {
+      totalIssues: passiveResults.length,
+      criticalIssues: passiveResults.filter(r => r.riskLevel === 'critical').length,
+      highIssues: passiveResults.filter(r => r.riskLevel === 'high').length,
+      mediumIssues: passiveResults.filter(r => r.riskLevel === 'medium').length,
+      lowIssues: passiveResults.filter(r => r.riskLevel === 'low').length
+    };
+
+    // 合并统计数据
+    const combinedStats = {
+      totalIssues: activeStats.totalIssues + passiveStats.totalIssues,
+      criticalIssues: activeStats.criticalIssues + passiveStats.criticalIssues,
+      highIssues: activeStats.highIssues + passiveStats.highIssues,
+      mediumIssues: activeStats.mediumIssues + passiveStats.mediumIssues,
+      lowIssues: activeStats.lowIssues + passiveStats.lowIssues
+    };
+
+    // 如果没有数据，显示空状态
+    if (!currentReport && passiveResults.length === 0) {
+      return (
+        <Empty 
+          description={t.security.noData}
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+        />
+      );
+    }
 
     return (
       <div>
+        {/* 保存按钮 */}
+        <Card style={{ marginBottom: 16 }} size="small">
+          <Row justify="space-between" align="middle">
+                      <Col>
+            <Space>
+              <Text strong>检测结果管理</Text>
+              {currentReport && (
+                <Tag color="blue">
+                  主动扫描 结果
+                </Tag>
+              )}
+              {passiveResults.length > 0 && (
+                <Tag color="green">
+                  被动检测 结果 ({passiveResults.length})
+                </Tag>
+              )}
+              {!currentReport && passiveResults.length === 0 && (
+                <Tag color="orange">
+                  暂无检测结果
+                </Tag>
+              )}
+            </Space>
+            {(currentReport || passiveResults.length > 0) && (
+              <div style={{ marginTop: 8, fontSize: '12px', color: '#666' }}>
+                <Text type="secondary">
+                  {currentReport && passiveResults.length > 0 
+                    ? `主动扫描: ${new Date(currentReport.timestamp).toLocaleString()} | 被动检测: 实时更新`
+                    : currentReport 
+                      ? `主动扫描: ${new Date(currentReport.timestamp).toLocaleString()}`
+                      : '被动检测: 实时更新'
+                  }
+                </Text>
+              </div>
+            )}
+          </Col>
+            <Col>
+              <Space>
+                <Button 
+                  type="primary" 
+                  icon={<DownloadOutlined />}
+                  onClick={handleSaveCurrentResults}
+                  disabled={!currentReport && passiveResults.length === 0}
+                >
+                  保存检测结果
+                </Button>
+                <Button 
+                  icon={<HistoryOutlined />}
+                  onClick={() => setActiveTab('history')}
+                >
+                  查看历史记录
+                </Button>
+                {(currentReport || passiveResults.length > 0) && (
+                  <Button 
+                    icon={<CloseCircleOutlined />}
+                    onClick={() => {
+                      setCurrentReport(null);
+                      setPassiveResults([]);
+                      message.info('已清空当前检测结果');
+                    }}
+                    danger
+                  >
+                    清空结果
+                  </Button>
+                )}
+              </Space>
+            </Col>
+          </Row>
+          {/* 添加说明文字 */}
+          {(!currentReport && passiveResults.length === 0) && (
+            <div style={{ marginTop: 12, fontSize: '12px', color: '#666' }}>
+              <Text type="secondary">
+                提示：主动扫描和被动检测的结果会同时显示。断开连接后结果会被清空，请及时保存重要结果。
+              </Text>
+            </div>
+          )}
+          {(currentReport || passiveResults.length > 0) && (
+            <div style={{ marginTop: 12, fontSize: '12px', color: '#666' }}>
+              <Text type="secondary">
+                提示：可以点击"保存检测结果"将当前结果保存到历史记录，或点击"清空结果"清除当前显示的结果。
+              </Text>
+            </div>
+          )}
+        </Card>
+
         <Row gutter={16} style={{ marginBottom: 24 }}>
           <Col span={6}>
             <Card>
               <Statistic
                 title={t.security.overallRisk}
-                value={t.security.riskLevels[currentReport.overallRisk as keyof typeof t.security.riskLevels]}
-                valueStyle={{ color: getRiskLevelColor(currentReport.overallRisk), textAlign: 'center' }}
+                value={currentReport ? t.security.riskLevels[currentReport.overallRisk as keyof typeof t.security.riskLevels] : t.security.riskLevels.low}
+                valueStyle={{ color: currentReport ? getRiskLevelColor(currentReport.overallRisk) : '#52c41a', textAlign: 'center' }}
               />
+              {!currentReport && passiveResults.length > 0 && (
+                <div style={{ fontSize: '12px', color: '#666', textAlign: 'center', marginTop: 8 }}>
+                  <Text type="secondary">仅被动检测</Text>
+                </div>
+              )}
+              {currentReport && passiveResults.length > 0 && (
+                <div style={{ fontSize: '12px', color: '#666', textAlign: 'center', marginTop: 8 }}>
+                  <Text type="secondary">主动+被动</Text>
+                </div>
+              )}
+              {currentReport && passiveResults.length === 0 && (
+                <div style={{ fontSize: '12px', color: 'center', marginTop: 8 }}>
+                  <Text type="secondary">仅主动扫描</Text>
+                </div>
+              )}
             </Card>
           </Col>
           <Col span={6}>
             <Card>
               <Statistic
                 title={t.security.totalIssues}
-                value={currentReport.summary.totalIssues}
+                value={combinedStats.totalIssues}
                 prefix={<AlertOutlined />}
-                valueStyle={{ color: currentReport.summary.totalIssues > 0 ? '#ff4d4f' : '#52c41a', textAlign: 'center' }}
+                valueStyle={{ color: combinedStats.totalIssues > 0 ? '#ff4d4f' : '#52c41a', textAlign: 'center' }}
               />
             </Card>
           </Col>
@@ -1405,7 +2288,7 @@ const SecurityPanel: React.FC = () => {
             <Card>
               <Statistic
                 title={t.security.criticalIssues}
-                value={currentReport.summary.criticalIssues}
+                value={combinedStats.criticalIssues}
                 prefix={<ExclamationCircleOutlined />}
                 valueStyle={{ color: '#ff4d4f', textAlign: 'center' }}
               />
@@ -1415,7 +2298,7 @@ const SecurityPanel: React.FC = () => {
             <Card>
               <Statistic
                 title={t.security.highIssues}
-                value={currentReport.summary.highIssues}
+                value={combinedStats.highIssues}
                 prefix={<WarningOutlined />}
                 valueStyle={{ color: '#ff7a45', textAlign: 'center' }}
               />
@@ -1429,38 +2312,105 @@ const SecurityPanel: React.FC = () => {
               <Space direction="vertical" style={{ width: '100%' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <Text>{t.security.criticalRisk}: </Text>
-                  <Tag color="red">{currentReport.summary.criticalIssues}</Tag>
+                  <Tag color="red">{combinedStats.criticalIssues}</Tag>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <Text>{t.security.highRisk}: </Text>
-                  <Tag color="orange">{currentReport.summary.highIssues}</Tag>
+                  <Tag color="orange">{combinedStats.highIssues}</Tag>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <Text>{t.security.mediumRisk}: </Text>
-                  <Tag color="gold">{currentReport.summary.mediumIssues}</Tag>
+                  <Tag color="gold">{combinedStats.mediumIssues}</Tag>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <Text>{t.security.lowRisk}: </Text>
-                  <Tag color="green">{currentReport.summary.lowIssues}</Tag>
+                  <Tag color="green">{combinedStats.lowIssues}</Tag>
                 </div>
               </Space>
+              {(currentReport || passiveResults.length > 0) && (
+                <div style={{ marginTop: 8, fontSize: '12px', color: '#666' }}>
+                  <Text type="secondary">
+                    {currentReport && passiveResults.length > 0 
+                      ? '包含主动扫描和被动检测结果'
+                      : currentReport 
+                        ? '仅主动扫描结果'
+                        : '仅被动检测结果'
+                    }
+                  </Text>
+                </div>
+              )}
             </Card>
           </Col>
           <Col span={12}>
             <Card title={t.security.recommendations} size="small">
               <Space direction="vertical">
-                {currentReport.recommendations.map((rec, index) => (
+                {currentReport?.recommendations?.map((rec, index) => (
                   <Alert
                     key={index}
                     type="info"
                     message={rec}
                     showIcon
                   />
-                ))}
+                )) || (
+                  <Alert
+                    type="info"
+                    message="暂无建议"
+                    showIcon
+                  />
+                )}
               </Space>
             </Card>
           </Col>
         </Row>
+
+        {/* 被动检测统计信息 */}
+        {passiveResults.length > 0 && (
+          <Row gutter={16} style={{ marginBottom: 24 }}>
+            <Col span={24}>
+              <Card title="被动检测统计" size="small">
+                <Row gutter={16}>
+                  <Col span={6}>
+                    <Statistic
+                      title="总检测次数"
+                      value={passiveStats.totalIssues}
+                      prefix={<AlertOutlined />}
+                      valueStyle={{ color: '#1890ff' }}
+                    />
+                  </Col>
+                  <Col span={6}>
+                    <Statistic
+                      title="严重风险"
+                      value={passiveStats.criticalIssues}
+                      prefix={<ExclamationCircleOutlined />}
+                      valueStyle={{ color: '#ff4d4f' }}
+                    />
+                  </Col>
+                  <Col span={6}>
+                    <Statistic
+                      title="高风险"
+                      value={passiveStats.highIssues}
+                      prefix={<WarningOutlined />}
+                      valueStyle={{ color: '#ff7a45' }}
+                    />
+                  </Col>
+                  <Col span={6}>
+                    <Statistic
+                      title="中等风险"
+                      value={passiveStats.mediumIssues}
+                      prefix={<SafetyCertificateOutlined />}
+                      valueStyle={{ color: '#ffa940' }}
+                    />
+                  </Col>
+                </Row>
+                <div style={{ marginTop: 12, fontSize: '12px', color: '#666' }}>
+                  <Text type="secondary">
+                    被动检测结果会实时更新，与主动扫描结果同时显示。断开连接后结果会被清空。
+                  </Text>
+                </div>
+              </Card>
+            </Col>
+          </Row>
+        )}
 
         {/* 综合安全分析 */}
         {currentReport?.comprehensiveRiskAnalysis && (
@@ -1487,6 +2437,9 @@ const SecurityPanel: React.FC = () => {
                           <Text strong>{issue.description}</Text>
                           <div style={{ marginTop: 4, fontSize: '12px', color: '#666' }}>
                             {t.security.source}: {issue.source} ({t.security.sourceTypes[issue.sourceType as keyof typeof t.security.sourceTypes]})
+                            {issue.scanType === 'passive' && (
+                              <Tag color="blue" style={{ marginLeft: 8 }}>被动检测</Tag>
+                            )}
                           </div>
                         </div>
                       }
@@ -1494,6 +2447,9 @@ const SecurityPanel: React.FC = () => {
                         <div style={{ fontSize: '12px' }}>
                           <div><strong>{t.security.riskType}:</strong> {issue.type}</div>
                           <div><strong>{t.security.suggestion}:</strong> {issue.recommendation}</div>
+                          {issue.scanType === 'passive' && issue.timestamp && (
+                            <div><strong>检测时间:</strong> {new Date(issue.timestamp).toLocaleString()}</div>
+                          )}
                         </div>
                       }
                     />
@@ -1520,6 +2476,9 @@ const SecurityPanel: React.FC = () => {
                           <Text strong>{issue.description}</Text>
                           <div style={{ marginTop: 4, fontSize: '12px', color: '#666' }}>
                             {t.security.source}: {issue.source} ({t.security.sourceTypes[issue.sourceType as keyof typeof t.security.sourceTypes]})
+                            {issue.scanType === 'passive' && (
+                              <Tag color="blue" style={{ marginLeft: 8 }}>被动检测</Tag>
+                            )}
                           </div>
                         </div>
                       }
@@ -1527,6 +2486,9 @@ const SecurityPanel: React.FC = () => {
                         <div style={{ fontSize: '12px' }}>
                           <div><strong>{t.security.riskType}:</strong> {issue.type}</div>
                           <div><strong>{t.security.suggestion}:</strong> {issue.recommendation}</div>
+                          {issue.scanType === 'passive' && issue.timestamp && (
+                            <div><strong>检测时间:</strong> {new Date(issue.timestamp).toLocaleString()}</div>
+                          )}
                         </div>
                       }
                     />
@@ -1599,6 +2561,10 @@ const SecurityPanel: React.FC = () => {
           <Switch />
         </Form.Item>
         
+        <Form.Item label={t.security.enableLLMAnalysis} name="enableLLMAnalysis" valuePropName="checked">
+          <Switch />
+        </Form.Item>
+        
         <Form.Item label={t.security.maxTestCases} name="maxTestCases">
           <InputNumber min={1} max={20} />
         </Form.Item>
@@ -1661,6 +2627,16 @@ const SecurityPanel: React.FC = () => {
                   {t.security.exportLogs}
                 </Button>
               )}
+              {/* 被动监控开关 */}
+              <Space>
+                <Switch
+                  checked={passiveMonitoringEnabled}
+                  onChange={setPassiveMonitoringEnabled}
+                  disabled={connectionStatus !== 'connected'}
+                  checkedChildren={<><ScanOutlined style={{ marginRight: 4 }} />监控中</>}
+                  unCheckedChildren="已停止"
+                />
+              </Space>
               {isScanning ? (
                 <Button 
                   icon={<PauseCircleOutlined />} 
@@ -1714,131 +2690,243 @@ const SecurityPanel: React.FC = () => {
               label: (
                 <Space>
                   {t.security.toolSecurity}
-                  {currentReport && currentReport.toolResults.length > 0 && (
-                    <Tag color="blue">{currentReport.toolResults.length}</Tag>
-                  )}
+                  {(() => {
+                    const mergedResults = getMergedResults();
+                    const totalCount = mergedResults.toolResults.length;
+                    return totalCount > 0 ? <Tag color="blue">{totalCount}</Tag> : null;
+                  })()}
                 </Space>
               ),
-              children: currentReport ? (
-                <Table
-                  dataSource={currentReport.toolResults}
-                  columns={toolColumns}
-                  rowKey="toolName"
-                  pagination={{ pageSize: 10 }}
-                />
-              ) : (
-                <Empty description={t.security.noData} />
-              )
+              children: (() => {
+                try {
+                  const mergedResults = getMergedResults();
+                  const filteredResults = filterResults(mergedResults.toolResults, toolRiskFilter, toolScanTypeFilter);
+                  
+                  return (
+                    <div>
+                      {renderFilterPanel(toolRiskFilter, setToolRiskFilter, toolScanTypeFilter, setToolScanTypeFilter)}
+                      {filteredResults.length > 0 ? (
+                        <Table
+                          dataSource={filteredResults}
+                          columns={toolColumns}
+                          rowKey={(record) => `${record.toolName}-${record.isPassive ? 'passive' : 'active'}`}
+                          pagination={{ pageSize: 10 }}
+                        />
+                      ) : (
+                        <Empty description={t.security.noData} />
+                      )}
+                    </div>
+                  );
+                } catch (error) {
+                  console.error('Error rendering tool security tab:', error);
+                  return <Empty description="加载数据时出错" />;
+                }
+              })()
             },
             {
               key: 'prompts',
               label: (
                 <Space>
                   {t.security.promptSecurity}
-                  {currentReport && currentReport.promptResults.length > 0 && (
-                    <Tag color="blue">{currentReport.promptResults.length}</Tag>
-                  )}
+                  {(() => {
+                    const mergedResults = getMergedResults();
+                    const totalCount = mergedResults.promptResults.length;
+                    return totalCount > 0 ? <Tag color="blue">{totalCount}</Tag> : null;
+                  })()}
                 </Space>
               ),
-              children: currentReport ? (
-                <Table
-                  dataSource={currentReport.promptResults}
-                  columns={[
-                    {
-                      title: t.security.promptName,
-                      dataIndex: 'promptName',
-                      key: 'promptName',
-                    },
-                    {
-                      title: t.security.riskLevel,
-                      dataIndex: 'riskLevel',
-                      key: 'riskLevel',
-                      align: 'center' as const,
-                      render: (level: SecurityRiskLevel) => (
-                        <Tag color={getRiskLevelColor(level)}>
-                          {t.security.riskLevels[level as keyof typeof t.security.riskLevels] || level}
-                        </Tag>
-                      ),
-                    },
-                    {
-                      title: t.security.threatCount,
-                      dataIndex: 'threats',
-                      key: 'threatCount',
-                      align: 'center' as const,
-                      render: (threats: any[]) => threats.length,
-                    },
-                    {
-                      title: t.llm.actions,
-                      key: 'actions',
-                      align: 'center' as const,
-                      render: (_: any, record: any) => (
-                        <Button type="link" onClick={() => showPromptDetail(record)}>
-                          {t.security.viewDetails}
-                        </Button>
-                      ),
-                    },
-                  ]}
-                  rowKey="promptName"
-                  pagination={{ pageSize: 10 }}
-                />
-              ) : (
-                <Empty description={t.security.noData} />
-              )
+                            children: (() => {
+                try {
+                  const mergedResults = getMergedResults();
+                  const filteredResults = filterResults(mergedResults.promptResults, promptRiskFilter, promptScanTypeFilter);
+                  
+                  return (
+                    <div>
+                      {renderFilterPanel(promptRiskFilter, setPromptRiskFilter, promptScanTypeFilter, setPromptScanTypeFilter)}
+                      {filteredResults.length > 0 ? (
+                        <Table
+                          dataSource={filteredResults}
+                          columns={[
+                            {
+                              title: t.security.promptName,
+                              dataIndex: 'promptName',
+                              key: 'promptName',
+                              render: (name: string, record: any) => (
+                                <Space>
+                                  <span>{name}</span>
+                                  {record.isPassive ? (
+                                    <Tag color="blue">被动检测</Tag>
+                                  ) : (
+                                    <Tag color="green">主动扫描</Tag>
+                                  )}
+                                </Space>
+                              ),
+                            },
+                            {
+                              title: t.security.riskLevel,
+                              dataIndex: 'riskLevel',
+                              key: 'riskLevel',
+                              align: 'center' as const,
+                              render: (level: SecurityRiskLevel) => (
+                                <Tag color={getRiskLevelColor(level)}>
+                                  {t.security.riskLevels[level as keyof typeof t.security.riskLevels] || level}
+                                </Tag>
+                              ),
+                            },
+                            {
+                              title: t.security.threatCount,
+                              dataIndex: 'threats',
+                              key: 'threatCount',
+                              align: 'center' as const,
+                              render: (threats: any[], record: any) => {
+                                let totalThreats = threats?.length || 0;
+                                
+                                // 如果有LLM静态分析，也计算其中的威胁数量
+                                if (record.llmAnalysis) {
+                                  try {
+                                    const analysis = typeof record.llmAnalysis === 'string' 
+                                      ? JSON.parse(record.llmAnalysis) 
+                                      : record.llmAnalysis;
+                                    if (analysis.threats && Array.isArray(analysis.threats)) {
+                                      totalThreats += analysis.threats.length;
+                                    }
+                                  } catch (error) {
+                                    // 解析失败时忽略
+                                  }
+                                }
+                                
+                                return totalThreats;
+                              },
+                            },
+                            {
+                              title: t.llm.actions,
+                              key: 'actions',
+                              align: 'center' as const,
+                              render: (_: any, record: any) => (
+                                <Button type="link" onClick={() => showPromptDetail(record)}>
+                                  {t.security.viewDetails}
+                                </Button>
+                              ),
+                            },
+                          ]}
+                          rowKey={(record) => `${record.promptName}-${record.isPassive ? 'passive' : 'active'}`}
+                          pagination={{ pageSize: 10 }}
+                        />
+                      ) : (
+                        <Empty description={t.security.noData} />
+                      )}
+                    </div>
+                  );
+                } catch (error) {
+                  console.error('Error rendering prompt security tab:', error);
+                  return <Empty description="加载数据时出错" />;
+                }
+              })()
             },
             {
               key: 'resources',
               label: (
                 <Space>
                   {t.security.resourceSecurity}
-                  {currentReport && currentReport.resourceResults.length > 0 && (
-                    <Tag color="blue">{currentReport.resourceResults.length}</Tag>
-                  )}
+                  {(() => {
+                    const mergedResults = getMergedResults();
+                    const totalCount = mergedResults.resourceResults.length;
+                    return totalCount > 0 ? <Tag color="blue">{totalCount}</Tag> : null;
+                  })()}
                 </Space>
               ),
-              children: currentReport ? (
-                <Table
-                  dataSource={currentReport.resourceResults}
-                  columns={[
-                    {
-                      title: t.security.resourceUri,
-                      dataIndex: 'resourceUri',
-                      key: 'resourceUri',
-                    },
-                    {
-                      title: t.security.riskLevel,
-                      dataIndex: 'riskLevel',
-                      key: 'riskLevel',
-                      align: 'center' as const,
-                      render: (level: SecurityRiskLevel) => (
-                        <Tag color={getRiskLevelColor(level)}>
-                          {t.security.riskLevels[level as keyof typeof t.security.riskLevels] || level}
-                        </Tag>
-                      ),
-                    },
-                    {
-                      title: t.security.riskCount,
-                      dataIndex: 'risks',
-                      key: 'riskCount',
-                      align: 'center' as const,
-                      render: (risks: any[]) => risks.length,
-                    },
-                    {
-                      title: t.llm.actions,
-                      key: 'actions',
-                      align: 'center' as const,
-                      render: (_: any, record: any) => (
-                        <Button type="link" onClick={() => showResourceDetail(record)}>
-                          {t.security.viewDetails}
-                        </Button>
-                      ),
-                    },
-                  ]}
-                  rowKey="resourceUri"
-                  pagination={{ pageSize: 10 }}
-                />
-              ) : (
-                <Empty description={t.security.noData} />
-              )
+                            children: (() => {
+                try {
+                  const mergedResults = getMergedResults();
+                  const filteredResults = filterResults(mergedResults.resourceResults, resourceRiskFilter, resourceScanTypeFilter);
+                  
+                  return (
+                    <div>
+                      {renderFilterPanel(resourceRiskFilter, setResourceRiskFilter, resourceScanTypeFilter, setResourceScanTypeFilter)}
+                      {filteredResults.length > 0 ? (
+                        <Table
+                          dataSource={filteredResults}
+                          columns={[
+                            {
+                              title: t.security.resourceUri,
+                              dataIndex: 'resourceUri',
+                              key: 'resourceUri',
+                              render: (uri: string, record: any) => (
+                                <Space>
+                                  <span>{uri}</span>
+                                  {record.isPassive ? (
+                                    <Tag color="blue">被动检测</Tag>
+                                  ) : (
+                                    <Tag color="green">主动扫描</Tag>
+                                  )}
+                                </Space>
+                              ),
+                            },
+                            {
+                              title: t.security.riskLevel,
+                              dataIndex: 'riskLevel',
+                              key: 'riskLevel',
+                              align: 'center' as const,
+                              render: (level: SecurityRiskLevel) => (
+                                <Tag color={getRiskLevelColor(level)}>
+                                  {t.security.riskLevels[level as keyof typeof t.security.riskLevels] || level}
+                                </Tag>
+                              ),
+                            },
+                            {
+                              title: t.security.riskCount,
+                              dataIndex: 'risks',
+                              key: 'riskCount',
+                              align: 'center' as const,
+                              render: (risks: any[], record: any) => {
+                                let totalRisks = risks?.length || 0;
+                                
+                                // 如果有访问测试结果，也计算其中的数量
+                                if (record.accessTests && Array.isArray(record.accessTests)) {
+                                  totalRisks += record.accessTests.length;
+                                }
+                                
+                                // 如果有LLM静态分析，也计算其中的风险数量
+                                if (record.llmAnalysis) {
+                                  try {
+                                    const analysis = typeof record.llmAnalysis === 'string' 
+                                      ? JSON.parse(record.llmAnalysis) 
+                                      : record.llmAnalysis;
+                                    if (analysis.risks && Array.isArray(analysis.risks)) {
+                                      totalRisks += analysis.risks.length;
+                                    }
+                                  } catch (error) {
+                                    // 解析失败时忽略
+                                  }
+                                }
+                                
+                                return totalRisks;
+                              },
+                            },
+                            {
+                              title: t.llm.actions,
+                              key: 'actions',
+                              align: 'center' as const,
+                              render: (_: any, record: any) => (
+                                <Button type="link" onClick={() => showResourceDetail(record)}>
+                                  {t.security.viewDetails}
+                                </Button>
+                              ),
+                            },
+                          ]}
+                          rowKey={(record) => `${record.resourceUri}-${record.isPassive ? 'passive' : 'active'}`}
+                          pagination={{ pageSize: 10 }}
+                        />
+                      ) : (
+                        <Empty description={t.security.noData} />
+                      )}
+                    </div>
+                  );
+                } catch (error) {
+                  console.error('Error rendering resource security tab:', error);
+                  return <Empty description="加载数据时出错" />;
+                }
+              })()
             },
             {
               key: 'passive',
@@ -1851,6 +2939,9 @@ const SecurityPanel: React.FC = () => {
               children: (
                 <PassiveSecurityTester
                   config={scanConfig}
+                  onNewPassiveResult={handleNewPassiveResult}
+                  enabled={passiveMonitoringEnabled}
+                  onEnabledChange={setPassiveMonitoringEnabled}
                 />
               )
             },
@@ -1871,6 +2962,20 @@ const SecurityPanel: React.FC = () => {
                   isScanning={isScanning}
                   onClearLogs={handleClearLogs}
                   onExportLogs={handleExportLogs}
+                />
+              )
+            },
+            {
+              key: 'history',
+              label: (
+                <Space>
+                  <HistoryOutlined />
+                  检测历史
+                </Space>
+              ),
+              children: (
+                <SecurityHistoryPanel
+                  onRestoreRecord={handleRestoreHistoryRecord}
                 />
               )
             }

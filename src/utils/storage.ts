@@ -11,7 +11,8 @@ const STORAGE_KEYS = {
   HISTORY: 'mcp_call_history',
   SETTINGS: 'mcp_settings',
   LLM_CONFIGS: 'mcp_llm_configs',
-  DETECTION_RULES: 'mcp_detection_rules'
+  DETECTION_RULES: 'mcp_detection_rules',
+  SECURITY_HISTORY: 'mcp_security_history'
 } as const;
 
 export const storage = {
@@ -550,6 +551,74 @@ export const detectionRuleStorage = {
       localStorage.removeItem(STORAGE_KEYS.DETECTION_RULES);
     } catch (error) {
       console.error('清除检测规则失败:', error);
+    }
+  }
+};
+
+// 安全检测历史存储函数
+export const securityHistoryStorage = {
+  /**
+   * 保存安全检测历史
+   */
+  saveSecurityHistory: (history: any[]) => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.SECURITY_HISTORY, JSON.stringify(history));
+    } catch (error) {
+      console.error('保存安全检测历史失败:', error);
+    }
+  },
+
+  /**
+   * 获取安全检测历史
+   */
+  getSecurityHistory: (): any[] => {
+    try {
+      const history = localStorage.getItem(STORAGE_KEYS.SECURITY_HISTORY);
+      return history ? JSON.parse(history) : [];
+    } catch (error) {
+      console.error('获取安全检测历史失败:', error);
+      return [];
+    }
+  },
+
+  /**
+   * 添加安全检测记录
+   */
+  addSecurityRecord: (record: any) => {
+    try {
+      const history = securityHistoryStorage.getSecurityHistory();
+      history.unshift(record);
+      // 限制历史记录数量，保留最新的100条
+      if (history.length > 100) {
+        history.splice(100);
+      }
+      securityHistoryStorage.saveSecurityHistory(history);
+    } catch (error) {
+      console.error('添加安全检测记录失败:', error);
+    }
+  },
+
+  /**
+   * 删除安全检测记录
+   */
+  deleteSecurityRecord: (id: string) => {
+    try {
+      const history = securityHistoryStorage.getSecurityHistory();
+      const filteredHistory = history.filter(record => record.id !== id);
+      securityHistoryStorage.saveSecurityHistory(filteredHistory);
+    } catch (error) {
+      console.error('删除安全检测记录失败:', error);
+    }
+  },
+
+  /**
+   * 清除所有安全检测历史
+   */
+  clearSecurityHistory: () => {
+    try {
+      localStorage.removeItem(STORAGE_KEYS.SECURITY_HISTORY);
+    } catch (error) {
+      console.error('清除安全检测历史失败:', error);
     }
   }
 }; 

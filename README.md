@@ -1,190 +1,181 @@
-# MCP Security Inspector | MCP安全检测器
+# MCP Security Inspector
 
-[English](#english) | [中文](#chinese)
+一个用于检测MCP（Model Context Protocol）服务器安全性的Chrome扩展。
 
-## English
+## 功能特性
 
-A professional security testing tool for Model Context Protocol (MCP) servers. This Chrome extension helps developers and security researchers evaluate the security of MCP implementations.
+### 🔍 统一安全检测引擎
 
-### 🌟 Features
+最新版本引入了统一的安全检测引擎，支持对MCP组件进行一致的安全分析：
 
-- **🛡️ Comprehensive Security Testing**: Automatically analyze MCP tools, resources, and prompts for potential security risks
-- **🌐 Multi-language Support**: Full internationalization with Chinese and English language support
-- **🔧 Multiple Authentication Methods**: Support for API Key, Basic Auth, Custom Headers, and Combined Authentication
-- **📊 Real-time Risk Assessment**: Categorize risks as Low, Medium, High, or Critical with detailed recommendations
-- **📈 History Tracking**: Keep detailed records of all testing activities
-- **🔒 Privacy-First Design**: All data processed locally, no external data transmission
-- **🎨 Modern UI**: Clean, intuitive interface built with Ant Design
+#### 支持的检测类型
+- **工具（Tool）检测**: 分析MCP工具的安全性，包括权限风险、输入验证、数据泄露等
+- **提示（Prompt）检测**: 检测提示注入、恶意引导、信息泄露等风险
+- **资源（Resource）检测**: 分析资源访问控制、路径遍历、内容注入等安全问题
 
-### 🚀 Installation
+#### 检测流程
+1. **静态分析**: 对组件定义进行敏感信息检测和关键词风险分析
+2. **LLM增强分析**: 使用大语言模型进行深度安全分析
+3. **动态测试**: 使用提供的参数执行实际测试（可选）
+4. **智能测试生成**: 自动生成并执行安全测试用例
 
-#### Option 1: Chrome Web Store (Recommended | 推荐)
-1. Visit [MCP Security Inspector on Chrome Web Store](https://chromewebstore.google.com/detail/mcp-security-inspector/opajbcoflmgkjmjafchlgehgllbekgeo?hl=en-US&utm_source=ext_sidebar)
-2. Click "Add to Chrome" to install the extension
-3. The extension will be automatically installed and ready to use
+#### 新增功能
+- **参数支持**: 所有检测类型现在都支持传入参数进行动态测试
+- **统一接口**: 使用 `performSecurityAnalysis()` 函数进行统一检测
+- **类型安全**: 根据组件类型自动选择相应的检测逻辑
 
-#### Option 2: Manual Installation (Developer Mode | 开发者模式)
-1. Download the latest release from [GitHub Releases](https://github.com/purpleroc/mcp-security-inspector/releases)
-2. Extract the ZIP file
-3. Open Chrome and navigate to `chrome://extensions/`
-4. Enable "Developer mode"
-5. Click "Load unpacked" and select the extracted folder
+#### 使用示例
 
-### 🛠️ Usage
+```typescript
+// 检测工具（带参数）
+const toolResult = await securityEngine.performSecurityAnalysis(
+  'tool',
+  toolObject,
+  config,
+  { input: 'test parameter' }
+);
 
-1. **Configuration**: Set up your MCP server connection details
-2. **Language Selection**: Choose your preferred language (Chinese/English) from the top-right dropdown
-3. **Testing**: Browse and test available tools, resources, and prompts
-4. **Analysis**: Review security assessments and recommendations
-5. **History**: Track your testing activities over time
+// 检测提示（带参数）
+const promptResult = await securityEngine.performSecurityAnalysis(
+  'prompt',
+  promptObject,
+  config,
+  { message: 'test message' }
+);
 
-### 🔧 Development
-
-   ```bash
-# Install dependencies
-   npm install
-
-# Start development server
-npm run dev
-
-# Build for production
-   npm run build:extension
-
-# Package for distribution
-npm run package
+// 检测资源（带参数）
+const resourceResult = await securityEngine.performSecurityAnalysis(
+  'resource',
+  resourceObject,
+  config,
+  { path: '/test/path' }
+);
 ```
 
-### 📋 System Requirements
+### 🛡️ 安全检测功能
 
-- Chrome Browser 88+
-- Access to MCP protocol-compliant servers
+#### 主动扫描
+- 全面的安全漏洞扫描
+- 智能测试用例生成
+- LLM增强的安全分析
+- 实时进度监控
 
-### 🔒 Permissions
+#### 被动检测
+- 实时监控MCP调用
+- 自动威胁检测
+- 风险等级评估
+- 安全日志记录
 
-- **Host Permissions (`<all_urls>`)**: Required to connect to MCP servers and handle CORS
-- **No Storage Permission**: All data is stored using standard localStorage (no special permissions needed)
+#### 检测规则
+- 敏感信息泄露检测
+- 注入攻击检测
+- 权限提升检测
+- 恶意代码检测
 
----
+### 📊 报告和分析
 
-## Chinese
+#### 综合安全报告
+- 风险等级评估
+- 漏洞详情分析
+- 修复建议
+- 历史记录管理
 
-专业的Model Context Protocol (MCP) 服务器安全测试工具。这个Chrome扩展帮助开发者和安全研究人员评估MCP实现的安全性。
+#### 可视化界面
+- 实时检测状态
+- 风险分布图表
+- 详细检测日志
+- 导出功能
 
-### 🌟 功能特性
+## 安装和使用
 
-- **🛡️ 全面安全测试**: 自动分析MCP工具、资源和提示的潜在安全风险
-- **🌐 多语言支持**: 完整的国际化支持，提供中英文语言切换
-- **🔧 多种认证方式**: 支持API Key、Basic认证、自定义请求头和组合认证
-- **📊 实时风险评估**: 将风险分类为低、中、高、严重四个等级，并提供详细建议
-- **📈 历史记录**: 保留所有测试活动的详细记录
-- **🔒 隐私优先设计**: 所有数据本地处理，无外部数据传输
-- **🎨 现代化界面**: 基于Ant Design构建的简洁直观界面
+### 安装步骤
 
-### 🚀 安装方法
+1. 下载扩展文件
+2. 在Chrome中打开 `chrome://extensions/`
+3. 启用开发者模式
+4. 点击"加载已解压的扩展程序"
+5. 选择扩展文件夹
 
-#### 方法一：Chrome插件商城（推荐）
-1. 访问 [Chrome插件商城中的MCP安全检测器](https://chromewebstore.google.com/detail/mcp-security-inspector/opajbcoflmgkjmjafchlgehgllbekgeo?hl=en-US&utm_source=ext_sidebar)
-2. 点击"添加至Chrome"安装扩展程序
-3. 扩展程序将自动安装并可以使用
+### 使用方法
 
-#### 方法二：手动安装（开发者模式）
-1. 从[GitHub Releases](https://github.com/purpleroc/mcp-security-inspector/releases)下载最新版本
-2. 解压ZIP文件
-3. 打开Chrome浏览器，访问 `chrome://extensions/`
-4. 启用"开发者模式"
-5. 点击"加载已解压的扩展程序"，选择解压后的文件夹
+1. 连接到MCP服务器
+2. 配置LLM服务（可选，用于增强分析）
+3. 启动安全扫描
+4. 查看检测结果和报告
 
-### 🛠️ 使用方法
+## 配置说明
 
-1. **配置**: 设置MCP服务器连接详情
-2. **语言选择**: 从右上角下拉菜单选择首选语言（中文/英文）
-3. **测试**: 浏览和测试可用的工具、资源和提示
-4. **分析**: 查看安全评估和建议
-5. **历史**: 跟踪测试活动记录
+### LLM配置
+- 支持多种LLM服务（OpenAI、Claude等）
+- 用于生成智能测试用例和深度安全分析
+- 可选的增强功能
 
-### 🔧 开发指南
+### 检测配置
+- 自动生成测试用例数量
+- 超时设置
+- 风险等级阈值
+- 检测规则启用/禁用
 
-```bash
-# 安装依赖
-npm install
+## 开发说明
 
-# 启动开发服务器
-npm run dev
+### 统一检测引擎
 
-# 构建生产版本
-npm run build:extension
+新的统一检测引擎位于 `src/services/securityEngine.ts`，主要特点：
 
-# 打包发布
-npm run package
+1. **统一接口**: `performSecurityAnalysis()` 函数支持所有检测类型
+2. **参数支持**: 所有检测类型都支持传入参数进行动态测试
+3. **类型安全**: 根据组件类型自动选择相应的检测逻辑
+4. **模块化设计**: 易于扩展和维护
+
+### 核心函数
+
+```typescript
+// 统一安全检测函数
+public async performSecurityAnalysis(
+  type: 'tool' | 'prompt' | 'resource',
+  target: MCPTool | MCPPrompt | MCPResource,
+  config: SecurityCheckConfig,
+  parameters?: Record<string, unknown>
+): Promise<any>
 ```
 
-### 📋 系统要求
+### 检测流程
 
-- Chrome浏览器 88+
-- 需要访问符合MCP协议的服务器
+1. **静态分析阶段**
+   - 敏感信息检测
+   - 关键词风险检测
+   - 类型特定的检测逻辑
 
-### 🔒 权限说明
+2. **LLM分析阶段**
+   - 使用大语言模型进行深度分析
+   - 生成详细的安全评估报告
 
-- **主机权限 (`<all_urls>`)**: 连接MCP服务器和处理CORS所需
-- **无存储权限**: 所有数据使用标准localStorage存储（无需特殊权限）
+3. **动态测试阶段**
+   - 使用提供的参数执行实际测试
+   - 评估实际运行时的安全风险
 
-## 📋 Supported Authentication | 支持的认证方式
+4. **智能测试阶段**
+   - 自动生成安全测试用例
+   - 执行智能测试并评估结果
 
-- **None** | 无认证
-- **API Key** | API密钥认证
-- **Basic Authentication** | Basic认证
-- **Custom Headers** | 自定义请求头
-- **Combined Authentication** | 组合认证
+## 更新日志
 
-## 🌐 Supported Transport | 支持的传输方式
+### v2.0.0 - 统一检测引擎
+- ✅ 新增统一安全检测函数 `performSecurityAnalysis()`
+- ✅ 所有检测类型支持参数传入
+- ✅ 改进的检测流程和错误处理
+- ✅ 更好的类型安全和代码组织
 
-- **Server-Sent Events** | 实时通信
-- **HTTP/HTTPS** | 标准HTTP传输
-- **CORS Support** | 跨域请求处理
+### v1.x.x - 基础功能
+- ✅ 基础安全检测功能
+- ✅ 被动检测和主动扫描
+- ✅ 报告生成和导出
+- ✅ 多语言支持
 
-## 📈 Changelog | 更新日志
-### v1.0.6 (Current | 当前版本)
-- 🔧 **Improved Debugging Experience** | 改进调试体验：调试面板现在直接显示在选中工具下方，无需滚动到底部
-- 📊 **Enhanced History Display** | 优化历史显示：改进历史记录页面参数框的显示效果，确保视觉一致性
+## 贡献指南
 
-### v1.0.5
-- 🌍 **Enhanced Multi-language Support** | 增强多语言支持：支持更多国家和地区的语言
-- 📚 **History Records** | 历史记录：完整的测试历史记录和查看功能
-- 🔗 **Connection History** | 连接记录：自动保存和管理MCP服务器连接历史
+欢迎提交Issue和Pull Request来改进这个项目。
 
-### v1.0.4
-- 🏪 **Chrome Web Store Release** | Chrome插件商城发布：现在可以通过Chrome Web Store直接安装
-- 🌐 **Official Store Listing** | 官方商店上架：提供更便捷的安装方式
-- 📦 **Simplified Installation** | 简化安装：一键安装，无需开发者模式
+## 许可证
 
-### v1.0.3
-- ✨ **Multi-language Support** | 多语言支持：完整的中英文国际化
-- 🌐 **Language Switching** | 语言切换：界面内快速切换语言
-- 🔒 **Privacy Enhanced** | 隐私增强：移除不必要的storage权限
-- 📱 **Better UX** | 用户体验：改进界面和交互体验
-- 🛠️ **Enhanced Security** | 安全增强：更好的安全评估算法
-- 💾 Local storage for connection history | 本地保存历史连接服务列表
-- 📊 Enhanced call history details | 增强的调用历史详情
-- 🔐 Multiple authentication adapters | 多种认证适配器支持
-
-### v1.0.2
-- 🔧 Fixed CORS errors from removing host_permissions | 修复去掉host_permissions导致的CORS错误
-- 🧹 Removed redundant configurations | 去掉多余配置，单纯从SSE URL获取
-
-### v1.0.1
-- 🆕 New tab mode for better user experience | 新标签页模式，提供更好的用户体验
-- 🔧 Fixed HTTP 400 errors, improved MCP protocol compatibility | 修复HTTP 400错误，改进MCP协议兼容性
-- 📱 Responsive layout for different screen sizes | 响应式布局，适配不同屏幕尺寸
-- 🧪 Built-in test server for functionality verification | 内置测试服务器，便于功能验证
-- 🎨 Improved UI design and interaction experience | 改进UI设计和交互体验
-
-### v1.0.0
-- 🎉 Initial release | 初始版本发布
-- 🔒 Complete MCP protocol security testing | 支持MCP协议的完整功能
-- 🛡️ Security checks and risk assessment | 安全检查和风险评估
-- 🖥️ Complete user interface and history tracking | 完整的用户界面和历史记录
-
----
-
-**Developer | 开发者**: purpleroc  
-**Contact | 联系方式**: [GitHub Issues](https://github.com/purpleroc/mcp-security-inspector/issues) 
+MIT License 

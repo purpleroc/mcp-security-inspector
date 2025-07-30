@@ -374,7 +374,12 @@ const mcpSlice = createSlice({
     },
     
     // 重置状态
-    resetState: () => initialState
+    resetState: () => initialState,
+    
+    // 清空安全检测结果
+    clearSecurityResults: (state) => {
+      state.securityCheck = null;
+    }
   },
   
   extraReducers: (builder) => {
@@ -393,6 +398,8 @@ const mcpSlice = createSlice({
         state.selectedResource = null;
         state.selectedPrompt = null;
         state.lastResult = null;
+        state.securityCheck = null;
+        // 清空安全检测结果
         state.securityCheck = null;
       })
       .addCase(connectToServer.fulfilled, (state, action) => {
@@ -544,7 +551,8 @@ export const {
   setPrompts,
   clearHistory,
   deleteHistoryItem,
-  resetState
+  resetState,
+  clearSecurityResults
 } = mcpSlice.actions;
 
 // 导出reducer
