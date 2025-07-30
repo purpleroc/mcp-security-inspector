@@ -2619,8 +2619,8 @@ ${item.description ? `- **LLM分析**: ${item.description}` : ''}
 要求：
 1. 分析要综合考虑所有类型的风险（工具、提示、资源）
 2. 识别风险之间的关联性和整体影响
-3. 提供可执行的改进建议
-4. 报告要求精简，不超过300字
+3. 提供具体可执行的建议
+4. 根据风险等级确定处理优先级，低风险可忽略
 
 ${llmClient.getLanguageOutputRequirement()}
 `;

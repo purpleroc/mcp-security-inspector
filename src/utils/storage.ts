@@ -10,7 +10,8 @@ const STORAGE_KEYS = {
   SAVED_CONFIGS: 'mcp_saved_configs',
   HISTORY: 'mcp_call_history',
   SETTINGS: 'mcp_settings',
-  LLM_CONFIGS: 'mcp_llm_configs'
+  LLM_CONFIGS: 'mcp_llm_configs',
+  DETECTION_RULES: 'mcp_detection_rules'
 } as const;
 
 export const storage = {
@@ -512,5 +513,43 @@ const parseLLMResponse = (type: string, data: any): LLMResponse => {
       
     default:
       throw new Error(`不支持的LLM类型: ${type}`);
+  }
+}; 
+
+// 检测规则存储函数
+export const detectionRuleStorage = {
+  /**
+   * 保存检测规则
+   */
+  saveDetectionRules: (rules: any[]) => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.DETECTION_RULES, JSON.stringify(rules));
+    } catch (error) {
+      console.error('保存检测规则失败:', error);
+    }
+  },
+
+  /**
+   * 获取检测规则
+   */
+  getDetectionRules: (): any[] => {
+    try {
+      const rules = localStorage.getItem(STORAGE_KEYS.DETECTION_RULES);
+      return rules ? JSON.parse(rules) : [];
+    } catch (error) {
+      console.error('获取检测规则失败:', error);
+      return [];
+    }
+  },
+
+  /**
+   * 清除检测规则
+   */
+  clearDetectionRules: () => {
+    try {
+      localStorage.removeItem(STORAGE_KEYS.DETECTION_RULES);
+    } catch (error) {
+      console.error('清除检测规则失败:', error);
+    }
   }
 }; 

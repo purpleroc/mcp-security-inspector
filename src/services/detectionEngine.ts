@@ -6,6 +6,7 @@ import {
   RuleValidationResult 
 } from '../types/mcp';
 import { BuiltinDetectionRules } from './detectionRules';
+import { detectionRuleStorage } from '../utils/storage';
 
 /**
  * 检测引擎 - 负责执行检测规则
@@ -16,7 +17,7 @@ export class DetectionEngine {
   private compiledRules: Map<string, RegExp> = new Map();
 
   private constructor() {
-    this.loadBuiltinRules();
+    this.loadRules();
   }
 
   static getInstance(): DetectionEngine {
@@ -27,11 +28,38 @@ export class DetectionEngine {
   }
 
   /**
-   * 加载内置规则
+   * 加载所有规则（内置规则 + 自定义规则）
    */
-  private loadBuiltinRules(): void {
-    this.rules = BuiltinDetectionRules.getAllBuiltinRules();
+  private loadRules(): void {
+    // 加载内置规则
+    const builtinRules = BuiltinDetectionRules.getAllBuiltinRules();
+    
+    // 加载保存的自定义规则
+    const savedCustomRules = detectionRuleStorage.getDetectionRules();
+    
+    // 合并规则，确保内置规则不被覆盖
+    const allRules = [...builtinRules];
+    
+    // 添加自定义规则，但要检查是否与内置规则冲突
+    for (const customRule of savedCustomRules) {
+      const existingBuiltin = builtinRules.find(r => r.id === customRule.id);
+      if (!existingBuiltin) {
+        // 确保自定义规则有正确的标识
+        customRule.isBuiltin = false;
+        allRules.push(customRule);
+      }
+    }
+    
+    this.rules = allRules;
     this.compileRules();
+  }
+
+  /**
+   * 保存自定义规则到本地存储
+   */
+  private saveCustomRules(): void {
+    const customRules = this.rules.filter(rule => !rule.isBuiltin);
+    detectionRuleStorage.saveDetectionRules(customRules);
   }
 
   /**
@@ -275,6 +303,9 @@ export class DetectionEngine {
     
     // 重新编译规则
     this.compileRules();
+    
+    // 保存自定义规则到本地存储
+    this.saveCustomRules();
   }
 
   /**
@@ -293,6 +324,9 @@ export class DetectionEngine {
     
     this.rules[index] = rule;
     this.compileRules();
+    
+    // 保存自定义规则到本地存储
+    this.saveCustomRules();
   }
 
   /**
@@ -307,6 +341,9 @@ export class DetectionEngine {
     
     this.rules = this.rules.filter(r => r.id !== ruleId);
     this.compiledRules.delete(ruleId);
+    
+    // 保存自定义规则到本地存储
+    this.saveCustomRules();
   }
 
   /**
@@ -330,6 +367,11 @@ export class DetectionEngine {
       }
     } else {
       this.compiledRules.delete(rule.id);
+    }
+    
+    // 如果是自定义规则，保存到本地存储
+    if (!rule.isBuiltin) {
+      this.saveCustomRules();
     }
   }
 
@@ -407,6 +449,10 @@ export class DetectionEngine {
    * 重置为默认规则
    */
   resetToDefaults(): void {
-    this.loadBuiltinRules();
+    // 清除保存的自定义规则
+    detectionRuleStorage.clearDetectionRules();
+    
+    // 重新加载规则（只包含内置规则）
+    this.loadRules();
   }
 } 

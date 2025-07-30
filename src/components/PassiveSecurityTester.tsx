@@ -325,7 +325,25 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
     setIsEditingRule(true);
     ruleForm.setFieldsValue({
       ...rule,
-      tags: rule.tags?.join(', ') || ''
+      tags: Array.isArray(rule.tags) ? rule.tags.join(', ') : rule.tags || '',
+      captureGroups: Array.isArray(rule.captureGroups) ? rule.captureGroups.join(', ') : rule.captureGroups || '',
+      references: Array.isArray(rule.references) ? rule.references.join('\n') : rule.references || ''
+    });
+    setTestInput(''); // 清空测试输入
+    setTestResults(null); // 清空测试结果
+    setTestMatchResult(null); // 清空匹配结果
+    setShowRuleEditor(true);
+  };
+
+  // 新增：处理内置规则查看
+  const handleViewBuiltinRule = (rule: DetectionRule) => {
+    setSelectedRule(rule);
+    setIsEditingRule(false); // 设置为非编辑模式
+    ruleForm.setFieldsValue({
+      ...rule,
+      tags: Array.isArray(rule.tags) ? rule.tags.join(', ') : rule.tags || '',
+      captureGroups: Array.isArray(rule.captureGroups) ? rule.captureGroups.join(', ') : rule.captureGroups || '',
+      references: Array.isArray(rule.references) ? rule.references.join('\n') : rule.references || ''
     });
     setTestInput(''); // 清空测试输入
     setTestResults(null); // 清空测试结果
@@ -335,6 +353,12 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
 
   const handleSaveRule = async () => {
     try {
+      // 如果是内置规则，不允许保存
+      if (selectedRule?.isBuiltin) {
+        message.warning(t.security.passive.rulesManagement.cannotEditBuiltinRule);
+        return;
+      }
+
       const values = await ruleForm.validateFields();
       const detectionEngine = DetectionEngine.getInstance();
       
@@ -349,16 +373,22 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
         scope: values.scope,
         riskLevel: values.riskLevel,
         threatType: values.threatType,
-        captureGroups: values.captureGroups?.split(',').map((s: string) => s.trim()).filter(Boolean),
+        captureGroups: Array.isArray(values.captureGroups) 
+          ? values.captureGroups 
+          : values.captureGroups?.split(',').map((s: string) => s.trim()).filter(Boolean),
         maskSensitiveData: values.maskSensitiveData || false,
         maxMatches: values.maxMatches || 10,
         isBuiltin: false,
         createdAt: isEditingRule ? selectedRule!.createdAt : Date.now(),
         updatedAt: Date.now(),
-        tags: values.tags ? values.tags.split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+        tags: Array.isArray(values.tags) 
+          ? values.tags 
+          : values.tags ? values.tags.split(',').map((s: string) => s.trim()).filter(Boolean) : [],
         recommendation: values.recommendation,
         remediation: values.remediation,
-        references: values.references?.split('\n').map((s: string) => s.trim()).filter(Boolean)
+        references: Array.isArray(values.references) 
+          ? values.references 
+          : values.references?.split('\n').map((s: string) => s.trim()).filter(Boolean)
       };
 
       if (isEditingRule) {
@@ -541,59 +571,18 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
 
   const handleImportRules = () => {
     Modal.confirm({
-      title: t.security.passive.rulesManagement.importRulesDesc,
-      width: 700,
+      title: t.security.passive.rulesManagement.importRules,
       content: (
         <div>
-          <Alert
-            type="info"
-            message={t.security.passive.rulesManagement.importRulesFormat}
-            description={
-              <div>
-                <p>{t.security.passive.rulesManagement.importRulesExample}</p>
-                <div style={{ 
-                  backgroundColor: '#f5f5f5', 
-                  padding: '12px', 
-                  borderRadius: '4px',
-                  fontFamily: 'monospace',
-                  fontSize: '12px',
-                  marginTop: '8px',
-                  overflow: 'auto',
-                  maxHeight: '300px'
-                }}>
-{`[
-  {
-    "id": "custom_rule_001",
-    "name": "Custom Password Detection",
-    "description": "Detect password leakage patterns",
-    "category": "privacy",
-    "enabled": true,
-    "pattern": "(password|pwd)\\\\s*[:=]\\\\s*([^\\\\s]+)",
-    "flags": "gi",
-    "scope": "both",
-    "riskLevel": "high",
-    "threatType": "Password Leakage",
-    "captureGroups": ["password"],
-    "maskSensitiveData": true,
-    "maxMatches": 5,
-    "isBuiltin": false,
-    "tags": ["password", "credentials"],
-    "recommendation": "Change password immediately",
-    "remediation": "Use secure password storage methods",
-    "references": ["https://owasp.org/..."]
-  }
-]`}
-                </div>
-                <div style={{ marginTop: 8, fontSize: '12px', color: '#666' }}>
-                  <p><strong>{t.security.passive.rulesManagement.requiredFields}</strong></p>
-                  <p><strong>{t.security.passive.rulesManagement.categories}</strong></p>
-                  <p><strong>{t.security.passive.rulesManagement.riskLevels}</strong></p>
-                  <p><strong>{t.security.passive.rulesManagement.detectionScopes}</strong></p>
-                </div>
-              </div>
-            }
-            style={{ marginBottom: 16 }}
-          />
+          <p>{t.security.passive.rulesManagement.importRulesDesc}</p>
+          <p>{t.security.passive.rulesManagement.importRulesFormat}</p>
+          <p>{t.security.passive.rulesManagement.importRulesExample}</p>
+          <ul>
+            <li>{t.security.passive.rulesManagement.requiredFields}</li>
+            <li>{t.security.passive.rulesManagement.categories}</li>
+            <li>{t.security.passive.rulesManagement.riskLevels}</li>
+            <li>{t.security.passive.rulesManagement.detectionScopes}</li>
+          </ul>
           <p>{t.security.passive.rulesManagement.clickToSelectFile}</p>
         </div>
       ),
@@ -601,48 +590,43 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.json';
-        input.onchange = (e) => {
+        input.onchange = async (e) => {
           const file = (e.target as HTMLInputElement).files?.[0];
-          if (!file) return;
-
-          const reader = new FileReader();
-          reader.onload = async (e) => {
+          if (file) {
             try {
-              const content = e.target?.result as string;
+              const text = await file.text();
               const detectionEngine = DetectionEngine.getInstance();
-              
-              // 验证JSON格式
-              let importedData;
-              try {
-                importedData = JSON.parse(content);
-              } catch (parseError) {
-                throw new Error(t.security.passive.rulesManagement.jsonFormatError);
-              }
-
-              // 验证是否为数组
-              if (!Array.isArray(importedData)) {
-                throw new Error(t.security.passive.rulesManagement.mustBeArray);
-              }
-
-              if (importedData.length === 0) {
-                message.warning(t.security.passive.rulesManagement.noRulesFound);
-                return;
-              }
-
-              // 导入规则
-              detectionEngine.importRules(content);
+              detectionEngine.importRules(text);
               await loadRules();
-              message.success(t.security.passive.rulesManagement.importSuccess.replace('{count}', importedData.length.toString()));
+              message.success(t.security.passive.rulesManagement.importSuccess.replace('{count}', '1'));
             } catch (error) {
               message.error(t.security.passive.rulesManagement.importFailed.replace('{error}', (error as Error).message));
             }
-          };
-          reader.readAsText(file);
+          }
         };
         input.click();
       },
       okText: t.security.passive.rulesManagement.selectFile,
       cancelText: t.security.passive.rulesManagement.cancel
+    });
+  };
+
+  const handleResetRules = () => {
+    Modal.confirm({
+      title: t.security.passive.rulesManagement.resetRules,
+      content: t.security.passive.rulesManagement.resetRulesDesc,
+      onOk: async () => {
+        try {
+          const detectionEngine = DetectionEngine.getInstance();
+          detectionEngine.resetToDefaults();
+          await loadRules();
+          message.success(t.security.passive.rulesManagement.resetRulesSuccess);
+        } catch (error) {
+          message.error(t.security.passive.rulesManagement.resetRulesFailed.replace('{error}', (error as Error).message));
+        }
+      },
+      okText: t.common.confirm,
+      cancelText: t.common.cancel
     });
   };
 
@@ -895,14 +879,25 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
         width: 120,
         render: (_: any, record: DetectionRule) => (
           <Space size="small">
-            <Tooltip title={t.security.passive.rulesManagement.edit}>
-              <Button
-                type="text"
-                size="small"
-                icon={<SettingOutlined />}
-                onClick={() => handleEditRule(record)}
-              />
-            </Tooltip>
+            {record.isBuiltin ? (
+              <Tooltip title={t.security.passive.rulesManagement.view}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<EyeOutlined />}
+                  onClick={() => handleViewBuiltinRule(record)}
+                />
+              </Tooltip>
+            ) : (
+              <Tooltip title={t.security.passive.rulesManagement.edit}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<SettingOutlined />}
+                  onClick={() => handleEditRule(record)}
+                />
+              </Tooltip>
+            )}
             {!record.isBuiltin && (
               <Tooltip title={t.security.passive.rulesManagement.delete}>
                 <Button
@@ -973,6 +968,13 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                   onClick={handleImportRules}
                 >
                   {t.security.passive.rulesManagement.importRules}
+                </Button>
+                <Button 
+                  icon={<ReloadOutlined />}
+                  onClick={handleResetRules}
+                  danger
+                >
+                  {t.security.passive.rulesManagement.resetRules}
                 </Button>
               </Space>
             </Col>
@@ -1122,14 +1124,32 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
 
       {/* 规则编辑器Modal */}
       <Modal
-        title={isEditingRule ? t.security.passive.rulesManagement.edit : t.security.passive.rulesManagement.newRule}
+        title={
+          selectedRule?.isBuiltin 
+            ? t.security.passive.rulesManagement.view 
+            : (isEditingRule ? t.security.passive.rulesManagement.edit : t.security.passive.rulesManagement.newRule)
+        }
         open={showRuleEditor}
         onCancel={() => setShowRuleEditor(false)}
-        onOk={handleSaveRule}
+        onOk={selectedRule?.isBuiltin ? undefined : handleSaveRule}
         width={800}
-        okText={t.common.save}
-        cancelText={t.common.cancel}
+        okText={selectedRule?.isBuiltin ? undefined : t.common.save}
+        cancelText={t.common.close}
+        footer={selectedRule?.isBuiltin ? [
+          <Button key="close" onClick={() => setShowRuleEditor(false)}>
+            {t.common.close}
+          </Button>
+        ] : undefined}
       >
+        {selectedRule?.isBuiltin && (
+          <Alert
+            message={t.security.passive.rulesManagement.cannotEditBuiltinRule}
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+        )}
+        
         <Form
           form={ruleForm}
           layout="vertical"
@@ -1150,7 +1170,10 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                 name="name"
                 rules={[{ required: true, message: t.security.passive.rulesManagement.ruleName }]}
               >
-                <Input placeholder={t.security.passive.rulesManagement.ruleName} />
+                <Input 
+                  placeholder={t.security.passive.rulesManagement.ruleName} 
+                  disabled={selectedRule?.isBuiltin}
+                />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -1159,7 +1182,10 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                 name="threatType"
                 rules={[{ required: true, message: t.security.passive.rulesManagement.threatType }]}
               >
-                <Input placeholder={t.security.passive.rulesManagement.threatTypePlaceholder} />
+                <Input 
+                  placeholder={t.security.passive.rulesManagement.threatTypePlaceholder} 
+                  disabled={selectedRule?.isBuiltin}
+                />
               </Form.Item>
             </Col>
           </Row>
@@ -1172,6 +1198,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
             <TextArea 
               rows={2} 
               placeholder={t.security.passive.rulesManagement.ruleDescription} 
+              disabled={selectedRule?.isBuiltin}
             />
           </Form.Item>
 
@@ -1191,6 +1218,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
               rows={3} 
               placeholder={t.security.passive.rulesManagement.regularExpressionPlaceholder} 
               style={{ fontFamily: 'monospace' }}
+              disabled={selectedRule?.isBuiltin}
             />
           </Form.Item>
 
@@ -1200,7 +1228,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                 label={t.security.passive.rulesManagement.category}
                 name="category"
               >
-                <Select>
+                <Select disabled={selectedRule?.isBuiltin}>
                   <Option value="security">{t.security.passive.rulesManagement.security}</Option>
                   <Option value="privacy">{t.security.passive.rulesManagement.privacy}</Option>
                   <Option value="compliance">{t.security.passive.rulesManagement.compliance}</Option>
@@ -1215,7 +1243,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                 label={t.security.passive.rulesManagement.riskLevel}
                 name="riskLevel"
               >
-                <Select>
+                <Select disabled={selectedRule?.isBuiltin}>
                   <Option value="critical">{t.security.riskLevels.critical}</Option>
                   <Option value="high">{t.security.riskLevels.high}</Option>
                   <Option value="medium">{t.security.riskLevels.medium}</Option>
@@ -1228,7 +1256,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                 label={t.security.passive.rulesManagement.scope}
                 name="scope"
               >
-                <Select>
+                <Select disabled={selectedRule?.isBuiltin}>
                   <Option value="parameters">{t.security.passive.rulesManagement.input}</Option>
                   <Option value="output">{t.security.passive.rulesManagement.output}</Option>
                   <Option value="both">{t.security.passive.rulesManagement.both}</Option>
@@ -1243,7 +1271,10 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                 label={t.security.passive.rulesManagement.flags}
                 name="flags"
               >
-                <Input placeholder={t.security.passive.rulesManagement.flagsPlaceholder} />
+                <Input 
+                  placeholder={t.security.passive.rulesManagement.flagsPlaceholder} 
+                  disabled={selectedRule?.isBuiltin}
+                />
               </Form.Item>
             </Col>
             <Col span={8}>
@@ -1251,12 +1282,19 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                 label={t.security.passive.rulesManagement.maxMatches}
                 name="maxMatches"
               >
-                <Input type="number" min={1} max={100} />
+                <Input 
+                  type="number" 
+                  min={1} 
+                  max={100} 
+                  disabled={selectedRule?.isBuiltin}
+                />
               </Form.Item>
             </Col>
             <Col span={8}>
               <Form.Item name="enabled" valuePropName="checked">
-                <Checkbox>{t.security.passive.rulesManagement.enableRule}</Checkbox>
+                <Checkbox disabled={selectedRule?.isBuiltin}>
+                  {t.security.passive.rulesManagement.enableRule}
+                </Checkbox>
               </Form.Item>
             </Col>
           </Row>
@@ -1264,7 +1302,9 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="maskSensitiveData" valuePropName="checked">
-                <Checkbox>{t.security.passive.rulesManagement.maskSensitiveData}</Checkbox>
+                <Checkbox disabled={selectedRule?.isBuiltin}>
+                  {t.security.passive.rulesManagement.maskSensitiveData}
+                </Checkbox>
               </Form.Item>
             </Col>
           </Row>
@@ -1274,7 +1314,10 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
             name="captureGroups"
             extra={t.security.passive.rulesManagement.captureGroupsExtra}
           >
-            <Input placeholder={t.security.passive.rulesManagement.captureGroupsPlaceholder} />
+            <Input 
+              placeholder={t.security.passive.rulesManagement.captureGroupsPlaceholder} 
+              disabled={selectedRule?.isBuiltin}
+            />
           </Form.Item>
 
           <Form.Item
@@ -1282,7 +1325,10 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
             name="tags"
             extra={t.security.passive.rulesManagement.tagsExtra}
           >
-            <Input placeholder={t.security.passive.rulesManagement.tagsPlaceholder} />
+            <Input 
+              placeholder={t.security.passive.rulesManagement.tagsPlaceholder} 
+              disabled={selectedRule?.isBuiltin}
+            />
           </Form.Item>
 
           <Form.Item
@@ -1292,6 +1338,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
             <TextArea 
               rows={2} 
               placeholder={t.security.passive.rulesManagement.securityAdvicePlaceholder} 
+              disabled={selectedRule?.isBuiltin}
             />
           </Form.Item>
 
@@ -1302,6 +1349,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
             <TextArea 
               rows={2} 
               placeholder={t.security.passive.rulesManagement.remediationAdvicePlaceholder} 
+              disabled={selectedRule?.isBuiltin}
             />
           </Form.Item>
 
@@ -1313,6 +1361,7 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
             <TextArea 
               rows={2} 
               placeholder={t.security.passive.rulesManagement.referencesPlaceholder} 
+              disabled={selectedRule?.isBuiltin}
             />
           </Form.Item>
 
@@ -1682,6 +1731,164 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
           ]}
         />
       </Card>
+
+      {/* 详情抽屉 */}
+      <Drawer
+        title={t.security.passive.details}
+        placement="right"
+        onClose={() => setShowDetail(false)}
+        open={showDetail}
+        width={600}
+      >
+        {selectedResult && (
+          <div>
+            <Timeline>
+              <Timeline.Item 
+                color="blue" 
+                dot={<ClockCircleOutlined />}
+              >
+                <div>
+                  <Text strong>{t.security.passive.detectionTime}</Text>
+                  <div>{new Date(selectedResult.timestamp).toLocaleString()}</div>
+                </div>
+              </Timeline.Item>
+              
+              <Timeline.Item 
+                color="green" 
+                dot={getTypeIcon(selectedResult.type)}
+              >
+                <div>
+                  <Text strong>{t.security.passive.callType}</Text>
+                  <div>{getTypeText(selectedResult.type)}</div>
+                </div>
+              </Timeline.Item>
+              
+              <Timeline.Item 
+                color="orange" 
+                dot={<AlertOutlined />}
+              >
+                <div>
+                  <Text strong>{t.security.passive.targetName}</Text>
+                  <div>{selectedResult.targetName}</div>
+                </div>
+              </Timeline.Item>
+              
+              <Timeline.Item 
+                color={getRiskLevelColor(selectedResult.riskLevel)} 
+                dot={<WarningOutlined />}
+              >
+                <div>
+                  <Text strong>{t.security.riskLevel}</Text>
+                  <div>
+                    <Tag color={getRiskLevelColor(selectedResult.riskLevel)}>
+                      {getRiskLevelText(selectedResult.riskLevel)}
+                    </Tag>
+                  </div>
+                </div>
+              </Timeline.Item>
+            </Timeline>
+
+            <Divider>{t.security.passive.threatDetails}</Divider>
+            
+            {selectedResult.threats.map((threat, index) => (
+              <Card 
+                key={index} 
+                size="small" 
+                style={{ marginBottom: 16 }}
+                title={threat.type}
+              >
+                <Paragraph>{threat.description}</Paragraph>
+                
+                {threat.evidence && (
+                  <div>
+                    <Text strong>{t.security.passive.evidence}</Text>
+                    <div style={{ 
+                      backgroundColor: '#f5f5f5', 
+                      padding: '8px', 
+                      borderRadius: '4px',
+                      fontFamily: 'monospace',
+                      fontSize: '12px',
+                      marginTop: '4px'
+                    }}>
+                      {threat.evidence}
+                    </div>
+                  </div>
+                )}
+                
+                <div style={{ marginTop: 12 }}>
+                  <Text strong>{t.security.passive.threatLevel}</Text>
+                  <Tag color={getRiskLevelColor(threat.severity)} style={{ marginLeft: 8 }}>
+                    {getRiskLevelText(threat.severity)}
+                  </Tag>
+                </div>
+              </Card>
+            ))}
+
+            {selectedResult.sensitiveDataLeaks.length > 0 && (
+              <>
+                <Divider>{t.security.passive.sensitiveDataLeaks}</Divider>
+                {selectedResult.sensitiveDataLeaks.map((leak, index) => (
+                  <Alert
+                    key={index}
+                    type="error"
+                    message={leak.type}
+                    description={
+                      <div>
+                        <div>{t.security.passive.content} {leak.content}</div>
+                        <Tag color={getRiskLevelColor(leak.severity)} style={{ marginTop: 4 }}>
+                          {getRiskLevelText(leak.severity)}
+                        </Tag>
+                      </div>
+                    }
+                    style={{ marginBottom: 12 }}
+                  />
+                ))}
+              </>
+            )}
+
+            {selectedResult.recommendation && (
+              <>
+                <Divider>{t.security.passive.recommendations}</Divider>
+                <Alert
+                  type="info"
+                  message={t.security.passive.recommendations}
+                  description={selectedResult.recommendation}
+                />
+              </>
+            )}
+
+            {/* 显示调用参数 */}
+            <Divider>{t.security.passive.callParameters}</Divider>
+            <div style={{ 
+              backgroundColor: '#f5f5f5', 
+              padding: '8px', 
+              borderRadius: '4px',
+              fontFamily: 'monospace',
+              fontSize: '12px'
+            }}>
+              {JSON.stringify(selectedResult.parameters, null, 2)}
+            </div>
+
+            {/* 显示调用结果 */}
+            {selectedResult.result && (
+              <>
+                <Divider>{t.security.passive.callResult}</Divider>
+                <div style={{ 
+                  backgroundColor: '#f5f5f5', 
+                  padding: '8px', 
+                  borderRadius: '4px',
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  maxHeight: '200px',
+                  overflow: 'auto'
+                }}>
+                  {JSON.stringify(selectedResult.result, null, 2)}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </Drawer>
     </div>
   );
 }; 
