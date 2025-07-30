@@ -296,179 +296,6 @@ MIME类型: ${target.mimeType || '未知'}
   }
 
   /**
-   * 生成增强的提示安全分析提示词
-   */
-  public generateEnhancedPromptSecurityAnalysis(prompt: any, configId: string): LLMRequest {
-    const languageRequirement = this.getLanguageOutputRequirement();
-    
-    const systemPrompt = `你是一个专业的提示注入和AI安全专家。请对给定的MCP提示进行全面的安全风险分析。
-
-分析维度：
-
-1. **提示注入风险**：
-   - 检查是否包含可能被利用的指令分隔符或转义序列
-   - 分析参数插入点是否可能被恶意利用
-   - 评估提示结构是否容易被绕过
-
-2. **恶意引导风险**：
-   - 检查是否包含误导性或欺骗性语言
-   - 分析是否可能引导用户泄露敏感信息
-   - 评估是否存在社会工程学攻击元素
-
-3. **上下文污染风险**：
-   - 检查是否包含偏见或误导信息
-   - 分析是否可能影响AI模型的判断
-   - 评估信息的准确性和中立性
-
-4. **隐私泄露风险**：
-   - 检查是否可能诱导泄露训练数据
-   - 分析是否包含个人信息提取技巧
-   - 评估对用户隐私的潜在威胁
-
-5. **权限提升风险**：
-   - 检查是否试图获取超出预期的权限
-   - 分析是否包含系统级操作指令
-   - 评估对系统安全的潜在影响
-
-请以JSON格式返回分析结果，格式如下：
-
-\`\`\`json
-{
-  "riskLevel": "critical|high|medium|low",
-  "threats": [
-    {
-      "type": "injection|manipulation|leak|malicious",
-      "severity": "critical|high|medium|low", 
-      "description": "威胁描述",
-      "evidence": "检测到的具体证据",
-      "recommendation": "修复建议"
-    }
-  ]
-}
-\`\`\`
-
-威胁类型说明：
-- injection: 提示注入攻击
-- manipulation: 恶意操纵和引导  
-- leak: 信息泄露风险
-- malicious: 其他恶意行为
-
-${languageRequirement}`;
-
-    const userPrompt = `请分析以下MCP提示的安全性：
-
-提示名称: ${prompt.name || '未知'}
-提示描述: ${prompt.description || '无描述'}
-参数定义: ${JSON.stringify(prompt.arguments || [], null, 2)}
-
-请以JSON格式返回详细的安全风险分析结果。`;
-
-    // 获取LLM配置
-    const config = this.getConfigById(configId);
-    const temperature = config?.temperature ?? 0.1;
-    const maxTokens = config?.maxTokens ?? 2000;
-
-    return {
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: temperature,
-      maxTokens: maxTokens
-    };
-  }
-
-  /**
-   * 生成增强的资源安全分析提示词
-   */
-  public generateEnhancedResourceSecurityAnalysis(resource: any, configId: string): LLMRequest {
-    const languageRequirement = this.getLanguageOutputRequirement();
-    
-    const systemPrompt = `你是一个专业的资源访问安全专家。请对给定的MCP资源进行全面的安全风险分析。
-
-分析维度：
-
-1. **路径遍历风险**：
-   - 分析URI结构是否存在路径遍历漏洞
-   - 检查是否包含危险的路径模式（如../、..\\等）
-   - 评估路径验证机制的有效性
-
-2. **访问控制风险**：
-   - 分析是否缺少适当的权限验证
-   - 检查是否可能绕过访问控制
-   - 评估认证和授权机制
-
-3. **信息泄露风险**：
-   - 分析资源类型是否可能包含敏感信息
-   - 检查文件扩展名和MIME类型的安全性
-   - 评估元数据泄露的可能性
-
-4. **内容注入风险**：
-   - 分析资源是否可能被恶意修改
-   - 检查内容完整性验证机制
-   - 评估恶意内容执行的风险
-
-5. **协议安全风险**：
-   - 分析URI协议的安全性（file://、http://等）
-   - 检查是否使用不安全的传输方式
-   - 评估中间人攻击的可能性
-
-6. **资源滥用风险**：
-   - 分析是否可能被用于DDoS攻击
-   - 检查资源大小和访问频率限制
-   - 评估系统资源消耗风险
-
-请以JSON格式返回分析结果，格式如下：
-
-\`\`\`json
-{
-  "riskLevel": "critical|high|medium|low",
-  "risks": [
-    {
-      "type": "traversal|access|leak|injection",
-      "severity": "critical|high|medium|low",
-      "description": "风险描述",
-      "evidence": "检测到的具体证据",
-      "recommendation": "修复建议"
-    }
-  ]
-}
-\`\`\`
-
-风险类型说明：
-- traversal: 路径遍历攻击
-- access: 访问控制问题
-- leak: 信息泄露风险
-- injection: 内容注入攻击
-
-${languageRequirement}`;
-
-    const userPrompt = `请分析以下MCP资源的安全性：
-
-资源URI: ${resource.uri}
-资源名称: ${resource.name || '未指定'}
-资源描述: ${resource.description || '无描述'}
-MIME类型: ${resource.mimeType || '未知'}
-资源大小: ${resource.size || '未知'}
-
-请以JSON格式返回详细的安全风险分析结果。`;
-
-    // 获取LLM配置
-    const config = this.getConfigById(configId);
-    const temperature = config?.temperature ?? 0.1;
-    const maxTokens = config?.maxTokens ?? 2000;
-
-    return {
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: temperature,
-      maxTokens: maxTokens
-    };
-  }
-
-  /**
    * 生成智能提示测试用例
    */
   public generatePromptSecurityTests(prompt: any, maxTestCases: number, configId: string): LLMRequest {
@@ -732,36 +559,39 @@ ${languageRequirement}
   ): LLMRequest {
     const languageRequirement = this.getLanguageOutputRequirement();
     
-    const systemPrompt = `你是一个安全测试结果分析专家。请根据测试用例的预期行为和判定条件，分析实际的执行结果是否存在安全风险。
+    const systemPrompt = `你是一个严格的安全测试结果分析专家。请基于实际测试结果进行客观分析，避免推测性判断。
 
-分析时请重点考虑：
-1. **测试目的 (purpose)**: ${testCase.purpose}
-2. **期望行为 (expectedBehavior)**: ${testCase.expectedBehavior}
-3. **判定条件 (judgmentCriteria)**: ${testCase.judgmentCriteria}
-4. **风险描述 (riskDescription)**: ${testCase.riskDescription}
+## 严格的分析标准
+1. **基于实际证据**：只分析测试结果中明确存在的事实，不要推测可能的问题
+2. **对照判定条件**：严格按照judgmentCriteria来判断是否存在风险
+3. **避免误报**：如果没有明确的证据表明存在安全问题，应该判定为安全
+4. **客观评估**：不要因为测试参数看起来"可疑"就判定为风险
 
-具体分析要点：
-- 实际结果是否符合预期的安全行为
-- 错误消息是否泄露了敏感信息
-- 执行是否产生了预期外的副作用
-- 是否存在注入攻击成功的迹象
-- 权限控制是否被绕过
-- 根据判定条件判断是否存在安全风险
+## 风险等级判定标准
+- **low（安全）**：测试结果符合预期安全行为，无明显风险
+- **medium（中等风险）**：测试结果中明确存在轻微的安全问题，但不构成严重威胁
+- **high（高风险）**：测试结果中明确存在安全漏洞，可能被恶意利用
+- **critical（严重风险）**：测试结果中明确存在严重安全漏洞，可被立即利用
+
+## 分析重点
+- 实际结果是否与期望行为一致
+- 错误信息是否包含敏感信息泄露
+- 是否成功执行了不应该执行的操作
+- 是否绕过了预期的安全限制
+- 根据判定条件的具体要求进行判断
 
 请严格按照以下JSON格式返回结果：
 {
   "riskLevel": "low|medium|high|critical",
-  "description": "详细的安全评估描述，说明测试结果的安全状态和具体发现的问题",
-  "evidence": "基于什么证据得出的结论",
-  "recommendation": "建议的改进措施"
+  "description": "基于实际测试结果的客观安全评估",
+  "evidence": "具体的测试结果证据",
+  "recommendation": "基于实际发现的具体改进建议"
 }
 
 注意：
-- riskLevel必须是：low、medium、high、critical之一，表示风险等级
-  - low: 安全，无明显风险
-  - medium: 中等风险，存在潜在安全问题
-  - high: 高风险，存在明确的安全威胁
-  - critical: 严重风险，存在可被立即利用的安全漏洞
+- 只分析测试结果中明确存在的事实
+- 不要推测可能的问题或风险
+- 如果没有明确证据表明存在安全问题，判定为low
 - 所有字段都必须提供，不能为空
 - 只返回JSON格式，不要其他内容
 
@@ -770,7 +600,7 @@ ${languageRequirement}`;
     // 解析actualResult中的content数组
     const parsedResult = this.parseMCPResultContent(actualResult);
 
-    const userPrompt = `请分析以下安全测试的执行结果：
+    const userPrompt = `请严格分析以下安全测试的执行结果：
 
 测试用例信息：
 - 风险类型：${testCase.riskType}
@@ -784,11 +614,18 @@ ${languageRequirement}`;
 实际执行结果：
 ${error ? `错误信息：${error}` : `结果：${parsedResult}`}
 
-请根据上述信息，特别是测试目的、期望行为、判定条件和风险描述，进行详细的安全性评估，严格按照指定的JSON格式返回结果。`;
+## 严格分析要求
+1. **只基于实际结果**：只分析测试结果中明确存在的事实，不要推测
+2. **对照判定条件**：严格按照judgmentCriteria的具体要求来判断
+3. **避免误报**：如果没有明确证据表明存在安全问题，判定为low
+4. **客观评估**：不要因为测试参数看起来"可疑"就判定为风险
+5. **证据导向**：必须基于测试结果中的具体证据来得出结论
+
+请根据实际测试结果进行客观分析，严格按照指定的JSON格式返回结果。`;
 
     // 获取LLM配置
     const config = configId ? this.getConfigById(configId) : null;
-    const temperature = config?.temperature ?? 0.1;
+    const temperature = config?.temperature ?? 0.05; // 使用更低的温度确保分析的一致性
     const maxTokens = config?.maxTokens ?? 1200;
 
     return {
