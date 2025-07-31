@@ -273,33 +273,33 @@ const SecurityPanel: React.FC = () => {
       <Row gutter={16} align="middle">
         <Col>
           <Space>
-            <Text>风险等级:</Text>
+            <Text>{t.security.riskLevel}:</Text>
             <Select
               value={riskFilter}
               onChange={setRiskFilter}
               style={{ width: 120 }}
               size="small"
             >
-              <Select.Option value="all">全部</Select.Option>
-              <Select.Option value="critical">严重</Select.Option>
-              <Select.Option value="high">高危</Select.Option>
-              <Select.Option value="medium">中等</Select.Option>
-              <Select.Option value="low">低危</Select.Option>
+              <Select.Option value="all">{t.security.allLevels}</Select.Option>
+              <Select.Option value="critical">{t.security.riskLevels.critical}</Select.Option>
+              <Select.Option value="high">{t.security.riskLevels.high}</Select.Option>
+              <Select.Option value="medium">{t.security.riskLevels.medium}</Select.Option>
+              <Select.Option value="low">{t.security.riskLevels.low}</Select.Option>
             </Select>
           </Space>
         </Col>
         <Col>
           <Space>
-            <Text>扫描类型:</Text>
+            <Text>{t.security.scanType}:</Text>
             <Select
               value={scanTypeFilter}
               onChange={setScanTypeFilter}
               style={{ width: 120 }}
               size="small"
             >
-              <Select.Option value="all">全部</Select.Option>
-              <Select.Option value="active">主动扫描</Select.Option>
-              <Select.Option value="passive">被动检测</Select.Option>
+              <Select.Option value="all">{t.security.allTypes}</Select.Option>
+              <Select.Option value="active">{t.security.history.activeScan}</Select.Option>
+              <Select.Option value="passive">{t.security.history.passiveDetection}</Select.Option>
             </Select>
           </Space>
         </Col>
@@ -463,10 +463,10 @@ const SecurityPanel: React.FC = () => {
   const saveSecurityHistory = (record: any) => {
     try {
       securityHistoryStorage.addSecurityRecord(record);
-      message.success('检测结果已保存到历史记录');
+      message.success(t.security.history.saveHistorySuccess);
     } catch (error) {
-      console.error('保存检测历史失败:', error);
-      message.error('保存检测历史失败');
+      console.error(t.security.history.saveHistoryFailed, error);
+      message.error(t.security.history.saveHistoryFailed);
     }
   };
 
@@ -477,7 +477,7 @@ const SecurityPanel: React.FC = () => {
     const hasPassiveResults = passiveResults.length > 0;
     
     if (!hasActiveResults && !hasPassiveResults) {
-      message.warning('暂无检测结果可保存');
+      message.warning(t.security.history.noResultsToSave);
       return;
     }
 
@@ -531,10 +531,10 @@ const SecurityPanel: React.FC = () => {
     
     // 显示保存成功的详细信息
     const resultTypes = [];
-    if (hasActiveResults) resultTypes.push('主动扫描');
-    if (hasPassiveResults) resultTypes.push('被动检测');
+    if (hasActiveResults) resultTypes.push(t.security.history.activeScan);
+    if (hasPassiveResults) resultTypes.push(t.security.history.passiveDetection);
     
-    message.success(`已保存${resultTypes.join('和')}结果到历史记录`);
+    message.success(t.security.history.saveCombinedResultsSuccess.replace('{types}', resultTypes.join(t.security.history.and)));
   };
 
   // 恢复检测历史记录（支持主动扫描和合并结果）
@@ -543,7 +543,7 @@ const SecurityPanel: React.FC = () => {
       // 恢复主动扫描结果
       setCurrentReport(record.report);
       setActiveTab('overview');
-      message.success('已恢复主动扫描结果');
+      message.success(t.security.history.restoreActiveScanSuccess);
     } else if (record.scanType === 'combined' && record.report) {
       // 恢复合并的检测结果
       setCurrentReport(record.report);
@@ -554,9 +554,9 @@ const SecurityPanel: React.FC = () => {
       }
       
       setActiveTab('overview');
-      message.success('已恢复合并检测结果');
+      message.success(t.security.history.restoreCombinedResultsSuccess);
     } else {
-      message.warning('仅支持恢复主动扫描或合并检测结果');
+      message.warning(t.security.history.onlySupportActiveOrCombined);
     }
   };
 
@@ -2627,9 +2627,10 @@ const SecurityPanel: React.FC = () => {
                   {t.security.exportLogs}
                 </Button>
               )}
-              {/* 被动监控开关 */}
-              <Space>
-                <Switch
+                {/* 被动监控开关 */}
+                <Space>
+                  <Text>{t.security.passive.monitoring}: </Text>
+                  <Switch
                   checked={passiveMonitoringEnabled}
                   onChange={setPassiveMonitoringEnabled}
                   disabled={connectionStatus !== 'connected'}
@@ -2719,7 +2720,7 @@ const SecurityPanel: React.FC = () => {
                   );
                 } catch (error) {
                   console.error('Error rendering tool security tab:', error);
-                  return <Empty description="加载数据时出错" />;
+                  return <Empty description={t.errors.loadDataFailed} />;
                 }
               })()
             },
@@ -2819,7 +2820,7 @@ const SecurityPanel: React.FC = () => {
                   );
                 } catch (error) {
                   console.error('Error rendering prompt security tab:', error);
-                  return <Empty description="加载数据时出错" />;
+                  return <Empty description={t.errors.loadDataFailed} />;
                 }
               })()
             },
@@ -2924,7 +2925,7 @@ const SecurityPanel: React.FC = () => {
                   );
                 } catch (error) {
                   console.error('Error rendering resource security tab:', error);
-                  return <Empty description="加载数据时出错" />;
+                  return <Empty description={t.errors.loadDataFailed} />;
                 }
               })()
             },
@@ -2970,7 +2971,7 @@ const SecurityPanel: React.FC = () => {
               label: (
                 <Space>
                   <HistoryOutlined />
-                  检测历史
+                  {t.security.history.title}
                 </Space>
               ),
               children: (

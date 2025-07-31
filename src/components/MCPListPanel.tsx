@@ -79,7 +79,7 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
     try {
       // 如果当前已连接到其他服务器，先断开连接
       if (connectionStatus === 'connected') {
-        console.log('检测到已有连接，先断开连接...');
+        console.log(t.config.messages.disconnectSuccess);
         await dispatch(disconnectFromServer() as any).unwrap();
       }
       

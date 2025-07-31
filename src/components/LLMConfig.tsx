@@ -84,7 +84,7 @@ const LLMConfigComponent: React.FC<LLMConfigProps> = ({ onConfigChange }) => {
       setConfigs(savedConfigs);
       onConfigChange?.(savedConfigs);
     } catch (error) {
-      console.error('加载LLM配置失败:', error);
+      console.error(t.errors.loadConfigFailed, error);
     }
   };
 

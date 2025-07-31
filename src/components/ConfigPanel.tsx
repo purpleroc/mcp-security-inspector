@@ -233,8 +233,8 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
               }</p>
               {serverInfo && (
                 <>
-                  <p><strong>协议版本:</strong> {serverInfo.protocolVersion}</p>
-                  <p><strong>服务器版本:</strong> {serverInfo.serverInfo.name} v{serverInfo.serverInfo.version}</p>
+                  <p><strong>{t.config.protocolVersion}:</strong> {serverInfo.protocolVersion}</p>
+                  <p><strong>{t.config.serverVersion}:</strong> {serverInfo.serverInfo.name} v{serverInfo.serverInfo.version}</p>
                 </>
               )}
             </div>

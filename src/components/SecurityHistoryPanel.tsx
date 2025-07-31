@@ -65,8 +65,8 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
       const activeRecords = allRecords.filter(record => record.scanType === 'active');
       setHistoryRecords(activeRecords);
     } catch (error) {
-      console.error('加载安全检测历史失败:', error);
-      message.error('加载历史记录失败');
+      console.error(t.security.history.loadHistoryFailed, error);
+      message.error(t.security.history.loadHistoryFailed);
     } finally {
       setLoading(false);
     }
@@ -91,13 +91,13 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
   const getStatusInfo = (status: string) => {
     switch (status) {
       case 'completed':
-        return { icon: <CheckCircleOutlined />, color: 'green', text: '已完成' };
+        return { icon: <CheckCircleOutlined />, color: 'green', text: t.security.history.completed };
       case 'failed':
-        return { icon: <CloseCircleOutlined />, color: 'red', text: '失败' };
+        return { icon: <CloseCircleOutlined />, color: 'red', text: t.security.history.failed };
       case 'cancelled':
-        return { icon: <PauseCircleOutlined />, color: 'orange', text: '已取消' };
+        return { icon: <PauseCircleOutlined />, color: 'orange', text: t.security.history.cancelled };
       default:
-        return { icon: <ExclamationCircleOutlined />, color: 'default', text: '未知' };
+        return { icon: <ExclamationCircleOutlined />, color: 'default', text: t.security.history.unknown };
     }
   };
 
@@ -106,26 +106,26 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
     try {
       securityHistoryStorage.deleteSecurityRecord(id);
       setHistoryRecords(prev => prev.filter(record => record.id !== id));
-      message.success('删除成功');
+      message.success(t.success.itemDeleted);
     } catch (error) {
-      console.error('删除历史记录失败:', error);
-      message.error('删除失败');
+      console.error(t.security.history.deleteRecordFailed, error);
+      message.error(t.errors.deleteFailed);
     }
   };
 
   // 清空所有历史记录
   const handleClearAllHistory = () => {
     Modal.confirm({
-      title: '确认清空',
-      content: '确定要清空所有安全检测历史记录吗？此操作不可恢复。',
+      title: t.security.history.confirmClear,
+      content: t.security.history.confirmClearDesc,
       onOk: () => {
         try {
           securityHistoryStorage.clearSecurityHistory();
           setHistoryRecords([]);
-          message.success('已清空所有历史记录');
+          message.success(t.success.historyCleared);
         } catch (error) {
-          console.error('清空历史记录失败:', error);
-          message.error('清空失败');
+          console.error(t.security.history.clearHistoryFailed, error);
+          message.error(t.errors.clearFailed);
         }
       }
     });
@@ -135,7 +135,7 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
   const handleRestoreRecord = (record: SecurityHistoryRecord) => {
     if (onRestoreRecord) {
       onRestoreRecord(record);
-      message.success('已恢复检测记录');
+      message.success(t.security.history.restoreRecordSuccess);
     }
   };
 
@@ -152,10 +152,10 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
       linkElement.setAttribute('download', exportFileDefaultName);
       linkElement.click();
       
-      message.success('导出成功');
+      message.success(t.success.exportSuccess);
     } catch (error) {
-      console.error('导出历史记录失败:', error);
-      message.error('导出失败');
+      console.error(t.security.history.exportHistoryFailed, error);
+      message.error(t.errors.exportFailed);
     }
   };
 
@@ -168,7 +168,7 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
   // 表格列定义
   const columns = [
     {
-      title: '服务器名称',
+      title: t.security.history.serverName,
       dataIndex: 'serverName',
       key: 'serverName',
       render: (name: string, record: SecurityHistoryRecord) => (
@@ -183,17 +183,17 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
       ),
     },
     {
-      title: '检测类型',
+      title: t.security.history.scanType,
       dataIndex: 'scanType',
       key: 'scanType',
       render: (scanType: string) => (
         <Tag color="green">
-          主动扫描
+          {t.security.history.activeScan}
         </Tag>
       ),
     },
     {
-      title: '整体风险',
+      title: t.security.history.overallRisk,
       dataIndex: 'report',
       key: 'overallRisk',
       render: (report: any, record: SecurityHistoryRecord) => {
@@ -205,29 +205,29 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
           );
         }
         
-        return <Tag color="default">无数据</Tag>;
+        return <Tag color="default">{t.security.noData}</Tag>;
       },
     },
     {
-      title: '问题统计',
+      title: t.security.history.issueCount,
       dataIndex: 'report',
       key: 'issueCount',
       render: (report: any, record: SecurityHistoryRecord) => {
         if (report?.summary) {
           return (
             <Space direction="vertical" size="small">
-              <Text>总计: {report.summary.totalIssues}</Text>
-              {report.summary.criticalIssues > 0 && <Text type="danger">严重: {report.summary.criticalIssues}</Text>}
-              {report.summary.highIssues > 0 && <Text type="warning">高危: {report.summary.highIssues}</Text>}
+              <Text>{t.security.history.totalIssues}: {report.summary.totalIssues}</Text>
+              {report.summary.criticalIssues > 0 && <Text type="danger">{t.security.history.criticalIssues}: {report.summary.criticalIssues}</Text>}
+              {report.summary.highIssues > 0 && <Text type="warning">{t.security.history.highIssues}: {report.summary.highIssues}</Text>}
             </Space>
           );
         }
         
-        return <Text>无数据</Text>;
+        return <Text>{t.security.noData}</Text>;
       },
     },
     {
-      title: '状态',
+      title: t.security.history.status,
       dataIndex: 'status',
       key: 'status',
       render: (status: string, record: SecurityHistoryRecord) => {
@@ -247,7 +247,7 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
       },
     },
     {
-      title: '检测时间',
+      title: t.security.history.scanTime,
       dataIndex: 'timestamp',
       key: 'timestamp',
       render: (timestamp: number) => (
@@ -255,18 +255,18 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
       ),
     },
     {
-      title: '操作',
+      title: t.security.history.actions,
       key: 'actions',
       render: (_: any, record: SecurityHistoryRecord) => (
         <Space>
-          <Tooltip title="查看详情">
+                      <Tooltip title={t.security.history.viewDetail}>
             <Button 
               type="link" 
               icon={<EyeOutlined />} 
               onClick={() => handleViewDetail(record)}
             />
           </Tooltip>
-          <Tooltip title="恢复记录">
+                      <Tooltip title={t.security.history.restoreRecord}>
             <Button 
               type="link" 
               icon={<ReloadOutlined />} 
@@ -274,10 +274,10 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
               disabled={connectionStatus !== 'connected'}
             />
           </Tooltip>
-          <Tooltip title="删除记录">
+                      <Tooltip title={t.security.history.deleteRecord}>
             <Popconfirm
-              title="确认删除"
-              description="确定要删除这条历史记录吗？"
+                              title={t.security.history.confirmDelete}
+                description={t.security.history.confirmDeleteDesc}
               onConfirm={() => handleDeleteRecord(record.id)}
             >
               <Button type="link" danger icon={<DeleteOutlined />} />
@@ -294,13 +294,13 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
 
     return (
       <Modal
-        title={`检测详情 - ${selectedRecord.serverName}`}
+        title={`${t.security.history.scanDetail} - ${selectedRecord.serverName}`}
         open={showDetailModal}
         onCancel={() => setShowDetailModal(false)}
         width={800}
         footer={[
           <Button key="close" onClick={() => setShowDetailModal(false)}>
-            关闭
+            {t.common.close}
           </Button>,
           <Button 
             key="restore" 
@@ -312,34 +312,34 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
             }}
             disabled={connectionStatus !== 'connected'}
           >
-            恢复记录
+            {t.security.history.restoreRecord}
           </Button>
         ]}
       >
         <div>
           <Row gutter={16} style={{ marginBottom: 16 }}>
             <Col span={8}>
-              <Statistic title="服务器名称" value={selectedRecord.serverName} />
+              <Statistic title={t.security.history.serverName} value={selectedRecord.serverName} />
             </Col>
             <Col span={8}>
-              <Statistic title="检测类型" value="主动扫描" />
+              <Statistic title={t.security.history.scanType} value={t.security.history.activeScan} />
             </Col>
             <Col span={8}>
-              <Statistic title="检测状态" value={getStatusInfo(selectedRecord.status).text} />
+              <Statistic title={t.security.history.status} value={getStatusInfo(selectedRecord.status).text} />
             </Col>
           </Row>
 
           <Row gutter={16} style={{ marginBottom: 16 }}>
             <Col span={8}>
-              <Statistic title="检测时间" value={new Date(selectedRecord.timestamp).toLocaleString()} />
+              <Statistic title={t.security.history.scanTime} value={new Date(selectedRecord.timestamp).toLocaleString()} />
             </Col>
             <Col span={8}>
-              <Statistic title="持续时间" value={selectedRecord.duration ? `${Math.round(selectedRecord.duration / 1000)}秒` : '未知'} />
+              <Statistic title={t.security.history.duration} value={selectedRecord.duration ? `${Math.round(selectedRecord.duration / 1000)}${t.security.history.seconds}` : t.security.history.unknown} />
             </Col>
             <Col span={8}>
               <Statistic 
-                title="整体风险" 
-                value={selectedRecord.report?.overallRisk || '无数据'}
+                title={t.security.history.overallRisk} 
+                value={selectedRecord.report?.overallRisk || t.security.noData}
                 valueStyle={{ color: selectedRecord.report?.overallRisk ? getRiskLevelColor(selectedRecord.report.overallRisk) : undefined }}
               />
             </Col>
@@ -348,7 +348,7 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
           {selectedRecord.errorMessage && (
             <Alert
               type="error"
-              message="错误信息"
+              message={t.security.history.errorMessage}
               description={selectedRecord.errorMessage}
               style={{ marginBottom: 16 }}
             />
@@ -356,35 +356,35 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
 
           {selectedRecord.scanType === 'active' && selectedRecord.report && (
             <div>
-              <Title level={5}>检测结果统计</Title>
+              <Title level={5}>{t.security.history.detectionResults}</Title>
               <Row gutter={16} style={{ marginBottom: 16 }}>
                 <Col span={6}>
-                  <Statistic title="工具检测" value={selectedRecord.report.toolResults.length} />
+                  <Statistic title={t.security.history.toolDetection} value={selectedRecord.report.toolResults.length} />
                 </Col>
                 <Col span={6}>
-                  <Statistic title="提示检测" value={selectedRecord.report.promptResults.length} />
+                  <Statistic title={t.security.history.promptDetection} value={selectedRecord.report.promptResults.length} />
                 </Col>
                 <Col span={6}>
-                  <Statistic title="资源检测" value={selectedRecord.report.resourceResults.length} />
+                  <Statistic title={t.security.history.resourceDetection} value={selectedRecord.report.resourceResults.length} />
                 </Col>
                 <Col span={6}>
-                  <Statistic title="总问题数" value={selectedRecord.report.summary.totalIssues} />
+                  <Statistic title={t.security.history.totalIssues} value={selectedRecord.report.summary.totalIssues} />
                 </Col>
               </Row>
 
-              <Title level={5}>风险分布</Title>
+              <Title level={5}>{t.security.history.riskDistribution}</Title>
               <Row gutter={16}>
                 <Col span={6}>
-                  <Statistic title="严重问题" value={selectedRecord.report.summary.criticalIssues} valueStyle={{ color: '#ff4d4f' }} />
+                  <Statistic title={t.security.history.criticalIssues} value={selectedRecord.report.summary.criticalIssues} valueStyle={{ color: '#ff4d4f' }} />
                 </Col>
                 <Col span={6}>
-                  <Statistic title="高危问题" value={selectedRecord.report.summary.highIssues} valueStyle={{ color: '#ff7a45' }} />
+                  <Statistic title={t.security.history.highIssues} value={selectedRecord.report.summary.highIssues} valueStyle={{ color: '#ff7a45' }} />
                 </Col>
                 <Col span={6}>
-                  <Statistic title="中等问题" value={selectedRecord.report.summary.mediumIssues} valueStyle={{ color: '#ffa940' }} />
+                  <Statistic title={t.security.history.mediumIssues} value={selectedRecord.report.summary.mediumIssues} valueStyle={{ color: '#ffa940' }} />
                 </Col>
                 <Col span={6}>
-                  <Statistic title="低危问题" value={selectedRecord.report.summary.lowIssues} valueStyle={{ color: '#52c41a' }} />
+                  <Statistic title={t.security.history.lowIssues} value={selectedRecord.report.summary.lowIssues} valueStyle={{ color: '#52c41a' }} />
                 </Col>
               </Row>
             </div>
@@ -392,7 +392,7 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
 
 
 
-          <Title level={5}>检测配置</Title>
+          <Title level={5}>{t.security.history.scanConfig}</Title>
           <div style={{ 
             backgroundColor: '#f5f5f5', 
             padding: '12px', 
@@ -417,7 +417,7 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
             <Col>
               <Space>
                 <Title level={4} style={{ margin: 0 }}>
-                  <HistoryOutlined /> 检测历史
+                  <HistoryOutlined /> {t.security.history.title}
                 </Title>
                 <Badge count={historyRecords.length} showZero />
               </Space>
@@ -429,14 +429,14 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
                   onClick={loadHistoryRecords}
                   loading={loading}
                 >
-                  刷新
+                  {t.common.refresh}
                 </Button>
                 <Button 
                   icon={<DownloadOutlined />} 
                   onClick={handleExportHistory}
                   disabled={historyRecords.length === 0}
                 >
-                  导出
+                  {t.common.export}
                 </Button>
                 <Button 
                   icon={<ClearOutlined />} 
@@ -444,7 +444,7 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
                   onClick={handleClearAllHistory}
                   disabled={historyRecords.length === 0}
                 >
-                  清空
+                  {t.common.clear}
                 </Button>
               </Space>
             </Col>
@@ -453,7 +453,7 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
 
         {historyRecords.length === 0 ? (
           <Empty 
-            description="暂无检测历史记录"
+            description={t.security.history.noHistory}
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           />
         ) : (
@@ -466,7 +466,7 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
               pageSize: 10,
               showSizeChanger: true,
               showQuickJumper: true,
-              showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条记录`
+              showTotal: (total, range) => `${t.common.pageInfo} ${range[0]}-${range[1]} ${t.common.of} ${total} ${t.common.records}`
             }}
           />
         )}

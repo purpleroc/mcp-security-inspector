@@ -30,6 +30,9 @@ export interface TranslationKey {
     next: string;
     submit: string;
     reset: string;
+    pageInfo: string;
+    of: string;
+    records: string;
   };
   
   // 标签页
@@ -57,6 +60,8 @@ export interface TranslationKey {
     messagePathPlaceholder: string;
     authentication: string;
     authType: string;
+    protocolVersion: string;
+    serverVersion: string;
     testConnection: string;
     saveConfig: string;
     savedConfigs: string;
@@ -273,6 +278,9 @@ export interface TranslationKey {
     scanning: string;
     scanComplete: string;
     riskLevel: string;
+    allLevels: string;
+    scanType: string;
+    allTypes: string;
     totalIssues: string;
     criticalIssues: string;
     highIssues: string;
@@ -428,6 +436,20 @@ export interface TranslationKey {
       lowIssues: string;
       passiveResults: string;
       potentialThreats: string;
+      loadHistoryFailed: string;
+      deleteRecordFailed: string;
+      clearHistoryFailed: string;
+      restoreRecordSuccess: string;
+      exportHistoryFailed: string;
+      saveHistorySuccess: string;
+      saveHistoryFailed: string;
+      noResultsToSave: string;
+      saveCombinedResultsSuccess: string;
+      and: string;
+      restoreActiveScanSuccess: string;
+      restoreCombinedResultsSuccess: string;
+      onlySupportActiveOrCombined: string;
+      seconds: string;
     };
     toolRisks: string;
     promptRisks: string;
@@ -826,6 +848,9 @@ export interface TranslationKey {
     loadConfigFailed: string;
     importFailed: string;
     exportFailed: string;
+    deleteFailed: string;
+    clearFailed: string;
+    loadDataFailed: string;
     networkError: string;
     timeout: string;
     unauthorized: string;
