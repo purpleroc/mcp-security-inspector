@@ -136,6 +136,12 @@ export class MCPClient {
       const ruleMatches = await detectionEngine.detectThreats(parameters, result);
       console.log(`[被动检测] 检测完成，找到 ${ruleMatches.length} 个规则匹配`);
 
+      // 如果没有命中任何规则，直接丢弃结果
+      if (ruleMatches.length === 0) {
+        console.log(`[被动检测] 没有命中任何规则，丢弃结果`);
+        return;
+      }
+
       // 转换检测结果为被动检测结果格式
       const threats: Array<{
         type: string;
@@ -182,6 +188,12 @@ export class MCPClient {
         if (riskPriority[risk.severity] > riskPriority[maxRiskLevel]) {
           maxRiskLevel = risk.severity;
         }
+      }
+
+      // 如果是低危告警，直接丢弃，不存储和通知
+      if (maxRiskLevel === 'low') {
+        console.log(`[被动检测] 低危告警，丢弃结果: ${type} ${targetName}`);
+        return;
       }
 
       // 生成建议
@@ -940,9 +952,49 @@ export class MCPClient {
       params: {}
     };
 
-    const response = await this.sendRequest(request);
-    const result = response.result as { resourceTemplates?: MCPResource[] };
-    return result?.resourceTemplates || [];
+    try {
+      console.log('[MCPClient] 开始获取资源模板...');
+      const response = await this.sendRequest(request);
+      console.log('[MCPClient] 资源模板服务器响应:', response);
+      
+      // 检查是否有错误
+      if (response.error) {
+        console.error('[MCPClient] 资源模板请求失败:', response.error);
+        // 如果服务器不支持资源模板，返回空数组
+        if (response.error.code === -32601) { // Method not found
+          console.warn('[MCPClient] 服务器不支持资源模板功能');
+          return [];
+        }
+        throw new Error(`资源模板请求失败: ${response.error.message}`);
+      }
+      
+      const result = response.result as { resourceTemplates?: MCPResource[] };
+      console.log('[MCPClient] 资源模板结果:', result);
+      
+      if (!result) {
+        console.warn('[MCPClient] 服务器返回空结果');
+        return [];
+      }
+      
+      const templates = result?.resourceTemplates || [];
+      console.log('[MCPClient] 原始资源模板数组:', templates);
+      
+      // 只过滤掉真正的null值，保留所有其他对象
+      const validTemplates = templates.filter(template => template !== null);
+      
+      if (templates.length !== validTemplates.length) {
+        console.warn(`[MCPClient] 过滤掉 ${templates.length - validTemplates.length} 个null资源模板`);
+        console.warn('[MCPClient] 原始数组包含null值:', templates);
+      }
+      
+      console.log(`[MCPClient] 获取资源模板成功: ${validTemplates.length} 个有效模板`);
+      console.log('[MCPClient] 有效模板详情:', validTemplates);
+      return validTemplates;
+    } catch (error) {
+      console.error('[MCPClient] 获取资源模板失败:', error);
+      // 如果是网络错误或服务器不支持，返回空数组而不是抛出错误
+      return [];
+    }
   }
 
   /**

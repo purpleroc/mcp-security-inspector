@@ -368,6 +368,16 @@ export interface TranslationKey {
       high: string;
       critical: string;
     };
+    // 访问测试结果相关翻译
+    testCaseNumber: string;
+    resourceName: string;
+    successStatus: string;
+    testURI: string;
+    returnResult: string;
+    testRiskLevel: string;
+    testDescription: string;
+    testEvidence: string;
+    improvementMeasures: string;
     checkTypes: {
       tool: string;
       prompt: string;
@@ -384,6 +394,8 @@ export interface TranslationKey {
     testCategory: string;
     securityLevel: string;
     description: string;
+    threatType: string;
+    evidence: string;
     // SecurityPanel additional fields
     logs: string;
     logCount: string;

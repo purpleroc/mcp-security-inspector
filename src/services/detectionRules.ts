@@ -14,9 +14,7 @@ export class BuiltinDetectionRules {
       ...this.getPrivacyRules(),
       ...this.getComplianceRules(),
       ...this.getPerformanceRules(),
-      ...this.getMaliciousPromptRules(),
-      ...this.getSensitiveDataRules(),
-      ...this.getRiskKeywordRules()
+      ...this.getMaliciousPromptRules()
     ];
   }
 
@@ -35,7 +33,7 @@ export class BuiltinDetectionRules {
         enabled: true,
         pattern: '(rm\\s+(-[rf]+\\s+)?[/\\\\]|del\\s+[/\\\\]|format\\s+[a-z]:|sudo\\s+rm|exec\\s*\\(|system\\s*\\(|shell_exec|passthru|eval\\s*\\()',
         flags: 'gi',
-        scope: 'both',
+        scope: 'output',
         riskLevel: 'critical',
         threatType: '命令注入',
         maskSensitiveData: false,
@@ -58,7 +56,7 @@ export class BuiltinDetectionRules {
         description: '检测目录遍历攻击模式，防止未授权文件访问',
         pattern: '(\\.\\./|\\.\\\\\\.|%2e%2e[/\\\\]|%252e%252e[/\\\\]|\\\\\\.\\.\\\\|\\.\\.\\\\)',
         flags: 'gi',
-        scope: 'both',
+        scope: 'output',
         category: 'security',
         enabled: true,
         riskLevel: 'high',
@@ -78,37 +76,12 @@ export class BuiltinDetectionRules {
       },
       
       {
-        id: 'sec_003_xss_patterns',
-        name: 'XSS攻击模式',
-        description: '检测跨站脚本攻击模式，包括各种绕过技术',
-        pattern: '(<script[^>]*>|javascript\\s*:|vbscript\\s*:|on\\w+\\s*=|<iframe[^>]*>|<object[^>]*>|<embed[^>]*>|<svg[^>]*>)',
-        flags: 'gi',
-        scope: 'both',
-        category: 'security',
-        enabled: true,
-        riskLevel: 'high',
-        threatType: 'XSS攻击',
-        maskSensitiveData: false,
-        maxMatches: 5,
-        isBuiltin: true,
-        createdAt: now,
-        updatedAt: now,
-        tags: ['xss', 'script', 'injection'],
-        recommendation: '检查输出编码和内容安全策略(CSP)配置',
-        remediation: 'HTML编码、CSP头部、输入验证和输出过滤',
-        references: [
-          'https://owasp.org/www-community/attacks/xss/',
-          'https://cwe.mitre.org/data/definitions/79.html'
-        ]
-      },
-      
-      {
         id: 'sec_004_sql_injection',
         name: 'SQL注入检测',
         description: '检测SQL注入攻击模式',
         pattern: "('\\s*(or|and)\\s+'?1'?\\s*=\\s*'?1|union\\s+(all\\s+)?select|insert\\s+into|update\\s+\\w+\\s+set|delete\\s+from|drop\\s+(table|database)|exec\\s*\\(|sp_|xp_)",
         flags: 'gi',
-        scope: 'both',
+        scope: 'output',
         category: 'security',
         enabled: true,
         riskLevel: 'critical',
@@ -125,31 +98,6 @@ export class BuiltinDetectionRules {
           'https://owasp.org/www-community/attacks/SQL_Injection',
           'https://cwe.mitre.org/data/definitions/89.html'
         ]
-      },
-      
-      {
-        id: 'sec_005_ldap_injection',
-        name: 'LDAP注入检测',
-        description: '检测LDAP注入攻击模式',
-        pattern: '(\\*\\)|\\|\\s*\\)|&\\s*\\)|!\\s*\\)|\\(\\s*\\||\\(\\s*&|\\(\\s*!)',
-        flags: 'gi',
-        scope: 'both',
-        category: 'security',
-        enabled: true,
-        riskLevel: 'high',
-        threatType: 'LDAP注入',
-        maskSensitiveData: false,
-        maxMatches: 5,
-        isBuiltin: true,
-        createdAt: now,
-        updatedAt: now,
-        tags: ['ldap', 'injection', 'directory'],
-        recommendation: '验证LDAP查询输入并使用安全的查询构建方法',
-        remediation: 'LDAP过滤器验证、特殊字符转义、最小权限查询',
-        references: [
-          'https://owasp.org/www-community/attacks/LDAP_Injection',
-          'https://cwe.mitre.org/data/definitions/90.html'
-        ]
       }
     ];
   }
@@ -165,9 +113,9 @@ export class BuiltinDetectionRules {
         id: 'priv_001_password',
         name: '密码泄漏检测',
         description: '检测可能的密码泄漏',
-        pattern: '(?:password|pwd|pass|passwd)\\s*[:=]\\s*["\']?([^\\s"\'\\n]{4,})["\']?',
+        pattern: '(?:password|pwd|pass|passwd|key|token|secret|secretkey)\\s*[:=]\\s*["\']?([^\\s"\'\\n]{4,})["\']?',
         flags: 'gi',
-        scope: 'both',
+        scope: 'output',
         category: 'privacy',
         enabled: true,
         riskLevel: 'critical',
@@ -190,9 +138,9 @@ export class BuiltinDetectionRules {
         id: 'priv_002_api_key',
         name: 'API密钥泄漏',
         description: '检测API密钥、访问令牌等凭据泄漏',
-        pattern: '(?:api[_\\s]*key|apikey|access[_\\s]*token|bearer[_\\s]*token|secret[_\\s]*key)\\s*[:=]\\s*["\']?([a-zA-Z0-9\\-_]{16,})["\']?',
+        pattern: '(?:api[_\\s]*key|apikey|access[_\\s]*token|bearer[_\\s]*token|secret[_\\s]*key|token)\\s*[:=]\\s*["\']?([a-zA-Z0-9\\-_]{16,})["\']?',
         flags: 'gi',
-        scope: 'both',
+        scope: 'output',
         category: 'privacy',
         enabled: true,
         riskLevel: 'critical',
@@ -238,22 +186,22 @@ export class BuiltinDetectionRules {
       
       {
         id: 'priv_004_phone',
-        name: '电话号码泄漏',
-        description: '检测电话号码泄漏',
-        pattern: '(?:\\+?1[-\\s]?)?\\(?[0-9]{3}\\)?[-\\s]?[0-9]{3}[-\\s]?[0-9]{4}|(?:\\+86[-\\s]?)?1[3-9][0-9][-\\s]?[0-9]{4}[-\\s]?[0-9]{4}',
+        name: '手机号码泄漏',
+        description: '检测境内手机号码泄漏',
+        pattern: '(?:\\+86[-\\s]?)?1[3-9][0-9][-\\s]?[0-9]{4}[-\\s]?[0-9]{4}(?![0-9])',
         flags: 'gi',
         scope: 'output',
         category: 'privacy',
         enabled: true,
         riskLevel: 'medium',
-        threatType: '电话号码泄漏',
+        threatType: '手机号码泄漏',
         maskSensitiveData: true,
         maxMatches: 5,
         isBuiltin: true,
         createdAt: now,
         updatedAt: now,
         tags: ['phone', 'pii', 'contact'],
-        recommendation: '检查电话号码暴露的必要性，考虑脱敏处理',
+        recommendation: '检查手机号码暴露的必要性，考虑脱敏处理',
         remediation: '号码脱敏、访问控制、用户同意机制',
         references: [
           'https://gdpr.eu/personal-data/'
@@ -264,9 +212,9 @@ export class BuiltinDetectionRules {
         id: 'priv_005_credit_card',
         name: '信用卡号检测',
         description: '检测信用卡号码泄漏',
-        pattern: '(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|3[0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})',
+        pattern: '(?<![0-9])(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|3[0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})(?![0-9])',
         flags: 'gi',
-        scope: 'both',
+        scope: 'output',
         category: 'privacy',
         enabled: true,
         riskLevel: 'critical',
@@ -283,7 +231,130 @@ export class BuiltinDetectionRules {
           'https://www.pcisecuritystandards.org/',
           'https://owasp.org/www-project-application-security-verification-standard/'
         ]
-      }
+      },
+      {
+        id: 'priv_006_private_key',
+        name: '私钥信息检测',
+        description: '检测RSA私钥等敏感密钥信息',
+        pattern: '-----BEGIN\\s+(?:RSA\\s+)?PRIVATE\\s+KEY-----',
+        flags: 'gi',
+        scope: 'both',
+        category: 'privacy',
+        enabled: true,
+        riskLevel: 'critical',
+        threatType: '私钥泄漏',
+        maskSensitiveData: true,
+        maxMatches: 5,
+        isBuiltin: true,
+        createdAt: now,
+        updatedAt: now,
+        tags: ['private_key', 'rsa', 'cryptography'],
+        recommendation: '立即移除私钥信息，使用安全的密钥管理',
+        remediation: '密钥管理服务、安全存储、访问控制',
+        references: [
+          'https://cwe.mitre.org/data/definitions/321.html'
+        ]
+      },
+
+      
+      {
+        id: 'sensitive_003_database_connection',
+        name: '数据库连接字符串检测',
+        description: '检测包含敏感信息的数据库连接字符串',
+        pattern: '(?:mongodb|mysql|postgres|sqlite):[\/]{2}[^\s]+',
+        flags: 'gi',
+        scope: 'both',
+        category: 'privacy',
+        enabled: true,
+        riskLevel: 'high',
+        threatType: '数据库凭据泄漏',
+        maskSensitiveData: true,
+        maxMatches: 5,
+        isBuiltin: true,
+        createdAt: now,
+        updatedAt: now,
+        tags: ['database', 'connection', 'credential'],
+        recommendation: '使用环境变量或安全的配置管理',
+        remediation: '配置管理、环境变量、访问控制',
+        references: [
+          'https://cwe.mitre.org/data/definitions/532.html'
+        ]
+      },
+      
+      
+      {
+        id: 'priv_007_id_card',
+        name: '身份证号检测',
+        description: '检测中国身份证号码（18位格式）',
+        pattern: '(?<![0-9])[1-9]\\d{5}(18|19|20)\\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\\d|3[01])\\d{3}[0-9Xx](?![0-9Xx])',
+        flags: 'g',
+        scope: 'output',
+        category: 'privacy',
+        enabled: true,
+        riskLevel: 'high',
+        threatType: '身份证号泄漏',
+        maskSensitiveData: true,
+        maxMatches: 5,
+        isBuiltin: true,
+        createdAt: now,
+        updatedAt: now,
+        tags: ['id_card', 'personal', 'pii'],
+        recommendation: '立即移除身份证号信息',
+        remediation: '数据脱敏、隐私保护、合规管理',
+        references: [
+          'https://gdpr.eu/',
+          'https://cwe.mitre.org/data/definitions/200.html'
+        ]
+      },
+      
+      // 系统信息相关
+      {
+        id: 'priv_008_file_path',
+        name: '高敏感文件路径检测',
+        description: '检测系统高敏感文件路径信息，如密码文件、密钥文件等',
+        pattern: '(?:[a-zA-Z]:\\\\|\\/)[^\\s<>"]*(?:\\.(?:key|pem|p12|pfx|pwd|passwd|shadow|htpasswd|id_rsa|id_dsa|id_ecdsa|id_ed25519))',
+        flags: 'gi',
+        scope: 'output',
+        category: 'security',
+        enabled: false, // 默认禁用，减少误报
+        riskLevel: 'high',
+        threatType: '敏感文件路径泄漏',
+        maskSensitiveData: false,
+        maxMatches: 5,
+        isBuiltin: true,
+        createdAt: now,
+        updatedAt: now,
+        tags: ['file_path', 'sensitive', 'credentials', 'information_disclosure'],
+        recommendation: '检查是否暴露了高敏感文件路径，如密码文件、密钥文件等',
+        remediation: '敏感文件保护、路径遮蔽、访问控制',
+        references: [
+          'https://cwe.mitre.org/data/definitions/200.html'
+        ]
+      },
+      
+      {
+        id: 'priv_009_ip_address',
+        name: '私有IP地址检测',
+        description: '检测私有网络IP地址信息，避免内网信息泄漏',
+        pattern: '(?:(?:10\\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))|(?:172\\.(?:1[6-9]|2[0-9]|3[01])\\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))|(?:192\\.168\\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)))',
+        flags: 'g',
+        scope: 'output',
+        category: 'privacy',
+        enabled: false, // 默认禁用，减少误报
+        riskLevel: 'low',
+        threatType: '内网信息泄漏',
+        maskSensitiveData: false,
+        maxMatches: 10,
+        isBuiltin: true,
+        createdAt: now,
+        updatedAt: now,
+        tags: ['ip_address', 'private_network', 'information_disclosure'],
+        recommendation: '检查是否暴露了内网IP地址信息',
+        remediation: '内网信息保护、网络隔离、安全配置',
+        references: [
+          'https://cwe.mitre.org/data/definitions/200.html'
+        ]
+      },
     ];
   }
 
@@ -300,7 +371,7 @@ export class BuiltinDetectionRules {
         description: '检测可能的个人身份信息，确保GDPR合规',
         pattern: '(?:姓名|name|身份证|identity|户籍|residence|地址|address)\\s*[:=]\\s*["\']?([^\\s"\'\\n]{2,})["\']?',
         flags: 'gi',
-        scope: 'both',
+        scope: 'output',
         category: 'compliance',
         enabled: true,
         riskLevel: 'medium',
@@ -321,39 +392,6 @@ export class BuiltinDetectionRules {
       }
     ];
   }
-
-  // /**
-  //  * 数据质量检查规则
-  //  */
-  // static getDataQualityRules(): DetectionRule[] {
-  //   const now = Date.now();
-    
-  //   return [
-  //     {
-  //       id: 'dq_001_suspicious_strings',
-  //       name: '可疑字符串检测',
-  //       description: '检测可能的测试数据、错误消息或调试信息',
-  //       pattern: '(test|demo|example|null|undefined|error|exception|debug|tmp|temp)',
-  //       flags: 'gi',
-  //       scope: 'output',
-  //       category: 'data_quality',
-  //       enabled: true,
-  //       riskLevel: 'low',
-  //       threatType: '数据质量问题',
-  //       maskSensitiveData: false,
-  //       maxMatches: 10,
-  //       isBuiltin: true,
-  //       createdAt: now,
-  //       updatedAt: now,
-  //       tags: ['quality', 'test', 'debug'],
-  //       recommendation: '检查是否存在测试数据或调试信息泄漏',
-  //       remediation: '数据清理、环境隔离、日志管理',
-  //       references: [
-  //         'https://owasp.org/www-community/Improper_Error_Handling'
-  //       ]
-  //     }
-  //   ];
-  // }
 
   /**
    * 性能问题检测规则
@@ -432,7 +470,7 @@ export class BuiltinDetectionRules {
         description: '检测试图绕过AI安全限制的越狱攻击模式',
         pattern: '(ignore\\s+previous\\s+instructions|forget\\s+all\\s+rules|act\\s+as\\s+if|pretend\\s+to\\s+be|you\\s+are\\s+now|system\\s+override|ignore\\s+ethical|bypass\\s+safety|ignore\\s+content\\s+policy|忽略.*指令|忘记.*规则|假装.*是|扮演.*角色|现在.*是|系统.*覆盖|绕过.*安全|忽略.*伦理)',
         flags: 'gi',
-        scope: 'both',
+        scope: 'output',
         category: 'security',
         enabled: true,
         riskLevel: 'critical',
@@ -457,7 +495,7 @@ export class BuiltinDetectionRules {
         description: '检测试图改变AI角色或身份的操纵行为',
         pattern: '(act\\s+as\\s+[a-zA-Z]+|pretend\\s+to\\s+be\\s+[a-zA-Z]+|you\\s+are\\s+[a-zA-Z]+|roleplay\\s+as|imagine\\s+you\\s+are|behave\\s+like|扮演.*[a-zA-Z\\u4e00-\\u9fa5]+|假装.*[a-zA-Z\\u4e00-\\u9fa5]+|你是.*[a-zA-Z\\u4e00-\\u9fa5]+|角色扮演.*|想象.*是|表现得像|你现在扮演)',
         flags: 'gi',
-        scope: 'both',
+        scope: 'output',
         category: 'security',
         enabled: true,
         riskLevel: 'high',
@@ -474,31 +512,6 @@ export class BuiltinDetectionRules {
           'https://arxiv.org/abs/2307.15043'
         ]
       },
-      
-    //   {
-    //     id: 'prompt_003_injection_attack',
-    //     name: 'Prompt注入攻击',
-    //     description: '检测prompt注入攻击模式，包括分隔符绕过',
-    //     pattern: '(\\{\\{|\\}\\}|\\[\\[|\\]\\]|<<|>>|\\|\\||&&|\\$\\{|\\$\\(|`.*`|"""|\\\'\\\'\\\')',
-    //     flags: 'gi',
-    //     scope: 'parameters',
-    //     category: 'security',
-    //     enabled: true,
-    //     riskLevel: 'critical',
-    //     threatType: 'Prompt注入',
-    //     maskSensitiveData: false,
-    //     maxMatches: 5,
-    //     isBuiltin: true,
-    //     createdAt: now,
-    //     updatedAt: now,
-    //     tags: ['injection', 'prompt', 'delimiter'],
-    //     recommendation: '检查是否存在prompt注入尝试',
-    //     remediation: '输入验证、分隔符转义、上下文隔离',
-    //     references: [
-    //       'https://arxiv.org/abs/2209.11302',
-    //       'https://owasp.org/www-project-ai-security-and-privacy-guide/'
-    //     ]
-    //   },
       
       {
         id: 'prompt_004_sensitive_extraction',
@@ -530,7 +543,7 @@ export class BuiltinDetectionRules {
         description: '检测包含恶意指令的prompt，包括攻击工具、恶意软件等',
         pattern: '(create\\s+malware|develop\\s+virus|build\\s+trojan|write\\s+keylogger|craft\\s+backdoor|generate\\s+rootkit|design\\s+spyware|hack\\s+into|exploit\\s+vulnerability|steal\\s+credentials|phish\\s+for|scam\\s+users|fraud\\s+scheme|unauthorized\\s+access|illegal\\s+activity|harmful\\s+code|dangerous\\s+script|destructive\\s+payload|创建.*恶意软件|开发.*病毒|构建.*木马|编写.*键盘记录器|制作.*后门|生成.*根套件|设计.*间谍软件|黑客.*入侵|利用.*漏洞|窃取.*凭据|钓鱼.*获取|诈骗.*用户|欺诈.*计划|未授权.*访问|非法.*活动|有害.*代码|危险.*脚本|破坏性.*载荷)',
         flags: 'gi',
-        scope: 'both',
+        scope: 'output',
         category: 'security',
         enabled: true,
         riskLevel: 'high',
@@ -554,7 +567,7 @@ export class BuiltinDetectionRules {
         description: '检测社会工程学攻击模式，包括紧急感制造、权威冒充等',
         pattern: '(urgent\\s+action\\s+required|emergency\\s+response\\s+needed|critical\\s+security\\s+alert|help\\s+me\\s+urgently|save\\s+me\\s+now|trust\\s+me\\s+completely|verify\\s+your\\s+identity\\s+now|confirm\\s+your\\s+account\\s+immediately|authority\\s+figure\\s+request|official\\s+security\\s+notice|boss\\s+needs\\s+immediate|family\\s+emergency\\s+help|朋友.*紧急.*帮助|家人.*急需.*救援|老板.*立即.*要求|权威.*验证.*身份|官方.*安全.*通知|紧急.*行动.*要求|关键.*安全.*警报|立即.*确认.*账户)',
         flags: 'gi',
-        scope: 'both',
+        scope: 'output',
         category: 'security',
         enabled: true,
         riskLevel: 'medium',
@@ -578,7 +591,7 @@ export class BuiltinDetectionRules {
         description: '检测试图执行恶意代码的prompt',
         pattern: '(eval\\s*\\(|exec\\s*\\(|system\\s*\\(|shell_exec|passthru|popen|proc_open|`.*`|\\$\\{.*\\}|\\$\\(.*\\)|import\\s+os|subprocess|os\\.system)',
         flags: 'gi',
-        scope: 'both',
+        scope: 'output',
         category: 'security',
         enabled: true,
         riskLevel: 'critical',
@@ -602,7 +615,7 @@ export class BuiltinDetectionRules {
         description: '检测试图泄露敏感数据的prompt，包括未授权传输和外部共享',
         pattern: '(send\\s+sensitive\\s+data\\s+to|upload\\s+private\\s+info\\s+to|post\\s+confidential\\s+to|email\\s+secrets\\s+to|share\\s+credentials\\s+with|forward\\s+personal\\s+data\\s+to|transmit\\s+internal\\s+data\\s+to|export\\s+user\\s+data\\s+to|download\\s+and\\s+send|copy\\s+private\\s+files\\s+to|save\\s+to\\s+external\\s+server|发送.*敏感.*数据.*到|上传.*私人.*信息.*到|发布.*机密.*到|邮件.*秘密.*到|分享.*凭据.*给|转发.*个人.*数据.*到|传输.*内部.*数据.*到|导出.*用户.*数据.*到|下载.*并.*发送|复制.*私人.*文件.*到|保存.*到.*外部.*服务器)',
         flags: 'gi',
-        scope: 'both',
+        scope: 'output',
         category: 'security',
         enabled: true,
         riskLevel: 'high',
@@ -621,398 +634,4 @@ export class BuiltinDetectionRules {
       }
     ];
   }
-
-  /**
-   * 敏感数据检测规则
-   */
-  static getSensitiveDataRules(): DetectionRule[] {
-    const now = Date.now();
-    
-    return [
-      // 凭据相关
-      {
-        id: 'sensitive_001_password',
-        name: '密码信息检测',
-        description: '检测密码、API密钥、访问令牌等敏感凭据信息',
-        pattern: '(?:password|pwd|pass|api[_\s]*key|apikey|access[_\s]*key|token|bearer|access[_\s]*token)\s*[:=]\s*[\'"]?([^\s\'"\n]+)[\'"]?',
-        flags: 'gi',
-        scope: 'both',
-        category: 'privacy',
-        enabled: true,
-        riskLevel: 'critical',
-        threatType: '凭据泄漏',
-        captureGroups: ['credential'],
-        maskSensitiveData: true,
-        maxMatches: 10,
-        isBuiltin: true,
-        createdAt: now,
-        updatedAt: now,
-        tags: ['credential', 'password', 'api_key', 'token'],
-        recommendation: '立即移除或遮蔽敏感凭据信息',
-        remediation: '环境变量、密钥管理、数据加密',
-        references: [
-          'https://owasp.org/www-project-top-ten/2017/A2_2017-Broken_Authentication',
-          'https://cwe.mitre.org/data/definitions/532.html'
-        ]
-      },
-      
-      {
-        id: 'sensitive_002_private_key',
-        name: '私钥信息检测',
-        description: '检测RSA私钥等敏感密钥信息',
-        pattern: '-----BEGIN\\s+(?:RSA\\s+)?PRIVATE\\s+KEY-----',
-        flags: 'gi',
-        scope: 'both',
-        category: 'privacy',
-        enabled: true,
-        riskLevel: 'critical',
-        threatType: '私钥泄漏',
-        maskSensitiveData: true,
-        maxMatches: 5,
-        isBuiltin: true,
-        createdAt: now,
-        updatedAt: now,
-        tags: ['private_key', 'rsa', 'cryptography'],
-        recommendation: '立即移除私钥信息，使用安全的密钥管理',
-        remediation: '密钥管理服务、安全存储、访问控制',
-        references: [
-          'https://cwe.mitre.org/data/definitions/321.html'
-        ]
-      },
-      
-      {
-        id: 'sensitive_003_database_connection',
-        name: '数据库连接字符串检测',
-        description: '检测包含敏感信息的数据库连接字符串',
-        pattern: '(?:mongodb|mysql|postgres|sqlite):[\/]{2}[^\s]+',
-        flags: 'gi',
-        scope: 'both',
-        category: 'privacy',
-        enabled: true,
-        riskLevel: 'high',
-        threatType: '数据库凭据泄漏',
-        maskSensitiveData: true,
-        maxMatches: 5,
-        isBuiltin: true,
-        createdAt: now,
-        updatedAt: now,
-        tags: ['database', 'connection', 'credential'],
-        recommendation: '使用环境变量或安全的配置管理',
-        remediation: '配置管理、环境变量、访问控制',
-        references: [
-          'https://cwe.mitre.org/data/definitions/532.html'
-        ]
-      },
-      
-      // 个人信息相关
-      {
-        id: 'sensitive_004_email',
-        name: '电子邮箱检测',
-        description: '检测电子邮箱地址信息',
-        pattern: '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}',
-        flags: 'g',
-        scope: 'both',
-        category: 'privacy',
-        enabled: true,
-        riskLevel: 'medium',
-        threatType: '个人信息泄漏',
-        maskSensitiveData: true,
-        maxMatches: 20,
-        isBuiltin: true,
-        createdAt: now,
-        updatedAt: now,
-        tags: ['email', 'personal', 'pii'],
-        recommendation: '考虑遮蔽或移除邮箱地址',
-        remediation: '数据脱敏、隐私保护、用户同意',
-        references: [
-          'https://gdpr.eu/',
-          'https://cwe.mitre.org/data/definitions/200.html'
-        ]
-      },
-      
-      {
-        id: 'sensitive_005_phone_number',
-        name: '电话号码检测',
-        description: '检测中国手机号码和常见电话号码格式',
-        pattern: '(?:\\+86|86)?[-\\s]?1[3-9]\\d{9}|\\(\\d{3}\\)\\s?\\d{3}-\\d{4}',
-        flags: 'g',
-        scope: 'both',
-        category: 'privacy',
-        enabled: true,
-        riskLevel: 'medium',
-        threatType: '个人信息泄漏',
-        maskSensitiveData: true,
-        maxMatches: 10,
-        isBuiltin: true,
-        createdAt: now,
-        updatedAt: now,
-        tags: ['phone', 'personal', 'pii'],
-        recommendation: '考虑遮蔽电话号码信息',
-        remediation: '数据脱敏、隐私保护、用户同意',
-        references: [
-          'https://gdpr.eu/',
-          'https://cwe.mitre.org/data/definitions/200.html'
-        ]
-      },
-      
-      {
-        id: 'sensitive_006_id_card',
-        name: '身份证号检测',
-        description: '检测中国身份证号码',
-        pattern: '[1-9]\\d{5}(18|19|20)\\d{2}((0[1-9])|(1[0-2]))(([0-2][1-9])|10|20|30|31)\\d{3}[0-9Xx]',
-        flags: 'g',
-        scope: 'both',
-        category: 'privacy',
-        enabled: true,
-        riskLevel: 'high',
-        threatType: '身份证号泄漏',
-        maskSensitiveData: true,
-        maxMatches: 5,
-        isBuiltin: true,
-        createdAt: now,
-        updatedAt: now,
-        tags: ['id_card', 'personal', 'pii'],
-        recommendation: '立即移除身份证号信息',
-        remediation: '数据脱敏、隐私保护、合规管理',
-        references: [
-          'https://gdpr.eu/',
-          'https://cwe.mitre.org/data/definitions/200.html'
-        ]
-      },
-      
-      // 系统信息相关
-      {
-        id: 'sensitive_007_file_path',
-        name: '敏感文件路径检测',
-        description: '检测系统敏感文件路径信息',
-        pattern: '(?:[a-zA-Z]:\\\\|\\/)[^\\s<>"]*(?:\\.(?:exe|dll|sys|conf|ini|log|key|pem))',
-        flags: 'gi',
-        scope: 'both',
-        category: 'security',
-        enabled: true,
-        riskLevel: 'medium',
-        threatType: '系统信息泄漏',
-        maskSensitiveData: false,
-        maxMatches: 10,
-        isBuiltin: true,
-        createdAt: now,
-        updatedAt: now,
-        tags: ['file_path', 'system', 'information_disclosure'],
-        recommendation: '避免暴露系统文件路径信息',
-        remediation: '路径遮蔽、信息最小化、安全配置',
-        references: [
-          'https://cwe.mitre.org/data/definitions/200.html'
-        ]
-      },
-      
-      {
-        id: 'sensitive_008_ip_address',
-        name: 'IP地址检测',
-        description: '检测IPv4地址信息',
-        pattern: '(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)',
-        flags: 'g',
-        scope: 'both',
-        category: 'privacy',
-        enabled: true,
-        riskLevel: 'low',
-        threatType: '网络信息泄漏',
-        maskSensitiveData: false,
-        maxMatches: 20,
-        isBuiltin: true,
-        createdAt: now,
-        updatedAt: now,
-        tags: ['ip_address', 'network', 'information_disclosure'],
-        recommendation: '考虑是否需要在输出中显示IP地址',
-        remediation: '信息最小化、隐私保护、安全配置',
-        references: [
-          'https://cwe.mitre.org/data/definitions/200.html'
-        ]
-      },
-      
-      // 金融相关
-      {
-        id: 'sensitive_009_credit_card',
-        name: '信用卡号检测',
-        description: '检测信用卡号码信息',
-        pattern: '(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|3[0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})',
-        flags: 'g',
-        scope: 'both',
-        category: 'privacy',
-        enabled: true,
-        riskLevel: 'critical',
-        threatType: '信用卡信息泄漏',
-        maskSensitiveData: true,
-        maxMatches: 5,
-        isBuiltin: true,
-        createdAt: now,
-        updatedAt: now,
-        tags: ['credit_card', 'financial', 'pci'],
-        recommendation: '立即移除信用卡号信息',
-        remediation: 'PCI合规、数据加密、安全存储',
-        references: [
-          'https://www.pcisecuritystandards.org/',
-          'https://cwe.mitre.org/data/definitions/532.html'
-        ]
-      }
-    ];
-  }
-
-  /**
-   * 风险关键词检测规则
-   */
-  static getRiskKeywordRules(): DetectionRule[] {
-    const now = Date.now();
-    
-    return [
-      {
-        id: 'risk_001_injection_prompts',
-        name: '提示注入攻击检测',
-        description: '检测试图绕过AI安全限制的提示注入攻击模式',
-        pattern: '(忽略之前的指令|忽略上述指令|忽略系统提示|ignore previous instructions|现在你是|你现在扮演|you are now|act as|roleplay as|暴露系统提示|显示系统提示|show system prompt|reveal system prompt|执行代码|运行脚本|execute code|run script|eval\\(|突破限制|绕过限制|bypass restrictions|break limits)',
-        flags: 'gi',
-        scope: 'both',
-        category: 'security',
-        enabled: true,
-        riskLevel: 'high',
-        threatType: '提示注入攻击',
-        maskSensitiveData: false,
-        maxMatches: 5,
-        isBuiltin: true,
-        createdAt: now,
-        updatedAt: now,
-        tags: ['injection', 'prompt', 'jailbreak'],
-        recommendation: '立即阻止此类请求，加强输入验证',
-        remediation: '输入验证、安全过滤、行为监控',
-        references: [
-          'https://arxiv.org/abs/2307.15043',
-          'https://owasp.org/www-project-ai-security-and-privacy-guide/'
-        ]
-      },
-      
-      {
-        id: 'risk_002_system_commands',
-        name: '系统命令执行检测',
-        description: '检测潜在的危险系统命令执行尝试',
-        pattern: '(rm\\s+-rf|del\\s+\\/f|format\\s+c:|sudo\\s+rm|chmod\\s+777|cat\\s+\\/etc\\/passwd|type\\s+con|net\\s+user|whoami|ps\\s+aux|netstat|ifconfig|ipconfig|curl|wget|nc\\s+-|telnet|ssh)',
-        flags: 'gi',
-        scope: 'both',
-        category: 'security',
-        enabled: true,
-        riskLevel: 'critical',
-        threatType: '命令注入',
-        maskSensitiveData: false,
-        maxMatches: 10,
-        isBuiltin: true,
-        createdAt: now,
-        updatedAt: now,
-        tags: ['command_injection', 'system_command', 'execution'],
-        recommendation: '立即阻止此类请求，检查输入验证',
-        remediation: '输入验证、命令白名单、最小权限',
-        references: [
-          'https://owasp.org/www-community/attacks/Command_Injection',
-          'https://cwe.mitre.org/data/definitions/78.html'
-        ]
-      },
-      
-      {
-        id: 'risk_003_sql_injection',
-        name: 'SQL注入攻击检测',
-        description: '检测SQL注入攻击模式',
-        pattern: '(\'\\s+or\\s+\'1\'=\'1|"\\s+or\\s+"1"="1|union\\s+select|drop\\s+table|insert\\s+into|delete\\s+from|update\\s+set|alter\\s+table|--|\\/\\*|\\*\\/|xp_cmdshell|sp_executesql)',
-        flags: 'gi',
-        scope: 'both',
-        category: 'security',
-        enabled: true,
-        riskLevel: 'critical',
-        threatType: 'SQL注入',
-        maskSensitiveData: false,
-        maxMatches: 10,
-        isBuiltin: true,
-        createdAt: now,
-        updatedAt: now,
-        tags: ['sql_injection', 'database', 'injection'],
-        recommendation: '立即阻止此类请求，使用参数化查询',
-        remediation: '参数化查询、输入验证、ORM使用',
-        references: [
-          'https://owasp.org/www-project-top-ten/2017/A1_2017-Injection',
-          'https://cwe.mitre.org/data/definitions/89.html'
-        ]
-      },
-      
-      {
-        id: 'risk_004_xss_patterns',
-        name: '跨站脚本攻击检测',
-        description: '检测XSS攻击模式',
-        pattern: '(<script>|<\\/script>|javascript:|onerror=|onload=|alert\\(|confirm\\(|prompt\\(|eval\\(|document\\.cookie|window\\.location|innerHTML=|outerHTML=)',
-        flags: 'gi',
-        scope: 'both',
-        category: 'security',
-        enabled: true,
-        riskLevel: 'high',
-        threatType: 'XSS攻击',
-        maskSensitiveData: false,
-        maxMatches: 10,
-        isBuiltin: true,
-        createdAt: now,
-        updatedAt: now,
-        tags: ['xss', 'cross_site_scripting', 'injection'],
-        recommendation: '立即阻止此类请求，加强输出编码',
-        remediation: '输出编码、CSP策略、输入验证',
-        references: [
-          'https://owasp.org/www-project-top-ten/2017/A7_2017-Cross-Site_Scripting_(XSS)',
-          'https://cwe.mitre.org/data/definitions/79.html'
-        ]
-      },
-      
-      {
-        id: 'risk_005_path_traversal',
-        name: '路径遍历攻击检测',
-        description: '检测路径遍历攻击模式',
-        pattern: '(\\.\\.\\/|\\.\\.\\\\|\\.\\.\\.\\.\\/|\\.\\.\\.\\.\\\\|\\/etc\\/passwd|\\\\windows\\\\system32|c:\\\\windows|%2e%2e%2f|%2e%2e%5c|\\.\\.%2f|\\.\\.%5c)',
-        flags: 'gi',
-        scope: 'both',
-        category: 'security',
-        enabled: true,
-        riskLevel: 'high',
-        threatType: '路径遍历',
-        maskSensitiveData: false,
-        maxMatches: 10,
-        isBuiltin: true,
-        createdAt: now,
-        updatedAt: now,
-        tags: ['path_traversal', 'directory_traversal', 'file_access'],
-        recommendation: '立即阻止此类请求，验证文件路径',
-        remediation: '路径验证、访问控制、安全配置',
-        references: [
-          'https://owasp.org/www-community/attacks/Path_Traversal',
-          'https://cwe.mitre.org/data/definitions/22.html'
-        ]
-      },
-      
-      {
-        id: 'risk_006_information_gathering',
-        name: '信息收集检测',
-        description: '检测信息收集尝试',
-        pattern: '(version\\(\\)|@@version|user\\(\\)|database\\(\\)|show\\s+tables|show\\s+databases|information_schema|sys\\.tables|sys\\.databases|pg_tables|\\/proc\\/version|\\/etc\\/issue|uname\\s+-a)',
-        flags: 'gi',
-        scope: 'both',
-        category: 'security',
-        enabled: true,
-        riskLevel: 'medium',
-        threatType: '信息收集',
-        maskSensitiveData: false,
-        maxMatches: 10,
-        isBuiltin: true,
-        createdAt: now,
-        updatedAt: now,
-        tags: ['information_gathering', 'reconnaissance', 'enumeration'],
-        recommendation: '监控此类请求，限制信息暴露',
-        remediation: '信息最小化、访问控制、安全配置',
-        references: [
-          'https://owasp.org/www-community/attacks/Information_Gathering',
-          'https://cwe.mitre.org/data/definitions/200.html'
-        ]
-      }
-    ];
-  }
-} 
+}

@@ -129,15 +129,16 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
     const handleNewResult = (result: PassiveDetectionResult) => {
       setResults(prev => [result, ...prev.slice(0, 499)]); // 保持最新500条
       
-      if (realtimeEnabled) {
+      // 只有非低位告警才显示实时通知
+      if (realtimeEnabled && result.riskLevel !== 'low') {
         message.info({
           content: `${t.security.passive.detectionTime} ${getRiskLevelText(result.riskLevel)} ${t.security.passive.threatLevel}: ${result.targetName}`,
           duration: 3
         });
       }
       
-      // 通知父组件新的被动检测结果
-      if (onNewPassiveResult) {
+      // 通知父组件新的被动检测结果（只通知非低位告警）
+      if (onNewPassiveResult && result.riskLevel !== 'low') {
         onNewPassiveResult(result);
       }
       
@@ -716,7 +717,6 @@ export const PassiveSecurityTester: React.FC<PassiveSecurityDisplayProps> = ({
                 <Option value="critical">{t.security.riskLevels.critical}</Option>
                 <Option value="high">{t.security.riskLevels.high}</Option>
                 <Option value="medium">{t.security.riskLevels.medium}</Option>
-                <Option value="low">{t.security.riskLevels.low}</Option>
               </Select>
             </Space>
           </Col>

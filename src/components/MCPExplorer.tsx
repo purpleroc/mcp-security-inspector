@@ -114,17 +114,43 @@ const MCPExplorer: React.FC = () => {
     try {
       // 如果是动态资源模板，构造实际的URI
       let actualUri = selectedResource.uri || (selectedResource as any).uriTemplate;
+      console.log('原始URI模板:', actualUri);
+      console.log('当前参数:', resourceParams);
+      
       if (actualUri && actualUri.includes('{')) {
-        // 替换URI模板中的参数，对于空值使用空字符串
-        Object.entries(resourceParams).forEach(([key, value]) => {
-          actualUri = actualUri.replace(`{${key}}`, String(value || ''));
+        // 检查是否所有必需的参数都已填写
+        const requiredParams = actualUri.match(/\{([^}]+)\}/g) || [];
+        const missingParams: string[] = [];
+        
+        requiredParams.forEach((param: string) => {
+          const paramName = param.slice(1, -1); // 移除 { 和 }
+          if (!resourceParams[paramName] || resourceParams[paramName].toString().trim() === '') {
+            missingParams.push(paramName);
+          }
         });
         
-        // 对于剩余的未填写参数，也用空字符串替换
-        const remainingParams = actualUri.match(/\{([^}]+)\}/g) || [];
-        remainingParams.forEach((param: string) => {
-          actualUri = actualUri.replace(param, '');
+        if (missingParams.length > 0) {
+          message.error(`请填写以下必需参数: ${missingParams.join(', ')}`);
+          return;
+        }
+        
+        // 替换URI模板中的参数
+        Object.entries(resourceParams).forEach(([key, value]) => {
+          if (value && value.toString().trim() !== '') {
+            console.log(`替换参数 ${key} = ${value}`);
+            actualUri = actualUri.replace(`{${key}}`, String(value));
+          }
         });
+        
+        console.log('替换后的URI:', actualUri);
+        
+        // 检查是否还有未替换的参数
+        const remainingParams = actualUri.match(/\{([^}]+)\}/g) || [];
+        if (remainingParams.length > 0) {
+          const remainingParamNames = remainingParams.map((param: string) => param.slice(1, -1));
+          message.error(`缺少必需参数: ${remainingParamNames.join(', ')}`);
+          return;
+        }
       }
 
       // 创建带有实际URI的资源对象
@@ -132,14 +158,19 @@ const MCPExplorer: React.FC = () => {
         ...selectedResource,
         uri: actualUri
       };
+      
+      console.log('发送给服务器的资源对象:', resourceToRead);
 
       const result = await dispatch(readResource({ resource: resourceToRead, parameters: resourceParams }) as any).unwrap();
-      const resourceKey = selectedResource.name || selectedResource.uri;
+      // 改进资源键的生成逻辑
+      const resourceKey = selectedResource.name || selectedResource.uri || (selectedResource as any).uriTemplate;
       setResourceResults(prev => ({ ...prev, [resourceKey]: result.result }));
       setResourceErrors(prev => ({ ...prev, [resourceKey]: '' }));
       message.success(t.success.connected);
     } catch (error) {
-      const resourceKey = selectedResource.name || selectedResource.uri;
+      console.error('资源读取错误:', error);
+      // 改进资源键的生成逻辑
+      const resourceKey = selectedResource.name || selectedResource.uri || (selectedResource as any).uriTemplate;
       setResourceErrors(prev => ({ ...prev, [resourceKey]: String(error) }));
       setResourceResults(prev => ({ ...prev, [resourceKey]: null }));
       message.error(`${t.errors.resourceReadFailed}: ${error}`);
@@ -160,6 +191,22 @@ const MCPExplorer: React.FC = () => {
       setPromptResults(prev => ({ ...prev, [selectedPrompt.name]: null }));
       message.error(`${t.errors.promptGetFailed}: ${error}`);
     }
+  };
+
+  // 从URI模板中提取参数
+  const extractParamsFromUri = (uri: string): Record<string, { type: string; description?: string }> => {
+    const params: Record<string, { type: string; description?: string }> = {};
+    const matches = uri.match(/\{([^}]+)\}/g) || [];
+    
+    matches.forEach((match) => {
+      const paramName = match.slice(1, -1); // 移除 { 和 }
+      params[paramName] = {
+        type: 'string',
+        description: `参数: ${paramName}`
+      };
+    });
+    
+    return params;
   };
 
   // 渲染结果显示组件
@@ -216,18 +263,29 @@ const MCPExplorer: React.FC = () => {
   const renderParameterForm = (
     schema: any, 
     values: Record<string, any>, 
-    onChange: (values: Record<string, any>) => void
+    onChange: (values: Record<string, any>) => void,
+    uriTemplate?: string
   ) => {
-    if (!schema?.properties) return null;
+    
+    // 如果没有schema但有URI模板，从模板中提取参数
+    let effectiveSchema = schema;
+    if ((!schema?.properties || Object.keys(schema.properties || {}).length === 0) && uriTemplate) {
+      const extractedParams = extractParamsFromUri(uriTemplate);
+      effectiveSchema = { properties: extractedParams };
+    }
+    
+    if (!effectiveSchema?.properties || Object.keys(effectiveSchema.properties).length === 0) {
+      return null;
+    }
 
     return (
       <Form layout="vertical">
-        {Object.entries(schema.properties).map(([key, prop]: [string, any]) => (
+        {Object.entries(effectiveSchema.properties).map(([key, prop]: [string, any]) => (
           <Form.Item 
             key={key} 
             label={prop.title || key}
             help={prop.description}
-            required={false}
+            required={true} // 从URI模板提取的参数都是必需的
           >
             {prop.type === 'string' && prop.enum ? (
               <Select
@@ -254,6 +312,7 @@ const MCPExplorer: React.FC = () => {
                 placeholder={prop.description ? prop.description : `${t.tools.pleaseInput} ${key}`}
                 value={values[key] || ''}
                 onChange={(e) => onChange({ ...values, [key]: e.target.value })}
+                required
               />
             )}
           </Form.Item>
@@ -441,20 +500,19 @@ const MCPExplorer: React.FC = () => {
                         {selectedResource?.uri === resource.uri && (
                           <div style={{ marginLeft: 24, marginBottom: 16, marginTop: 8 }}>
                             <Card size="small" title={`${t.resources.readResource}: ${selectedResource?.name || selectedResource?.uri}`}>
-                              {selectedResource.uri && selectedResource.uri.includes('{') && (
-                                <div style={{ marginBottom: 16 }}>
-                                  <Alert
-                                    message={`${t.resources.resourceUri}: ${selectedResource.uri}`}
-                                    type="info"
-                                    style={{ marginBottom: 16 }}
-                                  />
-                                  {renderParameterForm(
-                                    (selectedResource as any).inputSchema || { properties: {} },
-                                    resourceParams,
-                                    setResourceParams
-                                  )}
-                                </div>
-                              )}
+                              <div style={{ marginBottom: 16 }}>
+                                <Alert
+                                  message={`${t.resources.resourceUri}: ${selectedResource.uri}`}
+                                  type="info"
+                                  style={{ marginBottom: 16 }}
+                                />
+                                {renderParameterForm(
+                                  (selectedResource as any).inputSchema || { properties: {} },
+                                  resourceParams,
+                                  setResourceParams,
+                                  selectedResource.uri
+                                )}
+                              </div>
                               
                               <Button 
                                 type="primary" 
@@ -522,20 +580,19 @@ const MCPExplorer: React.FC = () => {
                         {selectedResource?.name === template.name && (
                           <div style={{ marginLeft: 24, marginBottom: 16, marginTop: 8 }}>
                             <Card size="small" title={`${t.resources.readResource}: ${selectedResource?.name || selectedResource?.uri}`}>
-                              {selectedResource?.uri && selectedResource?.uri.includes('{') && (
-                                <div style={{ marginBottom: 16 }}>
-                                  <Alert
-                                    message={`${t.resources.resourceUri}: ${selectedResource?.uri}`}
-                                    type="info"
-                                    style={{ marginBottom: 16 }}
-                                  />
-                                  {renderParameterForm(
-                                    (selectedResource as any).inputSchema || { properties: {} },
-                                    resourceParams,
-                                    setResourceParams
-                                  )}
-                                </div>
-                              )}
+                              <div style={{ marginBottom: 16 }}>
+                                <Alert
+                                  message={`${t.resources.resourceUri}: ${selectedResource?.uri || (template as any).uriTemplate}`}
+                                  type="info"
+                                  style={{ marginBottom: 16 }}
+                                />
+                                {renderParameterForm(
+                                  (selectedResource as any).inputSchema || (template as any).inputSchema || { properties: {} },
+                                  resourceParams,
+                                  setResourceParams,
+                                  (template as any).uriTemplate
+                                )}
+                              </div>
                               
                               <Button 
                                 type="primary" 
@@ -549,11 +606,12 @@ const MCPExplorer: React.FC = () => {
                             
                             {/* 资源读取结果显示 */}
                             {renderResultDisplay(
-                              resourceResults[template.name || ''], 
-                              resourceErrors[template.name || ''], 
+                              resourceResults[template.name || (template as any).uriTemplate || ''], 
+                              resourceErrors[template.name || (template as any).uriTemplate || ''], 
                               () => {
-                                setResourceResults(prev => ({ ...prev, [template.name || '']: null }));
-                                setResourceErrors(prev => ({ ...prev, [template.name || '']: '' }));
+                                const resourceKey = template.name || (template as any).uriTemplate || '';
+                                setResourceResults(prev => ({ ...prev, [resourceKey]: null }));
+                                setResourceErrors(prev => ({ ...prev, [resourceKey]: '' }));
                               }
                             )}
                           </div>

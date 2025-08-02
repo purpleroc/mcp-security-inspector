@@ -130,6 +130,7 @@ export interface MCPResource {
   name?: string;
   description?: string;
   mimeType?: string;
+  uriTemplate?: string; // 资源模板的URI模板
 }
 
 /**

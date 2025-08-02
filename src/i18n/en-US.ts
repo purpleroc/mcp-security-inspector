@@ -385,6 +385,16 @@ export const enUS: TranslationKey = {
        high: 'High Risk',
        critical: 'Critical Risk',
      },
+     // Access test result related translations
+     testCaseNumber: 'Test Case #',
+     resourceName: 'Resource Name',
+     successStatus: 'Success Status',
+     testURI: 'Test URI',
+     returnResult: 'Return Result',
+     testRiskLevel: 'Risk Level',
+     testDescription: 'Description',
+     testEvidence: 'Evidence',
+     improvementMeasures: 'Improvement Measures',
      checkTypes: {
        tool: 'Tool Detection',
        prompt: 'Prompt Detection',
@@ -401,6 +411,8 @@ export const enUS: TranslationKey = {
      testCategory: 'Test Category',
      securityLevel: 'Security Level',
      description: 'Description',
+     threatType: 'Threat Type',
+     evidence: 'Evidence',
      // SecurityPanel additional texts
      logs: 'Logs',
      logCount: ' items',

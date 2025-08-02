@@ -239,6 +239,7 @@ export const readResource = createAsyncThunk(
   async ({ resource, parameters }: { resource: MCPResource; parameters?: Record<string, unknown> }, { rejectWithValue }) => {
     try {
       const startTime = Date.now();
+      // 使用构造后的实际URI
       const result = await mcpClient.readResource(resource.uri);
       const endTime = Date.now();
       

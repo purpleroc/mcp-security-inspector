@@ -197,23 +197,44 @@ export class SecurityEngine {
         message: t().security.logMessages.fetchingFromServer
       });
 
-      const [tools, prompts, resources] = await Promise.all([
+      const [tools, prompts, resources, resourceTemplates] = await Promise.all([
         mcpClient.listTools(),
         mcpClient.listPrompts(),
-        mcpClient.listResources()
+        mcpClient.listResources(),
+        mcpClient.listResourceTemplates()
       ]);
+
+      console.log('[SecurityEngine] 原始资源模板数据:', resourceTemplates);
+
+      // 只过滤掉真正的null值，保留所有其他对象
+      const validResourceTemplates = resourceTemplates.filter(template => template !== null);
+      
+      if (resourceTemplates.length !== validResourceTemplates.length) {
+        console.warn(`[SecurityEngine] 过滤掉 ${resourceTemplates.length - validResourceTemplates.length} 个null资源模板`);
+        console.warn('[SecurityEngine] 原始资源模板数组包含null值:', resourceTemplates);
+        this.addLog({
+          type: 'warning',
+          phase: 'init',
+          title: '资源模板数据异常',
+          message: `发现 ${resourceTemplates.length - validResourceTemplates.length} 个null资源模板，已过滤`,
+          details: { originalCount: resourceTemplates.length, validCount: validResourceTemplates.length }
+        });
+      }
+
+      console.log('[SecurityEngine] 有效资源模板:', validResourceTemplates);
 
       const fetchDuration = Date.now() - startTime;
       this.addLog({
         type: 'success',
         phase: 'init',
         title: t().security.logMessages.componentsFetched,
-        message: `${t().security.logMessages.generatedTests} ${tools.length} ${t().security.logMessages.toolsCount}，${prompts.length} ${t().security.logMessages.promptsCount}，${resources.length} ${t().security.logMessages.resourcesCount}`,
+        message: `${t().security.logMessages.generatedTests} ${tools.length} ${t().security.logMessages.toolsCount}，${prompts.length} ${t().security.logMessages.promptsCount}，${resources.length + validResourceTemplates.length} ${t().security.logMessages.resourcesCount}`,
         duration: fetchDuration,
         details: {
           tools: tools.map(t => t.name),
           prompts: prompts.map(p => p.name),
-          resources: resources.map(r => r.uri)
+          resources: resources.map(r => r.uri),
+          resourceTemplates: validResourceTemplates.map(r => (r as any).uriTemplate || r.uri || r.name || 'unknown')
         }
       });
 
@@ -238,7 +259,7 @@ export class SecurityEngine {
       };
 
       // 分步骤执行检测
-      const totalSteps = tools.length + prompts.length + resources.length;
+      const totalSteps = tools.length + prompts.length + resources.length + validResourceTemplates.length;
       let currentStep = 0;
 
       // 检测工具安全性
@@ -375,11 +396,13 @@ export class SecurityEngine {
         type: 'step',
         phase: 'resource_analysis',
         title: t().security.logMessages.resourceAnalysisStart,
-        message: `${t().security.logMessages.analyzingResources} ${resources.length} ${t().security.logMessages.resourcesSecurityAnalysis}`,
+        message: `${t().security.logMessages.analyzingResources} ${resources.length + validResourceTemplates.length} ${t().security.logMessages.resourcesSecurityAnalysis}`,
         progress: 85
       });
 
-      onProgress?.(85, `${t().security.logMessages.startingDetection} ${resources.length} ${t().security.logMessages.resources}`);
+      onProgress?.(85, `${t().security.logMessages.startingDetection} ${resources.length + validResourceTemplates.length} ${t().security.logMessages.resources}`);
+      
+      // 检测普通资源
       for (const resource of resources) {
         // 检查是否被取消
         if (!this.isScanning || this.currentAbortController?.signal.aborted) {
@@ -431,6 +454,61 @@ export class SecurityEngine {
             details: error
           });
           console.error(`${t().security.logMessages.checkingResource} ${resource.uri} ${t().security.logMessages.failed}:`, error);
+        }
+      }
+
+      // 检测资源模板
+      for (const resourceTemplate of validResourceTemplates) {
+        // 检查是否被取消
+        if (!this.isScanning || this.currentAbortController?.signal.aborted) {
+          this.addLog({
+            type: 'info',
+            phase: 'resource_analysis',
+            title: '扫描已取消',
+            message: '用户取消了安全扫描操作'
+          });
+          throw new Error('扫描已被用户取消');
+        }
+
+        try {
+          const resourceStartTime = Date.now();
+          this.addLog({
+            type: 'step',
+            phase: 'resource_analysis',
+            title: t().security.logMessages.analyzingResource,
+            message: `${t().security.logMessages.analyzingResource}: ${resourceTemplate.name || resourceTemplate.uri} (模板)`,
+            metadata: { resourceUri: resourceTemplate.uri }
+          });
+
+          const result = await this.analyzeResourceEnhanced(resourceTemplate, config);
+          report.resourceResults.push(result);
+          
+          const resourceDuration = Date.now() - resourceStartTime;
+          this.addLog({
+            type: 'success',
+            phase: 'resource_analysis',
+            title: t().security.logMessages.resourceAnalysisComplete,
+            message: `${t().security.resourceUri} ${resourceTemplate.name || resourceTemplate.uri} (模板) ${t().security.logMessages.resourceAnalysisComplete}，${t().security.logMessages.riskLevel}: ${result.riskLevel}`,
+            duration: resourceDuration,
+            metadata: { 
+              resourceUri: resourceTemplate.uri, 
+              riskLevel: result.riskLevel 
+            },
+            details: result
+          });
+
+          currentStep++;
+          onProgress?.(20 + (currentStep / totalSteps) * 50, `${t().security.logMessages.checkingResource2}${resourceTemplate.name || resourceTemplate.uri} (模板)`);
+        } catch (error) {
+          this.addLog({
+            type: 'error',
+            phase: 'resource_analysis',
+            title: t().security.logMessages.resourceAnalysisFailed,
+            message: `${t().security.logMessages.checkingResource} ${resourceTemplate.uri} (模板) ${t().security.logMessages.failed}: ${error instanceof Error ? error.message : t().security.logMessages.unknownError}`,
+            metadata: { resourceUri: resourceTemplate.uri },
+            details: error
+          });
+          console.error(`${t().security.logMessages.checkingResource} ${resourceTemplate.uri} (模板) ${t().security.logMessages.failed}:`, error);
         }
       }
 
@@ -587,24 +665,58 @@ export class SecurityEngine {
         message: `${t().security.logMessages.forTool} ${tool.name} ${t().security.logMessages.generateTargetedTests}`,
         metadata: { toolName: tool.name }
       });
-      const testCaseRequest = llmClient.generateAdvancedToolTestCases(tool,  config.maxTestCases, config.llmConfigId);
-      const testCaseResponse = await llmClient.callLLM(config.llmConfigId, testCaseRequest, this.currentAbortController?.signal);
       
-      // 解析生成的测试用例
-      const testCases = this.parseAdvancedTestCases(testCaseResponse.content);
+      let testCases: Array<{
+        riskType: string;
+        purpose: string;
+        parameters: Record<string, unknown>;
+        expectedBehavior: string;
+        judgmentCriteria: string;
+        riskLevel: string;
+        riskDescription: string;
+      }> = [];
       
-      this.addLog({
-        type: 'success',
-        phase: 'test_generation',
-        title: t().security.logMessages.testGenerationComplete,
-        message: `${t().security.logMessages.forTool} ${tool.name} ${t().security.logMessages.generateTestCase} ${testCases.length} ${t().security.logMessages.smartSecurityTests}`,
-        metadata: { toolName: tool.name },
-        details: testCases.map(tc => ({
-          type: tc.riskType,
-          purpose: tc.purpose,
-          parameters: tc.parameters
-        }))
-      });
+      try {
+        const testCaseRequest = llmClient.generateAdvancedToolTestCases(tool, config.maxTestCases, config.llmConfigId);
+        const testCaseResponse = await llmClient.callLLM(config.llmConfigId, testCaseRequest, this.currentAbortController?.signal);
+        
+        // 解析生成的测试用例
+        testCases = this.parseAdvancedTestCases(testCaseResponse.content, testCaseRequest, testCaseResponse);
+        
+        this.addLog({
+          type: 'success',
+          phase: 'test_generation',
+          title: t().security.logMessages.testGenerationComplete,
+          message: `${t().security.logMessages.forTool} ${tool.name} ${t().security.logMessages.generateTestCase} ${testCases.length} ${t().security.logMessages.smartSecurityTests}`,
+          metadata: { toolName: tool.name },
+          details: testCases.map((tc: any) => ({
+            type: tc.riskType,
+            purpose: tc.purpose,
+            parameters: tc.parameters
+          }))
+        });
+        
+      } catch (error) {
+        console.error('生成工具测试用例失败:', error);
+        this.addLog({
+          type: 'error',
+          phase: 'test_generation',
+          title: '生成工具测试用例失败',
+          message: `生成测试用例时发生错误: ${error instanceof Error ? error.message : '未知错误'}`,
+          metadata: { toolName: tool.name },
+          details: { error }
+        });
+        
+        // 如果LLM调用失败，使用默认测试用例
+        testCases = this.parseAdvancedTestCases('', null, null);
+        this.addLog({
+          type: 'warning',
+          phase: 'test_generation',
+          title: '使用默认测试用例',
+          message: `由于LLM调用失败，为工具 ${tool.name} 使用默认测试用例`,
+          metadata: { toolName: tool.name }
+        });
+      }
       
       // 第二步：执行测试用例（限制数量）
       const maxTests = Math.min(testCases.length, config.maxTestCases);
@@ -958,21 +1070,57 @@ export class SecurityEngine {
         metadata: { promptName: prompt.name }
       });
 
-      // 生成智能测试用例
-      const testCaseRequest = llmClient.generatePromptSecurityTests(prompt, config.maxTestCases, config.llmConfigId);
-      const testCaseResponse = await llmClient.callLLM(config.llmConfigId, testCaseRequest, this.currentAbortController?.signal);
+      let testCases: Array<{
+        testType: string;
+        purpose: string;
+        description: string;
+        parameters: Record<string, unknown>;
+        expectedBehavior: string;
+        riskCriteria: string;
+      }> = [];
 
-      this.addLog({
-        type: 'success',
-        phase: 'test_generation',
-        title: t().security.logMessages.promptTestGenerationComplete,
-        message: `${t().security.logMessages.forPrompt} ${prompt.name} ${t().security.logMessages.generatedPromptTests}`,
-        metadata: { promptName: prompt.name },
-        details: testCaseResponse.content
-      });
+      try {
+        // 生成智能测试用例
+        const testCaseRequest = llmClient.generatePromptSecurityTests(prompt, config.maxTestCases, config.llmConfigId);
+        const testCaseResponse = await llmClient.callLLM(config.llmConfigId, testCaseRequest, this.currentAbortController?.signal);
 
-      // 解析测试用例
-      const testCases = this.parsePromptTestCases(testCaseResponse.content);
+        // 解析测试用例
+        testCases = this.parsePromptTestCases(testCaseResponse.content, testCaseRequest, testCaseResponse);
+
+        this.addLog({
+          type: 'success',
+          phase: 'test_generation',
+          title: t().security.logMessages.promptTestGenerationComplete,
+          message: `${t().security.logMessages.forPrompt} ${prompt.name} ${t().security.logMessages.generatedPromptTests}`,
+          metadata: { promptName: prompt.name },
+          details: testCases.map((tc: any) => ({
+            type: tc.testType,
+            purpose: tc.purpose,
+            parameters: tc.parameters
+          }))
+        });
+
+      } catch (error) {
+        console.error('生成提示测试用例失败:', error);
+        this.addLog({
+          type: 'error',
+          phase: 'test_generation',
+          title: '生成提示测试用例失败',
+          message: `生成测试用例时发生错误: ${error instanceof Error ? error.message : '未知错误'}`,
+          metadata: { promptName: prompt.name },
+          details: { error }
+        });
+
+        // 如果LLM调用失败，使用默认测试用例
+        testCases = this.parsePromptTestCases('', null, null);
+        this.addLog({
+          type: 'warning',
+          phase: 'test_generation',
+          title: '使用默认测试用例',
+          message: `由于LLM调用失败，为提示 ${prompt.name} 使用默认测试用例`,
+          metadata: { promptName: prompt.name }
+        });
+      }
 
       // 执行测试用例（模拟执行，因为提示测试需要实际的AI交互）
       const maxTests = Math.min(testCases.length, config.maxTestCases);
@@ -1125,13 +1273,29 @@ export class SecurityEngine {
     result: ResourceSecurityResult
   ): Promise<void> {
     try {
+      // 检查是否为动态资源模板
+      const isDynamicResource = (resource as any).uriTemplate && 
+        (resource as any).uriTemplate.includes('{') && 
+        (resource as any).uriTemplate.includes('}');
+
       // 检查资源URI的格式和可访问性
       const isSimpleResource = resource.uri && 
         !resource.uri.includes('?') && 
         !resource.uri.includes('{') && 
         !resource.uri.includes('}');
 
-      if (isSimpleResource) {
+      if (isDynamicResource) {
+        // 如果是动态资源模板，进行专门的测试
+        this.addLog({
+          type: 'step',
+          phase: 'test_execution',
+          title: '执行动态资源模板测试',
+          message: `${t().security.logMessages.forResource} ${(resource as any).uriTemplate} 检测到动态资源模板，执行模板安全测试`,
+          metadata: { resourceUri: (resource as any).uriTemplate }
+        });
+
+        await this.performDynamicResourceTemplateTests(resource, config, result);
+      } else if (isSimpleResource) {
         // 如果是简单资源（没有参数），直接进行基本访问测试
         this.addLog({
           type: 'step',
@@ -1261,20 +1425,18 @@ export class SecurityEngine {
             }
           }
         }
+      } else {
+        // 对于其他类型的资源（如带参数的资源），执行基本测试
+        this.addLog({
+          type: 'step',
+          phase: 'test_execution',
+          title: '执行通用资源测试',
+          message: `${t().security.logMessages.forResource} ${resource.uri} 执行通用资源安全测试`,
+          metadata: { resourceUri: resource.uri }
+        });
 
-        return; // 如果是简单资源，直接返回，不执行后续的测试用例生成
+        await this.performBasicResourceTests(resource, result);
       }
-
-      // 第一步：基本访问测试
-      this.addLog({
-        type: 'step',
-        phase: 'test_execution',
-        title: t().security.logMessages.executingResourceTests,
-        message: `${t().security.logMessages.testingResourceAccess} ${resource.uri} ${t().security.logMessages.basicAccessSecurity}`,
-        metadata: { resourceUri: resource.uri }
-      });
-
-      await this.performBasicResourceTests(resource, result);
 
       // 第二步：生成并执行智能测试用例
       if (config.autoGenerate) {
@@ -1286,10 +1448,56 @@ export class SecurityEngine {
           metadata: { resourceUri: resource.uri }
         });
 
-        const testCaseRequest = llmClient.generateResourceSecurityTests(resource, config.maxTestCases, config.llmConfigId);
-        const testCaseResponse = await llmClient.callLLM(config.llmConfigId, testCaseRequest, this.currentAbortController?.signal);
+        let testCases: Array<{
+          testType: string;
+          purpose: string;
+          testUri: string;
+          expectedBehavior: string;
+          riskCriteria: string;
+        }> = [];
 
-        const testCases = this.parseResourceTestCases(testCaseResponse.content);
+        try {
+          const testCaseRequest = llmClient.generateResourceSecurityTests(resource, config.maxTestCases, config.llmConfigId);
+          const testCaseResponse = await llmClient.callLLM(config.llmConfigId, testCaseRequest, this.currentAbortController?.signal);
+
+          // 解析测试用例
+          testCases = this.parseResourceTestCases(testCaseResponse.content, testCaseRequest, testCaseResponse);
+
+          this.addLog({
+            type: 'success',
+            phase: 'test_generation',
+            title: t().security.logMessages.testGenerationComplete,
+            message: `${t().security.logMessages.forResource} ${resource.uri} ${t().security.logMessages.generateTestCase} ${testCases.length} ${t().security.logMessages.smartSecurityTests}`,
+            metadata: { resourceUri: resource.uri },
+            details: testCases.map((tc: any) => ({
+              type: tc.testType,
+              purpose: tc.purpose,
+              testUri: tc.testUri
+            }))
+          });
+
+        } catch (error) {
+          console.error('生成资源测试用例失败:', error);
+          this.addLog({
+            type: 'error',
+            phase: 'test_generation',
+            title: '生成资源测试用例失败',
+            message: `生成测试用例时发生错误: ${error instanceof Error ? error.message : '未知错误'}`,
+            metadata: { resourceUri: resource.uri },
+            details: { error }
+          });
+
+          // 如果LLM调用失败，使用默认测试用例
+          testCases = this.parseResourceTestCases('', null, null);
+          this.addLog({
+            type: 'warning',
+            phase: 'test_generation',
+            title: '使用默认测试用例',
+            message: `由于LLM调用失败，为资源 ${resource.uri} 使用默认测试用例`,
+            metadata: { resourceUri: resource.uri }
+          });
+        }
+
         const maxTests = Math.min(testCases.length, config.maxTestCases);
 
         this.addLog({
@@ -1677,7 +1885,11 @@ export class SecurityEngine {
   /**
    * 解析高级测试用例
    */
-  private parseAdvancedTestCases(content: string): Array<{
+  private parseAdvancedTestCases(
+    content: string, 
+    request?: any, 
+    response?: any
+  ): Array<{
     riskType: string;
     purpose: string;
     parameters: Record<string, unknown>;
@@ -1703,53 +1915,32 @@ export class SecurityEngine {
         }
       }
     }
+    
     console.log('解析高级测试用例失败', content);
+    this.addLog({
+      type: 'error',
+      phase: 'test_generation',
+      title: '解析工具测试用例失败',
+      message: 'LLM返回的测试用例格式不正确，使用默认测试用例',
+      details: { 
+        response: content,
+        responseLength: content.length,
+        parseError: 'JSON解析失败，格式不正确',
+        prompt: request?.messages,
+        llmResponse: response?.content
+      }
+    });
+    
     // 如果解析失败，生成安全的默认测试用例
     return [
       {
         riskType: 'validation',
-        purpose: '输入验证测试',
-        parameters: { input: '<script>alert("test")</script>' },
-        expectedBehavior: '工具应该过滤或转义特殊字符',
-        judgmentCriteria: '返回结果不应包含未转义的脚本标签',
-        riskLevel: 'medium',
-        riskDescription: '可能存在XSS攻击风险'
-      },
-      {
-        riskType: 'validation',
-        purpose: '空值处理测试',
+        purpose: '空参数测试',
         parameters: { input: '' },
-        expectedBehavior: '工具应该正确处理空输入',
-        judgmentCriteria: '不应返回系统错误或敏感信息',
+        expectedBehavior: '报错',
+        judgmentCriteria: '是否报错',
         riskLevel: 'low',
-        riskDescription: '可能暴露系统内部信息'
-      },
-      {
-        riskType: 'injection',
-        purpose: 'SQL注入模式测试',
-        parameters: { query: "'; SELECT 1; --" },
-        expectedBehavior: '工具应该拒绝或过滤SQL注入尝试',
-        judgmentCriteria: '不应执行SQL命令或返回数据库错误',
-        riskLevel: 'high',
-        riskDescription: '可能存在SQL注入漏洞'
-      },
-      {
-        riskType: 'disclosure',
-        purpose: '路径访问测试',
-        parameters: { path: '../config.json' },
-        expectedBehavior: '工具应该验证路径安全性',
-        judgmentCriteria: '不应能够访问上级目录文件',
-        riskLevel: 'high',
-        riskDescription: '可能存在路径遍历漏洞'
-      },
-      {
-        riskType: 'privilege',
-        purpose: '权限提升测试',
-        parameters: { admin: true, role: 'administrator' },
-        expectedBehavior: '工具应该验证用户权限',
-        judgmentCriteria: '不应获得管理员权限或功能',
-        riskLevel: 'critical',
-        riskDescription: '可能存在权限绕过漏洞'
+        riskDescription: '测试'
       }
     ];
   }
@@ -2192,7 +2383,11 @@ ${llmClient.getLanguageOutputRequirement()}
   /**
    * 解析提示测试用例
    */
-  private parsePromptTestCases(content: string): Array<{
+  private parsePromptTestCases(
+    content: string, 
+    request?: any, 
+    response?: any
+  ): Array<{
     testType: string;
     purpose: string;
     description: string;
@@ -2206,7 +2401,21 @@ ${llmClient.getLanguageOutputRequirement()}
         return parsed;
       }
     } catch (e) {
-      // 如果解析失败，返回默认测试用例
+      // 如果解析失败，记录日志并返回默认测试用例
+      console.log('解析提示测试用例失败', content);
+      this.addLog({
+        type: 'error',
+        phase: 'test_generation',
+        title: '解析提示测试用例失败',
+        message: 'LLM返回的测试用例格式不正确，使用默认测试用例',
+        details: { 
+          response: content,
+          responseLength: content.length,
+          parseError: 'JSON解析失败，格式不正确',
+          prompt: request?.messages,
+          llmResponse: response?.content
+        }
+      });
     }
 
     return [
@@ -2313,7 +2522,11 @@ ${llmClient.getLanguageOutputRequirement()}
   /**
    * 解析资源测试用例
    */
-  private parseResourceTestCases(content: string): Array<{
+  private parseResourceTestCases(
+    content: string, 
+    request?: any, 
+    response?: any
+  ): Array<{
     testType: string;
     purpose: string;
     testUri: string;
@@ -2326,7 +2539,21 @@ ${llmClient.getLanguageOutputRequirement()}
         return parsed;
       }
     } catch (e) {
-      // 如果解析失败，返回默认测试用例
+      // 如果解析失败，记录日志并返回默认测试用例
+      console.log('解析资源测试用例失败', content);
+      this.addLog({
+        type: 'error',
+        phase: 'test_generation',
+        title: '解析资源测试用例失败',
+        message: 'LLM返回的测试用例格式不正确，使用默认测试用例',
+        details: { 
+          response: content,
+          responseLength: content.length,
+          parseError: 'JSON解析失败，格式不正确',
+          prompt: request?.messages,
+          llmResponse: response?.content
+        }
+      });
     }
 
     return [
@@ -2633,11 +2860,6 @@ ${llmClient.getLanguageOutputRequirement()}
       });
 
       // 专注于静态分析，敏感信息检测已由被动检测系统自动处理
-
-      // 第二阶段：敏感信息检测（保留，因为这是基础的安全检查）
-      // 关键词检测逻辑已移除，因为被动检测中已经有了更完善的实现
-
-      // 第三阶段：LLM静态分析（如果启用）
       if (config.enableLLMAnalysis !== false) {
         this.addLog({
           type: 'step',
@@ -2915,6 +3137,373 @@ ${llmClient.getLanguageOutputRequirement()}
     parameters?: Record<string, unknown>
   ): Promise<any> {
     return await this.performUnifiedSecurityAnalysis(type, target, config, parameters);
+  }
+
+  /**
+   * 执行动态资源模板测试
+   */
+  private async performDynamicResourceTemplateTests(
+    resource: MCPResource,
+    config: SecurityCheckConfig,
+    result: ResourceSecurityResult
+  ): Promise<void> {
+    try {
+      const uriTemplate = (resource as any).uriTemplate;
+      if (!uriTemplate) {
+        this.addLog({
+          type: 'error',
+          phase: 'test_execution',
+          title: '动态资源模板测试失败',
+          message: '资源模板缺少uriTemplate字段',
+          metadata: { resourceUri: resource.uri || 'unknown' }
+        });
+        return;
+      }
+
+      // 提取模板中的参数
+      const paramMatches = uriTemplate.match(/\{([^}]+)\}/g) || [];
+      const parameters = paramMatches.map((match: string) => match.slice(1, -1));
+
+      this.addLog({
+        type: 'step',
+        phase: 'test_execution',
+        title: '分析动态资源模板',
+        message: `模板 ${uriTemplate} 包含参数: ${parameters.join(', ')}`,
+        metadata: { resourceUri: uriTemplate }
+      });
+
+      // 使用LLM生成智能测试用例
+      const testCases = await this.generateIntelligentDynamicResourceTestCases(resource, config);
+
+      // 执行测试用例
+      for (let i = 0; i < testCases.length; i++) {
+        const testCase = testCases[i];
+        
+        this.addLog({
+          type: 'step',
+          phase: 'test_execution',
+          title: `执行动态资源测试 ${i + 1}/${testCases.length}`,
+          message: `测试用例: ${testCase.purpose}`,
+          metadata: { 
+            resourceUri: uriTemplate,
+            testCase: testCase.purpose,
+            testNumber: i + 1,
+            totalTests: testCases.length
+          }
+        });
+
+        try {
+          // 构造测试URI
+          let testUri = uriTemplate;
+          Object.entries(testCase.parameters).forEach(([key, value]) => {
+            testUri = testUri.replace(`{${key}}`, String(value));
+          });
+
+          // 尝试访问资源
+          const testResult = await mcpClient.readResource(testUri);
+          
+          // 评估测试结果
+          const evaluationRequest = llmClient.generateIntelligentResultEvaluation(
+            {
+              riskType: 'dynamic_resource_access',
+              purpose: testCase.purpose,
+              parameters: testCase.parameters,
+              expectedBehavior: testCase.expectedBehavior,
+              judgmentCriteria: testCase.judgmentCriteria,
+              riskLevel: testCase.riskLevel,
+              riskDescription: testCase.riskDescription
+            },
+            testResult,
+            undefined,
+            config.llmConfigId
+          );
+          
+          const evaluationResponse = await llmClient.callLLM(config.llmConfigId, evaluationRequest, this.currentAbortController?.signal);
+
+          let evaluation;
+          try {
+            evaluation = JSON.parse(evaluationResponse.content);
+          } catch (parseError) {
+            evaluation = this.parseSecurityEvaluation(evaluationResponse.content);
+          }
+          
+          const evaluationJson = JSON.stringify(evaluation);
+          
+          // 添加测试结果
+          result.accessTests.push({
+            testType: 'dynamic_resource_access',
+            uri: testUri,
+            success: true,
+            riskAssessment: evaluationJson
+          });
+
+          // 如果发现风险，添加到风险列表
+          if (evaluation.riskLevel !== 'low') {
+            result.risks.push({
+              type: 'access',
+              severity: evaluation.riskLevel,
+              description: evaluation.description || `动态资源 ${uriTemplate} 存在安全风险`,
+              evidence: evaluation.evidence || `测试用例: ${testCase.purpose}, URI: ${testUri}`,
+              recommendation: evaluation.recommendation || '建议加强动态资源访问控制'
+            });
+
+            this.addLog({
+              type: 'warning',
+              phase: 'test_execution',
+              title: '发现动态资源安全风险',
+              message: `测试发现风险: ${evaluation.description || '动态资源访问存在安全风险'}`,
+              metadata: { 
+                resourceUri: uriTemplate,
+                testCase: testCase.purpose,
+                riskLevel: evaluation.riskLevel
+              }
+            });
+          }
+
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : '动态资源访问失败';
+          
+          this.addLog({
+            type: 'warning',
+            phase: 'test_execution',
+            title: '动态资源测试错误',
+            message: `测试用例 ${testCase.purpose} 执行失败: ${errorMessage}`,
+            metadata: { 
+              resourceUri: uriTemplate,
+              testCase: testCase.purpose
+            },
+            details: { error: errorMessage }
+          });
+
+          // 对错误也进行安全评估
+          const evaluationRequest = llmClient.generateIntelligentResultEvaluation(
+            {
+              riskType: 'dynamic_resource_error',
+              purpose: testCase.purpose,
+              parameters: testCase.parameters,
+              expectedBehavior: '应该能够正常访问',
+              judgmentCriteria: '检查错误是否表明安全风险',
+              riskLevel: 'medium',
+              riskDescription: '动态资源访问失败，可能存在安全风险'
+            },
+            { error: errorMessage },
+            errorMessage,
+            config.llmConfigId
+          );
+          
+          const evaluationResponse = await llmClient.callLLM(config.llmConfigId, evaluationRequest, this.currentAbortController?.signal);
+
+          let evaluation;
+          try {
+            evaluation = JSON.parse(evaluationResponse.content);
+          } catch (parseError) {
+            evaluation = this.parseSecurityEvaluation(evaluationResponse.content);
+          }
+
+          // 添加错误测试结果
+          result.accessTests.push({
+            testType: 'dynamic_resource_error',
+            uri: JSON.stringify(testCase.parameters),
+            success: false,
+            riskAssessment: JSON.stringify(evaluation)
+          });
+
+          // 如果错误表明安全风险，添加到风险列表
+          if (evaluation.riskLevel !== 'low') {
+            result.risks.push({
+              type: 'access',
+              severity: evaluation.riskLevel,
+              description: evaluation.description || `动态资源 ${uriTemplate} 访问失败`,
+              evidence: evaluation.evidence || `测试用例: ${testCase.purpose}, 错误: ${errorMessage}`,
+              recommendation: evaluation.recommendation || '建议检查动态资源访问控制'
+            });
+          }
+        }
+      }
+
+    } catch (error) {
+      this.addLog({
+        type: 'error',
+        phase: 'test_execution',
+        title: '动态资源模板测试失败',
+        message: `执行动态资源模板测试时发生错误: ${error instanceof Error ? error.message : '未知错误'}`,
+        metadata: { resourceUri: (resource as any).uriTemplate || resource.uri || 'unknown' },
+        details: { error }
+      });
+    }
+  }
+
+  /**
+   * 生成智能动态资源测试用例
+   */
+  private async generateIntelligentDynamicResourceTestCases(
+    resource: MCPResource,
+    config: SecurityCheckConfig
+  ): Promise<Array<{
+    riskType: string;
+    purpose: string;
+    parameters: Record<string, unknown>;
+    expectedBehavior: string;
+    judgmentCriteria: string;
+    riskLevel: string;
+    riskDescription: string;
+  }>> {
+          try {
+        this.addLog({
+          type: 'step',
+          phase: 'test_generation',
+          title: '生成动态资源测试用例',
+          message: '使用LLM生成智能动态资源模板测试用例',
+          metadata: { resourceUri: (resource as any).uriTemplate || resource.uri }
+        });
+
+        // 获取最大测试用例数量
+        const maxTestCases = config.maxTestCases || 5;
+
+        // 生成测试用例请求
+        const testRequest = llmClient.generateDynamicResourceTemplateTests(
+          resource,
+          maxTestCases,
+          config.llmConfigId
+        );
+
+        // 调用LLM生成测试用例
+        const response = await llmClient.callLLM(
+          config.llmConfigId,
+          testRequest,
+          this.currentAbortController?.signal
+        );
+
+        // 解析测试用例
+        let testCases: Array<{
+          riskType: string;
+          purpose: string;
+          parameters: Record<string, unknown>;
+          expectedBehavior: string;
+          judgmentCriteria: string;
+          riskLevel: string;
+          riskDescription: string;
+        }> = [];
+
+        try {
+          testCases = JSON.parse(response.content);
+        } catch (parseError) {
+          console.error('解析动态资源测试用例失败:', parseError);
+          this.addLog({
+            type: 'error',
+            phase: 'test_generation',
+            title: '解析动态资源测试用例失败',
+            message: 'LLM返回的测试用例格式不正确，使用默认测试用例',
+            metadata: { resourceUri: (resource as any).uriTemplate || resource.uri },
+            details: { 
+              error: parseError, 
+              response: response.content,
+              prompt: testRequest.messages,
+              llmResponse: response.content
+            }
+          });
+
+          // 如果解析失败，使用默认测试用例
+          const uriTemplate = (resource as any).uriTemplate;
+          const paramMatches = uriTemplate.match(/\{([^}]+)\}/g) || [];
+          const parameters = paramMatches.map((match: string) => match.slice(1, -1));
+          testCases = this.generateDynamicResourceTestCases(uriTemplate, parameters);
+        }
+
+        this.addLog({
+          type: 'success',
+          phase: 'test_generation',
+          title: '动态资源测试用例生成完成',
+          message: `成功生成 ${testCases.length} 个测试用例`,
+          metadata: { 
+            resourceUri: (resource as any).uriTemplate || resource.uri
+          }
+        });
+
+        return testCases;
+
+      } catch (error) {
+        console.error('生成动态资源测试用例失败:', error);
+        this.addLog({
+          type: 'error',
+          phase: 'test_generation',
+          title: '生成动态资源测试用例失败',
+          message: `生成测试用例时发生错误: ${error instanceof Error ? error.message : '未知错误'}`,
+          metadata: { resourceUri: (resource as any).uriTemplate || resource.uri },
+          details: { error }
+        });
+
+        // 如果LLM调用失败，使用默认测试用例
+        const uriTemplate = (resource as any).uriTemplate;
+        const paramMatches = uriTemplate.match(/\{([^}]+)\}/g) || [];
+        const parameters = paramMatches.map((match: string) => match.slice(1, -1));
+        return this.generateDynamicResourceTestCases(uriTemplate, parameters);
+      }
+  }
+
+  /**
+   * 生成动态资源测试用例（默认实现）
+   */
+  private generateDynamicResourceTestCases(uriTemplate: string, parameters: string[]): Array<{
+    riskType: string;
+    purpose: string;
+    parameters: Record<string, unknown>;
+    expectedBehavior: string;
+    judgmentCriteria: string;
+    riskLevel: string;
+    riskDescription: string;
+  }> {
+    const testCases = [];
+
+    // 测试用例1: 正常参数
+    const normalParams: Record<string, unknown> = {};
+    parameters.forEach(param => {
+      normalParams[param] = `test_${param}`;
+    });
+    
+    testCases.push({
+      riskType: 'normal_parameter_test',
+      purpose: '正常参数测试',
+      parameters: normalParams,
+      expectedBehavior: '应该能够正常访问',
+      judgmentCriteria: '检查是否能够正常访问资源',
+      riskLevel: 'low',
+      riskDescription: '测试正常参数访问的安全性'
+    });
+
+    // 测试用例2: 边界值测试
+    const boundaryParams: Record<string, unknown> = {};
+    parameters.forEach(param => {
+      boundaryParams[param] = '0';
+    });
+    
+    testCases.push({
+      riskType: 'boundary_value_test',
+      purpose: '边界值测试',
+      parameters: boundaryParams,
+      expectedBehavior: '应该能够处理边界值',
+      judgmentCriteria: '检查边界值处理是否安全',
+      riskLevel: 'medium',
+      riskDescription: '测试边界值处理的安全性'
+    });
+
+    // 测试用例3: 特殊字符测试
+    const specialParams: Record<string, unknown> = {};
+    parameters.forEach(param => {
+      specialParams[param] = 'test@#$%^&*()';
+    });
+    
+    testCases.push({
+      riskType: 'special_character_test',
+      purpose: '特殊字符测试',
+      parameters: specialParams,
+      expectedBehavior: '应该能够安全处理特殊字符',
+      judgmentCriteria: '检查特殊字符处理是否安全',
+      riskLevel: 'medium',
+      riskDescription: '测试特殊字符处理的安全性'
+    });
+
+    return testCases;
   }
 }
 
