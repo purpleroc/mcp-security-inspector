@@ -172,14 +172,16 @@ const SecurityHistoryPanel: React.FC<SecurityHistoryPanelProps> = ({ onRestoreRe
       dataIndex: 'serverName',
       key: 'serverName',
       render: (name: string, record: SecurityHistoryRecord) => (
-        <Space>
-          <Text strong>{name}</Text>
+        <div>
+          <div>
+            <Text strong>{name}</Text>
+          </div>
           {record.serverConfig.host && (
-            <Text type="secondary" style={{ fontSize: '12px' }}>
+            <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
               {record.serverConfig.host}
-            </Text>
+            </div>
           )}
-        </Space>
+        </div>
       ),
     },
     {

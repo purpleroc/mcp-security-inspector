@@ -7,7 +7,14 @@ import {
   SecurityRiskLevel,
   MCPTool,
   MCPPrompt,
-  MCPResource
+  MCPResource,
+  ComponentParameterAnalysis,
+  EnhancedMCPTool,
+  EnhancedMCPPrompt,
+  EnhancedMCPResource,
+  EnhancedMCPComponent,
+  UnifiedRiskItem,
+  UnifiedSecurityOverview
 } from '../types/mcp';
 import { LLMClientService } from './llmClient';
 import { t } from '../i18n';
@@ -65,6 +72,227 @@ export class SecurityEngine {
       SecurityEngine.instance = new SecurityEngine();
     }
     return SecurityEngine.instance;
+  }
+
+  /**
+   * 清空所有状态（连接新服务器时调用）
+   */
+  public clearAllStates(): void {
+    this.isScanning = false;
+    this.currentScanId = null;
+    this.logs = [];
+    this.passiveTestResults = [];
+    if (this.currentAbortController) {
+      this.currentAbortController.abort();
+      this.currentAbortController = null;
+    }
+  }
+
+  /**
+   * 分析工具参数
+   */
+  private analyzeToolParameters(tool: MCPTool): ComponentParameterAnalysis {
+    const inputSchema = tool.inputSchema;
+    const properties = inputSchema?.properties || {};
+    const required = inputSchema?.required || [];
+    
+    const parameters = Object.entries(properties).map(([name, schema]) => ({
+      name,
+      type: schema.type,
+      description: schema.description,
+      required: required.includes(name),
+      isOptional: !required.includes(name)
+    }));
+
+    const hasParameters = parameters.length > 0;
+    
+    return {
+      hasParameters,
+      parameterCount: parameters.length,
+      parameters,
+      requiresLLMGeneration: hasParameters
+    };
+  }
+
+  /**
+   * 分析提示参数
+   */
+  private analyzePromptParameters(prompt: MCPPrompt): ComponentParameterAnalysis {
+    const args = prompt.arguments || [];
+    
+    const parameters = args.map(arg => ({
+      name: arg.name,
+      description: arg.description,
+      required: arg.required || false,
+      isOptional: !arg.required
+    }));
+
+    const hasParameters = parameters.length > 0;
+    
+    return {
+      hasParameters,
+      parameterCount: parameters.length,
+      parameters,
+      requiresLLMGeneration: hasParameters
+    };
+  }
+
+  /**
+   * 分析资源参数
+   */
+  private analyzeResourceParameters(resource: MCPResource): ComponentParameterAnalysis {
+    const uriTemplate = (resource as any).uriTemplate;
+    
+    if (!uriTemplate) {
+      return {
+        hasParameters: false,
+        parameterCount: 0,
+        parameters: [],
+        requiresLLMGeneration: false
+      };
+    }
+
+    // 提取模板中的参数
+    const paramMatches = uriTemplate.match(/\{([^}]+)\}/g) || [];
+    const parameters = paramMatches.map((match: string) => {
+      const paramName = match.slice(1, -1);
+      return {
+        name: paramName,
+        type: 'string',
+        description: `URI模板参数: ${paramName}`,
+        required: true,
+        isOptional: false
+      };
+    });
+
+    const hasParameters = parameters.length > 0;
+    
+    return {
+      hasParameters,
+      parameterCount: parameters.length,
+      parameters,
+      requiresLLMGeneration: hasParameters
+    };
+  }
+
+  /**
+   * 预处理工具组件
+   */
+  private preprocessTool(tool: MCPTool): EnhancedMCPTool {
+    const parameterAnalysis = this.analyzeToolParameters(tool);
+    
+    return {
+      ...tool,
+      parameterAnalysis,
+      componentType: 'tool'
+    };
+  }
+
+  /**
+   * 预处理提示组件
+   */
+  private preprocessPrompt(prompt: MCPPrompt): EnhancedMCPPrompt {
+    const parameterAnalysis = this.analyzePromptParameters(prompt);
+    
+    return {
+      ...prompt,
+      parameterAnalysis,
+      componentType: 'prompt'
+    };
+  }
+
+  /**
+   * 预处理资源组件
+   */
+  private preprocessResource(resource: MCPResource): EnhancedMCPResource {
+    const parameterAnalysis = this.analyzeResourceParameters(resource);
+    const uriTemplate = (resource as any).uriTemplate;
+    
+    // 确保资源有有效的URI
+    if (!resource.uri && uriTemplate) {
+      console.warn(`[SecurityEngine] 资源 ${resource.name} 缺少uri字段，使用uriTemplate: ${uriTemplate}`);
+      (resource as any).uri = uriTemplate;
+    }
+    
+    if (!resource.uri) {
+      console.error(`[SecurityEngine] 资源 ${resource.name} 缺少uri字段且没有uriTemplate，这将导致测试失败`);
+    }
+    
+    return {
+      ...resource,
+      parameterAnalysis,
+      componentType: 'resource',
+      resourceType: uriTemplate ? '动态资源' : '静态资源'
+    };
+  }
+
+  /**
+   * 批量预处理组件
+   */
+  private preprocessComponents(
+    tools: MCPTool[],
+    prompts: MCPPrompt[],
+    resources: MCPResource[],
+    resourceTemplates: MCPResource[]
+  ): {
+    enhancedTools: EnhancedMCPTool[];
+    enhancedPrompts: EnhancedMCPPrompt[];
+    enhancedResources: EnhancedMCPResource[];
+    enhancedResourceTemplates: EnhancedMCPResource[];
+  } {
+    this.addLog({
+      type: 'step',
+      phase: 'init',
+      title: '组件预处理',
+      message: '开始分析组件参数结构'
+    });
+
+    const enhancedTools = tools.map(tool => this.preprocessTool(tool));
+    const enhancedPrompts = prompts.map(prompt => this.preprocessPrompt(prompt));
+    const enhancedResources = resources.map(resource => this.preprocessResource(resource));
+    const enhancedResourceTemplates = resourceTemplates.map(template => this.preprocessResource(template));
+
+    // 统计信息
+    const toolsWithParams = enhancedTools.filter(t => t.parameterAnalysis.hasParameters).length;
+    const promptsWithParams = enhancedPrompts.filter(p => p.parameterAnalysis.hasParameters).length;
+    const resourcesWithParams = enhancedResources.filter(r => r.parameterAnalysis.hasParameters).length;
+    const templatesWithParams = enhancedResourceTemplates.filter(rt => rt.parameterAnalysis.hasParameters).length;
+
+    this.addLog({
+      type: 'success',
+      phase: 'init',
+      title: '组件预处理完成',
+      message: `工具: ${enhancedTools.length}个(${toolsWithParams}个有参数), 提示: ${enhancedPrompts.length}个(${promptsWithParams}个有参数), 资源: ${enhancedResources.length}个(${resourcesWithParams}个有参数), 资源模板: ${enhancedResourceTemplates.length}个(${templatesWithParams}个有参数)`,
+      details: {
+        tools: {
+          total: enhancedTools.length,
+          withParameters: toolsWithParams,
+          withoutParameters: enhancedTools.length - toolsWithParams
+        },
+        prompts: {
+          total: enhancedPrompts.length,
+          withParameters: promptsWithParams,
+          withoutParameters: enhancedPrompts.length - promptsWithParams
+        },
+        resources: {
+          total: enhancedResources.length,
+          withParameters: resourcesWithParams,
+          withoutParameters: enhancedResources.length - resourcesWithParams
+        },
+        resourceTemplates: {
+          total: enhancedResourceTemplates.length,
+          withParameters: templatesWithParams,
+          withoutParameters: enhancedResourceTemplates.length - templatesWithParams
+        }
+      }
+    });
+
+    return {
+      enhancedTools,
+      enhancedPrompts,
+      enhancedResources,
+      enhancedResourceTemplates
+    };
   }
 
   /**
@@ -188,61 +416,100 @@ export class SecurityEngine {
 
       onProgress?.(0, t().security.logMessages.initializingScan);
 
-      // 获取MCP服务器的所有组件
+      // 从MCPClient获取预处理好的组件（在连接时已初始化）
       const startTime = Date.now();
       this.addLog({
         type: 'step',
         phase: 'init',
-        title: t().security.logMessages.fetchingComponents,
-        message: t().security.logMessages.fetchingFromServer
+        title: '获取预处理组件',
+        message: '从MCPClient获取连接时已预处理的组件'
       });
 
-      const [tools, prompts, resources, resourceTemplates] = await Promise.all([
-        mcpClient.listTools(),
-        mcpClient.listPrompts(),
-        mcpClient.listResources(),
-        mcpClient.listResourceTemplates()
-      ]);
-
-      console.log('[SecurityEngine] 原始资源模板数据:', resourceTemplates);
-
-      // 只过滤掉真正的null值，保留所有其他对象
-      const validResourceTemplates = resourceTemplates.filter(template => template !== null);
-      
-      if (resourceTemplates.length !== validResourceTemplates.length) {
-        console.warn(`[SecurityEngine] 过滤掉 ${resourceTemplates.length - validResourceTemplates.length} 个null资源模板`);
-        console.warn('[SecurityEngine] 原始资源模板数组包含null值:', resourceTemplates);
+      // 检查组件是否已初始化
+      if (!mcpClient.isComponentsInitialized()) {
         this.addLog({
           type: 'warning',
           phase: 'init',
-          title: '资源模板数据异常',
-          message: `发现 ${resourceTemplates.length - validResourceTemplates.length} 个null资源模板，已过滤`,
-          details: { originalCount: resourceTemplates.length, validCount: validResourceTemplates.length }
+          title: '组件未初始化',
+          message: '组件未在连接时初始化，尝试现在初始化'
         });
-      }
+        
+        // 如果组件未初始化，可能是连接时初始化失败，这里再尝试一次
+        // 但这不是正常流程，正常情况下应该在连接时就完成
+        const [tools, prompts, resources, resourceTemplates] = await Promise.all([
+          mcpClient.listTools(),
+          mcpClient.listPrompts(),
+          mcpClient.listResources(),
+          mcpClient.listResourceTemplates()
+        ]);
 
-      console.log('[SecurityEngine] 有效资源模板:', validResourceTemplates);
+        // 过滤和去重
+        const validResourceTemplates = resourceTemplates.filter(template => template !== null);
+        const processedResourceUris = new Set<string>();
+        
+        const filteredResources = resources.filter(resource => {
+          const uri = resource.uri;
+          if (processedResourceUris.has(uri)) {
+            return false;
+          }
+          processedResourceUris.add(uri);
+          return true;
+        });
+
+        const filteredResourceTemplates = validResourceTemplates.filter(template => {
+          const uri = (template as any).uriTemplate || template.uri;
+          if (processedResourceUris.has(uri)) {
+            return false;
+          }
+          processedResourceUris.add(uri);
+          return true;
+        });
+
+        // 使用原有的预处理逻辑
+        const { 
+          enhancedTools, 
+          enhancedPrompts, 
+          enhancedResources, 
+          enhancedResourceTemplates 
+        } = this.preprocessComponents(tools, prompts, filteredResources, filteredResourceTemplates);
+
+        // 手动设置结果（这是备用方案）
+        var finalEnhancedTools = enhancedTools;
+        var finalEnhancedPrompts = enhancedPrompts;
+        var finalEnhancedResources = enhancedResources;
+        var finalEnhancedResourceTemplates = enhancedResourceTemplates;
+      } else {
+        // 正常情况：使用预处理好的组件
+        var finalEnhancedTools = mcpClient.getEnhancedTools();
+        var finalEnhancedPrompts = mcpClient.getEnhancedPrompts();
+        var finalEnhancedResources = mcpClient.getEnhancedResources();
+        var finalEnhancedResourceTemplates = mcpClient.getEnhancedResourceTemplates();
+      }
 
       const fetchDuration = Date.now() - startTime;
       this.addLog({
         type: 'success',
         phase: 'init',
         title: t().security.logMessages.componentsFetched,
-        message: `${t().security.logMessages.generatedTests} ${tools.length} ${t().security.logMessages.toolsCount}，${prompts.length} ${t().security.logMessages.promptsCount}，${resources.length + validResourceTemplates.length} ${t().security.logMessages.resourcesCount}`,
+        message: `${t().security.logMessages.generatedTests} ${finalEnhancedTools.length} ${t().security.logMessages.toolsCount}，${finalEnhancedPrompts.length} ${t().security.logMessages.promptsCount}，${finalEnhancedResources.length + finalEnhancedResourceTemplates.length} ${t().security.logMessages.resourcesCount}`,
         duration: fetchDuration,
         details: {
-          tools: tools.map(t => t.name),
-          prompts: prompts.map(p => p.name),
-          resources: resources.map(r => r.uri),
-          resourceTemplates: validResourceTemplates.map(r => (r as any).uriTemplate || r.uri || r.name || 'unknown')
+          tools: finalEnhancedTools.map(t => `${t.name}(${t.parameterAnalysis.hasParameters ? '有参数' : '无参数'})`),
+          prompts: finalEnhancedPrompts.map(p => `${p.name}(${p.parameterAnalysis.hasParameters ? '有参数' : '无参数'})`),
+          resources: finalEnhancedResources.map(r => `${r.uri}(${r.resourceType})`),
+          resourceTemplates: finalEnhancedResourceTemplates.map(r => `${(r as any).uriTemplate || r.uri || r.name || 'unknown'}(${r.resourceType})`)
         }
       });
 
       onProgress?.(10, t().security.logMessages.componentsComplete);
 
+      // 获取当前连接的服务器信息
+      const currentConfig = mcpClient.getCurrentConfig();
+      const serverName = currentConfig?.name || 'MCP Server';
+
       const report: SecurityReport = {
         id: this.currentScanId,
-        serverName: 'MCP Server', // TODO: 从连接配置获取
+        serverName: serverName,
         timestamp: Date.now(),
         overallRisk: 'low',
         toolResults: [],
@@ -259,7 +526,7 @@ export class SecurityEngine {
       };
 
       // 分步骤执行检测
-      const totalSteps = tools.length + prompts.length + resources.length + validResourceTemplates.length;
+      const totalSteps = finalEnhancedTools.length + finalEnhancedPrompts.length + finalEnhancedResources.length + finalEnhancedResourceTemplates.length;
       let currentStep = 0;
 
       // 检测工具安全性
@@ -267,13 +534,13 @@ export class SecurityEngine {
         type: 'step',
         phase: 'tool_analysis',
         title: t().security.logMessages.toolAnalysisStart,
-        message: `${t().security.logMessages.analyzingTools} ${tools.length} ${t().security.logMessages.toolsSecurityAnalysis}`,
+        message: `${t().security.logMessages.analyzingTools} ${finalEnhancedTools.length} ${t().security.logMessages.toolsSecurityAnalysis}`,
         progress: 20
       });
 
-      onProgress?.(20, `${t().security.logMessages.startingDetection} ${tools.length} ${t().security.logMessages.tools}`);
+      onProgress?.(20, `${t().security.logMessages.startingDetection} ${finalEnhancedTools.length} ${t().security.logMessages.tools}`);
       
-      for (const tool of tools) {
+      for (const tool of finalEnhancedTools) {
         // 检查是否被取消
         if (!this.isScanning || this.currentAbortController?.signal.aborted) {
           this.addLog({
@@ -332,12 +599,12 @@ export class SecurityEngine {
         type: 'step',
         phase: 'prompt_analysis',
         title: t().security.logMessages.promptAnalysisStart,
-        message: `${t().security.logMessages.analyzingPrompts} ${prompts.length} ${t().security.logMessages.promptsSecurityAnalysis}`,
+        message: `${t().security.logMessages.analyzingPrompts} ${finalEnhancedPrompts.length} ${t().security.logMessages.promptsSecurityAnalysis}`,
         progress: 70
       });
 
-      onProgress?.(70, `${t().security.logMessages.startingDetection} ${prompts.length} ${t().security.logMessages.prompts}`);
-      for (const prompt of prompts) {
+      onProgress?.(70, `${t().security.logMessages.startingDetection} ${finalEnhancedPrompts.length} ${t().security.logMessages.prompts}`);
+      for (const prompt of finalEnhancedPrompts) {
         // 检查是否被取消
         if (!this.isScanning || this.currentAbortController?.signal.aborted) {
           this.addLog({
@@ -396,14 +663,27 @@ export class SecurityEngine {
         type: 'step',
         phase: 'resource_analysis',
         title: t().security.logMessages.resourceAnalysisStart,
-        message: `${t().security.logMessages.analyzingResources} ${resources.length + validResourceTemplates.length} ${t().security.logMessages.resourcesSecurityAnalysis}`,
+        message: `${t().security.logMessages.analyzingResources} ${finalEnhancedResources.length + finalEnhancedResourceTemplates.length} ${t().security.logMessages.resourcesSecurityAnalysis}`,
         progress: 85
       });
 
-      onProgress?.(85, `${t().security.logMessages.startingDetection} ${resources.length + validResourceTemplates.length} ${t().security.logMessages.resources}`);
+      onProgress?.(85, `${t().security.logMessages.startingDetection} ${finalEnhancedResources.length + finalEnhancedResourceTemplates.length} ${t().security.logMessages.resources}`);
       
       // 检测普通资源
-      for (const resource of resources) {
+      for (const resource of finalEnhancedResources) {
+        // 检查资源的有效性，防止undefined或空对象
+        if (!resource || (!resource.name && !resource.uri)) {
+          console.warn('[SecurityEngine] 发现无效的资源对象，跳过:', resource);
+          this.addLog({
+            type: 'warning',
+            phase: 'resource_analysis',
+            title: '跳过无效资源',
+            message: '发现无效的资源对象，已自动跳过',
+            details: { invalidResource: resource }
+          });
+          continue;
+        }
+
         // 检查是否被取消
         if (!this.isScanning || this.currentAbortController?.signal.aborted) {
           this.addLog({
@@ -458,7 +738,20 @@ export class SecurityEngine {
       }
 
       // 检测资源模板
-      for (const resourceTemplate of validResourceTemplates) {
+      for (const resourceTemplate of finalEnhancedResourceTemplates) {
+        // 检查资源模板的有效性，防止undefined或空对象
+        if (!resourceTemplate || (!resourceTemplate.name && !resourceTemplate.uri && !(resourceTemplate as any).uriTemplate)) {
+          console.warn('[SecurityEngine] 发现无效的资源模板对象，跳过:', resourceTemplate);
+          this.addLog({
+            type: 'warning',
+            phase: 'resource_analysis',
+            title: '跳过无效资源模板',
+            message: '发现无效的资源模板对象，已自动跳过',
+            details: { invalidResourceTemplate: resourceTemplate }
+          });
+          continue;
+        }
+
         // 检查是否被取消
         if (!this.isScanning || this.currentAbortController?.signal.aborted) {
           this.addLog({
@@ -476,8 +769,8 @@ export class SecurityEngine {
             type: 'step',
             phase: 'resource_analysis',
             title: t().security.logMessages.analyzingResource,
-            message: `${t().security.logMessages.analyzingResource}: ${resourceTemplate.name || resourceTemplate.uri} (模板)`,
-            metadata: { resourceUri: resourceTemplate.uri }
+            message: `${t().security.logMessages.analyzingResource}: ${resourceTemplate.name || resourceTemplate.uri || (resourceTemplate as any).uriTemplate} (模板)`,
+            metadata: { resourceUri: resourceTemplate.uri || (resourceTemplate as any).uriTemplate }
           });
 
           const result = await this.analyzeResourceEnhanced(resourceTemplate, config);
@@ -546,22 +839,391 @@ export class SecurityEngine {
   /**
    * 增强版工具安全分析
    */
-  private async analyzeToolEnhanced(tool: MCPTool, config: SecurityCheckConfig): Promise<ToolSecurityResult> {
-    return await this.performUnifiedSecurityAnalysis('tool', tool, config) as ToolSecurityResult;
+  private async analyzeToolEnhanced(tool: EnhancedMCPTool, config: SecurityCheckConfig): Promise<ToolSecurityResult> {
+    this.addLog({
+      type: 'step',
+      phase: 'tool_analysis',
+      title: `分析工具: ${tool.name}`,
+      message: `工具类型: ${tool.parameterAnalysis.hasParameters ? '需要参数' : '无需参数'} (${tool.parameterAnalysis.parameterCount}个参数)`,
+      metadata: { toolName: tool.name }
+    });
+
+    return await this.performEnhancedComponentAnalysis('tool', tool, config) as ToolSecurityResult;
   }
 
   /**
    * 增强版提示安全分析
    */
-  private async analyzePromptEnhanced(prompt: MCPPrompt, config: SecurityCheckConfig): Promise<PromptSecurityResult> {
-    return await this.performUnifiedSecurityAnalysis('prompt', prompt, config) as PromptSecurityResult;
+  private async analyzePromptEnhanced(prompt: EnhancedMCPPrompt, config: SecurityCheckConfig): Promise<PromptSecurityResult> {
+    this.addLog({
+      type: 'step',
+      phase: 'prompt_analysis',
+      title: `分析提示: ${prompt.name}`,
+      message: `提示类型: ${prompt.parameterAnalysis.hasParameters ? '需要参数' : '无需参数'} (${prompt.parameterAnalysis.parameterCount}个参数)`,
+      metadata: { promptName: prompt.name }
+    });
+
+    return await this.performEnhancedComponentAnalysis('prompt', prompt, config) as PromptSecurityResult;
   }
 
   /**
    * 增强版资源安全分析
    */
-  private async analyzeResourceEnhanced(resource: MCPResource, config: SecurityCheckConfig): Promise<ResourceSecurityResult> {
-    return await this.performUnifiedSecurityAnalysis('resource', resource, config) as ResourceSecurityResult;
+  private async analyzeResourceEnhanced(resource: EnhancedMCPResource, config: SecurityCheckConfig): Promise<ResourceSecurityResult> {
+    this.addLog({
+      type: 'step',
+      phase: 'resource_analysis',
+      title: `分析资源: ${resource.name || resource.uri}`,
+      message: `资源类型: ${resource.resourceType} - ${resource.parameterAnalysis.hasParameters ? '需要参数' : '无需参数'} (${resource.parameterAnalysis.parameterCount}个参数)`,
+      metadata: { resourceUri: resource.uri }
+    });
+
+    return await this.performEnhancedComponentAnalysis('resource', resource, config) as ResourceSecurityResult;
+  }
+
+  /**
+   * 增强的组件分析函数 - 根据参数情况执行差异化测试
+   */
+  private async performEnhancedComponentAnalysis(
+    type: 'tool' | 'prompt' | 'resource',
+    component: EnhancedMCPComponent,
+    config: SecurityCheckConfig
+  ): Promise<any> {
+    const result: any = {
+      riskLevel: 'low',
+      timestamp: Date.now()
+    };
+
+    // 根据类型设置基础属性
+    switch (type) {
+      case 'tool':
+        const tool = component as EnhancedMCPTool;
+        result.toolName = tool.name;
+        result.vulnerabilities = [];
+        result.testResults = [];
+        result.llmAnalysis = '';
+        break;
+      case 'prompt':
+        const prompt = component as EnhancedMCPPrompt;
+        result.promptName = prompt.name;
+        result.threats = [];
+        result.llmAnalysis = '';
+        break;
+      case 'resource':
+        const resource = component as EnhancedMCPResource;
+        result.resourceUri = resource.uri || (resource as any).uriTemplate;
+        result.name = resource.name;
+        result.uriTemplate = (resource as any).uriTemplate;
+        result.resourceType = resource.resourceType;
+        result.risks = [];
+        result.accessTests = [];
+        result.llmAnalysis = '';
+        break;
+    }
+
+    try {
+      // 第一阶段：静态分析（始终执行）
+      this.addLog({
+        type: 'step',
+        phase: `${type}_analysis`,
+        title: `${type}静态分析`,
+        message: `对${type} ${this.getTargetName(component, type)} 进行静态安全分析`,
+        metadata: this.getMetadata(component, type)
+      });
+
+      if (config.enableLLMAnalysis !== false) {
+        const analysisRequest = llmClient.generateSecurityAnalysisPrompt(type, component, config.llmConfigId);
+        const analysisResponse = await llmClient.callLLM(config.llmConfigId, analysisRequest, this.currentAbortController?.signal);
+        result.llmAnalysis = analysisResponse.content;
+        this.parseAnalysis(result, type, analysisResponse.content);
+      }
+      
+      // 第二阶段：差异化测试策略
+      if (component.parameterAnalysis.hasParameters) {
+        // 有参数：使用原有的智能测试逻辑
+        this.addLog({
+          type: 'step',
+          phase: `${type}_analysis`,
+          title: '执行智能参数测试',
+          message: `${type}需要参数 (${component.parameterAnalysis.parameterCount}个)`,
+          metadata: this.getMetadata(component, type),
+          details: {
+            componentName: this.getTargetName(component, type),
+            parameterAnalysis: component.parameterAnalysis,
+            testStrategy: 'intelligent_parameter_testing'
+          }
+        });
+
+        if (config.autoGenerate) {
+          // 使用原有的智能测试逻辑
+          await this.performIntelligentTesting(type, component, config, result);
+        }
+      } else {
+        // 无参数：执行直接访问测试
+        this.addLog({
+          type: 'step',
+          phase: `${type}_analysis`,
+          title: '执行直接访问测试',
+          message: `${type}无需参数，执行直接访问测试`,
+          metadata: this.getMetadata(component, type),
+          details: {
+            componentName: this.getTargetName(component, type),
+            testStrategy: 'direct_access_testing',
+            reason: 'no_parameters_required'
+          }
+        });
+
+        await this.performDirectAccessTests(type, component, config, result);
+      }
+
+      // 计算整体风险等级
+      result.riskLevel = this.calculateComponentRiskLevel(result, type);
+
+      // 记录分析完成日志，包含详细的分析结果
+      this.addLog({
+        type: 'success',
+        phase: `${type}_analysis`,
+        title: '组件分析完成',
+        message: `${type} ${this.getTargetName(component, type)} 分析完成，风险等级: ${result.riskLevel}`,
+        metadata: {
+          ...this.getMetadata(component, type),
+          riskLevel: result.riskLevel,
+          componentType: type
+        },
+        details: {
+          analysisResult: result,
+          componentInfo: {
+            name: this.getTargetName(component, type),
+            type: type,
+            hasParameters: component.parameterAnalysis.hasParameters,
+            parameterCount: component.parameterAnalysis.parameterCount,
+            parameters: component.parameterAnalysis.parameters
+          },
+          riskAssessment: {
+            riskLevel: result.riskLevel,
+            vulnerabilities: result.vulnerabilities || [],
+            threats: result.threats || [],
+            risks: result.risks || []
+          },
+          testResults: {
+            testResults: result.testResults || [],
+            accessTests: result.accessTests || []
+          },
+          llmAnalysis: result.llmAnalysis || null,
+          analysisTimestamp: Date.now()
+        }
+      });
+
+    } catch (error) {
+      this.addLog({
+        type: 'error',
+        phase: `${type}_analysis`,
+        title: '组件分析失败',
+        message: `${type} ${this.getTargetName(component, type)} 分析失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        metadata: this.getMetadata(component, type),
+        details: error
+      });
+      result.riskLevel = 'medium'; // 分析失败时设为中等风险
+    }
+
+    return result;
+  }
+
+
+
+  /**
+   * 执行直接访问测试（融合LLM评估逻辑）
+   */
+  private async performDirectAccessTests(
+    type: 'tool' | 'prompt' | 'resource',
+    component: EnhancedMCPComponent,
+    config: SecurityCheckConfig,
+    result: any
+  ): Promise<void> {
+    try {
+      this.addLog({
+        type: 'step',
+        phase: `${type}_analysis`,
+        title: '执行直接访问测试',
+        message: `${type}无需参数，执行直接访问安全测试`,
+        metadata: this.getMetadata(component, type)
+      });
+
+      let testResult: any;
+      let error: string | undefined;
+      const startTime = Date.now();
+
+      try {
+        switch (type) {
+          case 'tool':
+            testResult = await mcpClient.callTool((component as EnhancedMCPTool).name, {});
+            break;
+          case 'prompt':
+            testResult = await mcpClient.getPrompt((component as EnhancedMCPPrompt).name, {});
+            break;
+          case 'resource':
+            const resource = component as EnhancedMCPResource;
+            const uri = resource.uri || (resource as any).uriTemplate;
+            testResult = await mcpClient.readResource(uri);
+            break;
+        }
+      } catch (testError) {
+        error = testError instanceof Error ? testError.message : '未知错误';
+        this.addLog({
+          type: 'warning',
+          phase: `${type}_analysis`,
+          title: '直接访问失败',
+          message: `直接访问失败: ${error}`,
+          metadata: this.getMetadata(component, type)
+        });
+      }
+
+      const duration = Date.now() - startTime;
+
+      // 构造测试用例用于LLM评估
+      const testCase = {
+        riskType: 'direct_access',
+        purpose: `${type}直接访问测试`,
+        parameters: {},
+        expectedBehavior: error ? '访问失败是预期行为' : `${type}应该能够正常访问`,
+        judgmentCriteria: error 
+          ? '检查错误信息是否泄露敏感信息' 
+          : '检查返回结果是否包含敏感信息或异常行为',
+        riskLevel: 'low',
+        riskDescription: `测试${type}的直接访问安全性`
+      };
+
+      // 使用LLM评估测试结果（保持与原有逻辑一致）
+      if (config.enableLLMAnalysis !== false) {
+        const evaluationRequest = llmClient.generateIntelligentResultEvaluation(
+          testCase,
+          testResult,
+          error,
+          config.llmConfigId
+        );
+        
+        const evaluationResponse = await llmClient.callLLM(config.llmConfigId, evaluationRequest, this.currentAbortController?.signal);
+
+        // 解析JSON格式的评估结果
+        let evaluation;
+        try {
+          evaluation = JSON.parse(evaluationResponse.content);
+        } catch (parseError) {
+          evaluation = this.parseSecurityEvaluation(evaluationResponse.content);
+        }
+        
+        const evaluationJson = JSON.stringify(evaluation);
+
+        // 记录测试结果，包含LLM评估
+        const testRecord = {
+          testCase: testCase.purpose,
+          parameters: testCase.parameters,
+          result: testResult,
+          riskAssessment: evaluationJson,
+          passed: evaluation.riskLevel === 'low',
+          duration: duration,
+          source: 'direct_access'
+        };
+
+        if (type === 'tool') {
+          result.testResults.push(testRecord);
+        } else if (type === 'prompt') {
+          result.testResults = result.testResults || [];
+          result.testResults.push(testRecord);
+        } else if (type === 'resource') {
+          result.accessTests.push({
+            testType: 'direct_access',
+            uri: (component as EnhancedMCPResource).uri || (component as any).uriTemplate,
+            success: !error,
+            riskAssessment: evaluationJson
+          });
+        }
+
+        // 如果发现风险，添加到相应的风险列表
+        if (evaluation.riskLevel && evaluation.riskLevel !== 'low') {
+          const riskItem = {
+            type: testCase.riskType,
+            severity: evaluation.riskLevel,
+            description: evaluation.description || testCase.purpose,
+            evidence: evaluation.evidence || (error ? `错误: ${error}` : JSON.stringify(testResult)),
+            recommendation: evaluation.recommendation || '建议进一步检查直接访问的安全性'
+          };
+
+          if (type === 'tool') {
+            result.vulnerabilities.push(riskItem);
+          } else if (type === 'prompt') {
+            result.threats.push(riskItem);
+          } else if (type === 'resource') {
+            result.risks.push(riskItem);
+          }
+        }
+
+        this.addLog({
+          type: evaluation.riskLevel === 'low' ? 'success' : 'warning',
+          phase: `${type}_analysis`,
+          title: '直接访问测试完成',
+          message: `执行时间: ${duration}ms，风险等级: ${evaluation.riskLevel}`,
+          metadata: this.getMetadata(component, type),
+          details: evaluation
+        });
+      } else {
+        // 如果没有启用LLM分析，使用简单的评估逻辑
+        const accessTest = {
+          testType: 'direct_access',
+          success: !error,
+          duration: duration,
+          result: testResult,
+          riskAssessment: error ? 'medium' : 'low'
+        };
+
+        if (type === 'tool') {
+          result.testResults.push(accessTest);
+        } else if (type === 'resource') {
+          result.accessTests.push({
+            testType: 'direct_access',
+            uri: (component as EnhancedMCPResource).uri,
+            success: !error,
+            riskAssessment: error ? 'medium' : 'low'
+          });
+        }
+
+        this.addLog({
+          type: error ? 'warning' : 'success',
+          phase: `${type}_analysis`,
+          title: '直接访问测试完成',
+          message: `执行时间: ${duration}ms，${error ? '访问失败' : '访问成功'}`,
+          metadata: this.getMetadata(component, type)
+        });
+      }
+
+    } catch (error) {
+      this.addLog({
+        type: 'error',
+        phase: `${type}_analysis`,
+        title: '直接访问测试异常',
+        message: `测试过程异常: ${error instanceof Error ? error.message : '未知错误'}`,
+        metadata: this.getMetadata(component, type),
+        details: error
+      });
+    }
+  }
+
+
+
+  /**
+   * 计算组件风险等级
+   */
+  private calculateComponentRiskLevel(result: any, type: string): SecurityRiskLevel {
+    const risks: SecurityRiskLevel[] = [];
+
+    // 收集所有风险等级
+    if (type === 'tool' && result.vulnerabilities) {
+      risks.push(...result.vulnerabilities.map((v: any) => v.severity));
+    } else if (type === 'resource' && result.risks) {
+      risks.push(...result.risks.map((r: any) => r.severity));
+    }
+
+    return this.calculateOverallRiskLevel(risks);
   }
 
   /**
@@ -1308,134 +1970,117 @@ export class SecurityEngine {
         await this.performBasicResourceTests(resource, result);
 
         // 对于简单资源，也进行LLM评估
-        if (config.enableLLMAnalysis !== false) {
-          try {
-            const testResult = await mcpClient.readResource(resource.uri);
-            
-            const evaluationRequest = llmClient.generateIntelligentResultEvaluation(
-              {
-                riskType: 'resource_access',
-                purpose: '简单资源访问测试',
-                parameters: { uri: resource.uri },
-                expectedBehavior: '资源应该能够正常访问',
-                judgmentCriteria: '检查资源访问是否安全',
-                riskLevel: 'low',
-                riskDescription: '测试简单资源的访问安全性'
-              },
-              testResult,
-              undefined,
-              config.llmConfigId
-            );
-            
-            const evaluationResponse = await llmClient.callLLM(config.llmConfigId, evaluationRequest, this.currentAbortController?.signal);
+        try {
+          const testResult = await mcpClient.readResource(resource.uri);
+          
+          const evaluationRequest = llmClient.generateIntelligentResultEvaluation(
+            {
+              riskType: 'resource_access',
+              purpose: '简单资源访问测试',
+              parameters: { uri: resource.uri },
+              expectedBehavior: '资源应该能够正常访问',
+              judgmentCriteria: '检查资源访问是否安全',
+              riskLevel: 'low',
+              riskDescription: '测试简单资源的访问安全性'
+            },
+            testResult,
+            undefined,
+            config.llmConfigId
+          );
+          
+          const evaluationResponse = await llmClient.callLLM(config.llmConfigId, evaluationRequest, this.currentAbortController?.signal);
 
-            let evaluation;
-            try {
-              evaluation = JSON.parse(evaluationResponse.content);
-            } catch (parseError) {
-              evaluation = this.parseSecurityEvaluation(evaluationResponse.content);
-            }
-            
-            const evaluationJson = JSON.stringify(evaluation);
-            
-            // 添加测试结果到resource结果中
-            result.accessTests.push({
-              testType: 'simple_resource_access',
-              uri: resource.uri,
-              success: true,
-              riskAssessment: evaluationJson
+          let evaluation;
+          try {
+            evaluation = JSON.parse(evaluationResponse.content);
+          } catch (parseError) {
+            evaluation = this.parseSecurityEvaluation(evaluationResponse.content);
+          }
+          
+          const evaluationJson = JSON.stringify(evaluation);
+          
+          // 添加测试结果到resource结果中
+          result.accessTests.push({
+            testType: 'simple_resource_access',
+            uri: resource.uri,
+            success: true,
+            riskAssessment: evaluationJson
+          });
+
+          // 如果发现风险，添加到风险列表
+            result.risks.push({
+              type: 'access',
+              severity: evaluation.riskLevel,
+              description: evaluation.description || `资源 ${resource.uri} 存在安全风险`,
+              evidence: evaluation.evidence || `能够访问: ${resource.uri}`,
+              recommendation: evaluation.recommendation || '建议加强访问控制'
             });
 
-            // 如果发现风险，添加到风险列表
-            if (evaluation.riskLevel !== 'low') {
-              result.risks.push({
-                type: 'access',
-                severity: evaluation.riskLevel,
-                description: evaluation.description || `资源 ${resource.uri} 存在安全风险`,
-                evidence: evaluation.evidence || `能够访问: ${resource.uri}`,
-                recommendation: evaluation.recommendation || '建议加强访问控制'
-              });
-
-              this.addLog({
-                type: 'warning',
-                phase: 'test_execution',
-                title: '发现资源安全风险',
-                message: `测试发现风险: ${evaluation.description || '资源访问存在安全风险'}`,
-                metadata: { 
-                  resourceUri: resource.uri,
-                  testCase: '简单资源访问测试',
-                  riskLevel: evaluation.riskLevel
-                }
-              });
-            }
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : '资源访问失败';
-            
             this.addLog({
               type: 'warning',
               phase: 'test_execution',
-              title: '资源访问测试错误',
-              message: `${t().security.resourceUri} ${resource.uri} ${t().security.logMessages.executionError}: ${errorMessage}`,
-              metadata: { resourceUri: resource.uri },
-              details: { error: errorMessage }
+              title: '发现资源安全风险',
+              message: `测试发现风险: ${evaluation.description || '资源访问存在安全风险'}`,
+              metadata: { 
+                resourceUri: resource.uri,
+                testCase: '简单资源访问测试',
+                riskLevel: evaluation.riskLevel
+              }
             });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : '资源访问失败';
+          
+          this.addLog({
+            type: 'warning',
+            phase: 'test_execution',
+            title: '资源访问测试错误',
+            message: `${t().security.resourceUri} ${resource.uri} ${t().security.logMessages.executionError}: ${errorMessage}`,
+            metadata: { resourceUri: resource.uri },
+            details: { error: errorMessage }
+          });
 
-            // 对错误也进行安全评估
-            const evaluationRequest = llmClient.generateIntelligentResultEvaluation(
-              {
-                riskType: 'resource_access',
-                purpose: '简单资源访问测试',
-                parameters: { uri: resource.uri },
-                expectedBehavior: '资源应该能够正常访问',
-                judgmentCriteria: '检查资源访问是否安全',
-                riskLevel: 'low',
-                riskDescription: '测试简单资源的访问安全性'
-              },
-              null,
-              errorMessage,
-              config.llmConfigId
-            );
-            
-            const evaluationResponse = await llmClient.callLLM(config.llmConfigId, evaluationRequest, this.currentAbortController?.signal);
+          // 对错误也进行安全评估
+          const evaluationRequest = llmClient.generateIntelligentResultEvaluation(
+            {
+              riskType: 'resource_access',
+              purpose: '简单资源访问测试',
+              parameters: { uri: resource.uri },
+              expectedBehavior: '资源应该能够正常访问',
+              judgmentCriteria: '检查资源访问是否安全',
+              riskLevel: 'low',
+              riskDescription: '测试简单资源的访问安全性'
+            },
+            null,
+            errorMessage,
+            config.llmConfigId
+          );
+          
+          const evaluationResponse = await llmClient.callLLM(config.llmConfigId, evaluationRequest, this.currentAbortController?.signal);
 
-            let evaluation;
-            try {
-              evaluation = JSON.parse(evaluationResponse.content);
-            } catch (parseError) {
-              evaluation = this.parseSecurityEvaluation(evaluationResponse.content);
-            }
-            
-            const evaluationJson = JSON.stringify(evaluation);
-            
-            result.accessTests.push({
-              testType: 'simple_resource_access',
-              uri: resource.uri,
-              success: false,
-              riskAssessment: evaluationJson
-            });
-
-            if (evaluation.riskLevel !== 'low') {
-              result.risks.push({
-                type: 'access',
-                severity: evaluation.riskLevel,
-                description: evaluation.description || `资源 ${resource.uri} 访问失败但存在安全风险`,
-                evidence: evaluation.evidence || `访问失败: ${errorMessage}`,
-                recommendation: evaluation.recommendation || '建议检查错误处理机制'
-              });
-            }
+          let evaluation;
+          try {
+            evaluation = JSON.parse(evaluationResponse.content);
+          } catch (parseError) {
+            evaluation = this.parseSecurityEvaluation(evaluationResponse.content);
           }
-        }
-      } else {
-        // 对于其他类型的资源（如带参数的资源），执行基本测试
-        this.addLog({
-          type: 'step',
-          phase: 'test_execution',
-          title: '执行通用资源测试',
-          message: `${t().security.logMessages.forResource} ${resource.uri} 执行通用资源安全测试`,
-          metadata: { resourceUri: resource.uri }
-        });
+          
+          const evaluationJson = JSON.stringify(evaluation);
+          
+          result.accessTests.push({
+            testType: 'simple_resource_access',
+            uri: resource.uri,
+            success: false,
+            riskAssessment: evaluationJson
+          });
 
-        await this.performBasicResourceTests(resource, result);
+            result.risks.push({
+              type: 'access',
+              severity: evaluation.riskLevel,
+              description: evaluation.description || `资源 ${resource.uri} 访问失败但存在安全风险`,
+              evidence: evaluation.evidence || `访问失败: ${errorMessage}`,
+              recommendation: evaluation.recommendation || '建议检查错误处理机制'
+            });
+        }
       }
 
       // 第二步：生成并执行智能测试用例（仅对动态资源和复杂资源）
@@ -1447,7 +2092,7 @@ export class SecurityEngine {
           type: 'step',
           phase: 'test_generation',
           title: t().security.logMessages.generatingResourceTests,
-          message: `${t().security.logMessages.forResource} ${resource.uri} ${t().security.logMessages.generateSecurityTests}`,
+          message: `${t().security.logMessages.forResource} ${resource.uri || resource.name || 'unknown'} ${t().security.logMessages.generateSecurityTests}`,
           metadata: { resourceUri: resource.uri }
         });
       } else if (config.autoGenerate && isSimpleResource) {
@@ -1456,7 +2101,7 @@ export class SecurityEngine {
           type: 'info',
           phase: 'test_generation',
           title: '跳过静态资源测试用例生成',
-          message: `${t().security.logMessages.forResource} ${resource.uri} 为静态资源，无需生成额外的参数化测试用例`,
+                      message: `${t().security.logMessages.forResource} ${resource.uri || resource.name || 'unknown'} 为静态资源，无需生成额外的参数化测试用例`,
           metadata: { resourceUri: resource.uri }
         });
       }
@@ -1482,7 +2127,7 @@ export class SecurityEngine {
             type: 'success',
             phase: 'test_generation',
             title: t().security.logMessages.testGenerationComplete,
-            message: `${t().security.logMessages.forResource} ${resource.uri} ${t().security.logMessages.generateTestCase} ${testCases.length} ${t().security.logMessages.smartSecurityTests}`,
+            message: `${t().security.logMessages.forResource} ${resource.uri || resource.name || 'unknown'} ${t().security.logMessages.generateTestCase} ${testCases.length} ${t().security.logMessages.smartSecurityTests}`,
             metadata: { resourceUri: resource.uri },
             details: testCases.map((tc: any) => ({
               type: tc.testType,
@@ -1499,7 +2144,7 @@ export class SecurityEngine {
             title: '生成资源测试用例失败',
             message: `生成测试用例时发生错误: ${error instanceof Error ? error.message : '未知错误'}`,
             metadata: { resourceUri: resource.uri },
-            details: { error }
+            details: { error: error }
           });
 
           // 如果LLM调用失败，使用默认测试用例
@@ -1508,7 +2153,7 @@ export class SecurityEngine {
             type: 'warning',
             phase: 'test_generation',
             title: '使用默认测试用例',
-            message: `由于LLM调用失败，为资源 ${resource.uri} 使用默认测试用例`,
+            message: `由于LLM调用失败，为资源 ${resource.uri || resource.name || 'unknown'} 使用默认测试用例`,
             metadata: { resourceUri: resource.uri }
           });
         }
@@ -2276,13 +2921,63 @@ ${llmClient.getLanguageOutputRequirement()}
 
     // 统计工具问题
     report.toolResults.forEach(result => {
+      // 统计直接漏洞
       result.vulnerabilities.forEach(vuln => {
         totalIssues++;
         switch (vuln.severity) {
           case 'critical': criticalIssues++; break;
           case 'high': highIssues++; break;
           case 'medium': mediumIssues++; break;
-          case 'low': lowIssues++; totalIssues--; break;
+          case 'low': lowIssues++; break;
+        }
+      });
+
+      // 统计LLM分析结果中的漏洞
+      if (result.llmAnalysis) {
+        try {
+          const analysis = typeof result.llmAnalysis === 'string' 
+            ? JSON.parse(result.llmAnalysis) 
+            : result.llmAnalysis;
+          if (analysis.vulnerabilities && Array.isArray(analysis.vulnerabilities)) {
+            analysis.vulnerabilities.forEach((vuln: any) => {
+              totalIssues++;
+              switch (vuln.severity) {
+                case 'critical': criticalIssues++; break;
+                case 'high': highIssues++; break;
+                case 'medium': mediumIssues++; break;
+                case 'low': lowIssues++; break;
+              }
+            });
+          }
+        } catch (error) {
+          // 解析失败时忽略
+        }
+      }
+
+      // 统计测试结果中的失败测试
+      result.testResults.forEach(test => {
+        if (!test.passed) {
+          totalIssues++;
+          // 尝试从riskAssessment中提取风险等级
+          try {
+            const assessment = typeof test.riskAssessment === 'string' 
+              ? JSON.parse(test.riskAssessment) 
+              : test.riskAssessment;
+            if (assessment.riskLevel) {
+              switch (assessment.riskLevel) {
+                case 'critical': criticalIssues++; break;
+                case 'high': highIssues++; break;
+                case 'medium': mediumIssues++; break;
+                case 'low': lowIssues++; break;
+              }
+            } else {
+              // 默认为低风险
+              lowIssues++;
+            }
+          } catch (error) {
+            // 解析失败时默认为低风险
+            lowIssues++;
+          }
         }
       });
       
@@ -2299,7 +2994,7 @@ ${llmClient.getLanguageOutputRequirement()}
           case 'critical': criticalIssues++; break;
           case 'high': highIssues++; break;
           case 'medium': mediumIssues++; break;
-          case 'low': lowIssues++; totalIssues--; break;
+          case 'low': lowIssues++; break;
         }
       });
       
@@ -2316,7 +3011,7 @@ ${llmClient.getLanguageOutputRequirement()}
           case 'critical': criticalIssues++; break;
           case 'high': highIssues++; break;
           case 'medium': mediumIssues++; break;
-          case 'low': lowIssues++; totalIssues--; break;
+          case 'low': lowIssues++; break;
         }
       });
       
@@ -2607,18 +3302,78 @@ ${llmClient.getLanguageOutputRequirement()}
         metadata: { 
           resourceUri: resource.uri,
           testCase: testCase.purpose
+        },
+        details: {
+          testCaseInfo: {
+            testType: testCase.testType,
+            purpose: testCase.purpose,
+            testUri: testCase.testUri,
+            expectedBehavior: testCase.expectedBehavior,
+            riskCriteria: testCase.riskCriteria
+          },
+          resourceInfo: {
+            name: resource.name,
+            uri: resource.uri,
+            description: resource.description
+          }
         }
       });
 
       // 构造测试URI
       const testUri = this.constructTestUri(resource.uri, testCase.testUri);
       
+      // 记录测试URI构造详情
+      this.addLog({
+        type: 'step',
+        phase: 'test_execution',
+        title: '构造测试URI',
+        message: `构造测试URI: ${testUri}`,
+        metadata: { 
+          resourceUri: resource.uri,
+          testCase: testCase.purpose
+        },
+        details: {
+          originalUri: resource.uri,
+          testPayload: testCase.testUri,
+          constructedUri: testUri,
+          testType: testCase.testType
+        }
+      });
+      
       try {
         // 尝试访问测试URI
         const testResult = await mcpClient.readResource(testUri);
         
+        // 记录访问结果
+        this.addLog({
+          type: 'step',
+          phase: 'test_execution',
+          title: '资源访问结果',
+          message: `成功访问测试URI: ${testUri}`,
+          metadata: { 
+            resourceUri: resource.uri,
+            testCase: testCase.purpose
+          },
+          details: {
+            testUri: testUri,
+            accessResult: testResult,
+            resultType: typeof testResult,
+            resultSize: JSON.stringify(testResult).length
+          }
+        });
+        
         // 使用LLM进行智能结果评估（与tool保持一致）
         if (config.enableLLMAnalysis !== false) {
+          this.addLog({
+            type: 'step',
+            phase: 'evaluation',
+            title: 'LLM安全评估',
+            message: `使用LLM评估测试结果的安全性`,
+            metadata: { 
+              resourceUri: resource.uri,
+              testCase: testCase.purpose
+            }
+          });
           const evaluationRequest = llmClient.generateIntelligentResultEvaluation(
             {
               riskType: testCase.testType,
@@ -2656,6 +3411,31 @@ ${llmClient.getLanguageOutputRequirement()}
             riskAssessment: evaluationJson
           });
 
+          // 记录LLM评估结果
+          this.addLog({
+            type: evaluation.riskLevel === 'low' ? 'success' : 'warning',
+            phase: 'evaluation',
+            title: 'LLM评估完成',
+            message: `风险等级: ${evaluation.riskLevel} - ${evaluation.description || '无描述'}`,
+            metadata: { 
+              resourceUri: resource.uri,
+              testCase: testCase.purpose,
+              riskLevel: evaluation.riskLevel,
+              securityStatus: evaluation.riskLevel === 'low' ? 'SAFE' : 'VULNERABLE'
+            },
+            details: {
+              llmEvaluation: evaluation,
+              evaluationRaw: evaluationResponse.content,
+              testContext: {
+                testUri: testUri,
+                testType: testCase.testType,
+                testResult: testResult,
+                expectedBehavior: testCase.expectedBehavior,
+                riskCriteria: testCase.riskCriteria
+              }
+            }
+          });
+
           // 如果发现风险，添加到风险列表
           if (evaluation.riskLevel !== 'low') {
             result.risks.push({
@@ -2675,17 +3455,15 @@ ${llmClient.getLanguageOutputRequirement()}
                 resourceUri: resource.uri,
                 testCase: testCase.purpose,
                 riskLevel: evaluation.riskLevel
-              }
-            });
-          } else {
-            this.addLog({
-              type: 'success',
-              phase: 'test_execution',
-              title: t().security.logMessages.securityTestPassed,
-              message: `${t().security.logMessages.securityTestPassed2}: ${testCase.purpose}`,
-              metadata: { 
-                resourceUri: resource.uri,
-                testCase: testCase.purpose
+              },
+              details: {
+                riskDetails: {
+                  type: testCase.testType,
+                  severity: evaluation.riskLevel,
+                  description: evaluation.description,
+                  evidence: evaluation.evidence,
+                  recommendation: evaluation.recommendation
+                }
               }
             });
           }
@@ -2857,9 +3635,17 @@ ${llmClient.getLanguageOutputRequirement()}
         result.llmAnalysis = '';
         break;
       case 'resource':
-        result.resourceUri = (target as MCPResource).uri || (target as any).uriTemplate;
-        result.name = (target as MCPResource).name;
-        result.uriTemplate = (target as any).uriTemplate;
+        const resource = target as MCPResource;
+        const uriTemplate = (resource as any).uriTemplate;
+        
+        // 设置资源URI，优先使用uriTemplate（动态资源）
+        result.resourceUri = uriTemplate || resource.uri;
+        result.name = resource.name;
+        result.uriTemplate = uriTemplate;
+        
+        // 明确资源类型：静态资源 vs 动态资源
+        result.resourceType = uriTemplate ? '动态资源' : '静态资源';
+        
         result.risks = [];
         result.accessTests = [];
         result.llmAnalysis = '';
@@ -3185,8 +3971,10 @@ ${llmClient.getLanguageOutputRequirement()}
         type: 'step',
         phase: 'test_execution',
         title: '分析动态资源模板',
-        message: `模板 ${uriTemplate} 包含参数: ${parameters.join(', ')}`,
-        metadata: { resourceUri: uriTemplate }
+        message: `模板 ${uriTemplate} 包含参数: ${parameters.length > 0 ? parameters.join(', ') : '无参数'} (共${parameters.length}个参数)`,
+        metadata: { 
+          resourceUri: uriTemplate
+        }
       });
 
       // 使用LLM生成智能测试用例
@@ -3206,6 +3994,21 @@ ${llmClient.getLanguageOutputRequirement()}
             testCase: testCase.purpose,
             testNumber: i + 1,
             totalTests: testCases.length
+          },
+          details: {
+            testCaseInfo: {
+              riskType: testCase.riskType,
+              purpose: testCase.purpose,
+              parameters: testCase.parameters,
+              expectedBehavior: testCase.expectedBehavior,
+              judgmentCriteria: testCase.judgmentCriteria,
+              riskLevel: testCase.riskLevel,
+              riskDescription: testCase.riskDescription
+            },
+            templateInfo: {
+              originalTemplate: uriTemplate,
+              extractedParameters: Object.keys(testCase.parameters)
+            }
           }
         });
 
@@ -3216,10 +4019,68 @@ ${llmClient.getLanguageOutputRequirement()}
             testUri = testUri.replace(`{${key}}`, String(value));
           });
 
+          // 记录测试执行详情
+          this.addLog({
+            type: 'step',
+            phase: 'test_execution',
+            title: '构造测试URI',
+            message: `使用参数构造测试URI: ${testUri}`,
+            metadata: { 
+              resourceUri: uriTemplate,
+              testCase: testCase.purpose,
+              testNumber: i + 1,
+              totalTests: testCases.length
+            },
+            details: {
+              originalTemplate: uriTemplate,
+              parameters: testCase.parameters,
+              constructedUri: testUri,
+              parameterMapping: Object.entries(testCase.parameters).map(([key, value]) => ({
+                parameter: key,
+                value: value,
+                replacedFrom: `{${key}}`,
+                replacedTo: String(value)
+              }))
+            }
+          });
+
           // 尝试访问资源
           const testResult = await mcpClient.readResource(testUri);
           
+          // 记录访问结果
+          this.addLog({
+            type: 'step',
+            phase: 'test_execution',
+            title: '资源访问结果',
+            message: `成功访问资源: ${testUri}`,
+            metadata: { 
+              resourceUri: uriTemplate,
+              testCase: testCase.purpose,
+              testNumber: i + 1,
+              totalTests: testCases.length
+            },
+            details: {
+              testUri: testUri,
+              accessResult: testResult,
+              resultType: typeof testResult,
+              resultSize: JSON.stringify(testResult).length
+            }
+          });
+          
           // 评估测试结果
+          this.addLog({
+            type: 'step',
+            phase: 'evaluation',
+            title: 'LLM安全评估',
+            message: `使用LLM评估测试结果的安全性`,
+            metadata: { 
+              resourceUri: uriTemplate,
+              testCase: testCase.purpose,
+              testNumber: i + 1,
+              totalTests: testCases.length
+            }
+          });
+
           const evaluationRequest = llmClient.generateIntelligentResultEvaluation(
             {
               riskType: 'dynamic_resource_access',
@@ -3245,6 +4106,33 @@ ${llmClient.getLanguageOutputRequirement()}
           }
           
           const evaluationJson = JSON.stringify(evaluation);
+
+          // 记录LLM评估结果
+          this.addLog({
+            type: evaluation.riskLevel === 'low' ? 'success' : 'warning',
+            phase: 'evaluation',
+            title: 'LLM评估完成',
+            message: `风险等级: ${evaluation.riskLevel} - ${evaluation.description || '无描述'}`,
+            metadata: { 
+              resourceUri: uriTemplate,
+              testCase: testCase.purpose,
+              testNumber: i + 1,
+              totalTests: testCases.length,
+              riskLevel: evaluation.riskLevel,
+              securityStatus: evaluation.riskLevel === 'low' ? 'SAFE' : 'VULNERABLE'
+            },
+            details: {
+              llmEvaluation: evaluation,
+              evaluationRaw: evaluationResponse.content,
+              testContext: {
+                testUri: testUri,
+                testParameters: testCase.parameters,
+                testResult: testResult,
+                expectedBehavior: testCase.expectedBehavior,
+                judgmentCriteria: testCase.judgmentCriteria
+              }
+            }
+          });
           
           // 添加测试结果
           result.accessTests.push({
@@ -3434,6 +4322,21 @@ ${llmClient.getLanguageOutputRequirement()}
           message: `成功生成 ${testCases.length} 个测试用例`,
           metadata: { 
             resourceUri: (resource as any).uriTemplate || resource.uri
+          },
+          details: {
+            generatedTestCases: testCases.map((tc, index) => ({
+              testNumber: index + 1,
+              riskType: tc.riskType,
+              purpose: tc.purpose,
+              parameters: tc.parameters,
+              expectedBehavior: tc.expectedBehavior,
+              judgmentCriteria: tc.judgmentCriteria,
+              riskLevel: tc.riskLevel,
+              riskDescription: tc.riskDescription
+            })),
+            resourceTemplate: (resource as any).uriTemplate || resource.uri,
+            totalTestCases: testCases.length,
+            llmResponse: response?.content
           }
         });
 
@@ -3521,6 +4424,221 @@ ${llmClient.getLanguageOutputRequirement()}
     });
 
     return testCases;
+  }
+
+  /**
+   * 统一收集所有风险数据
+   */
+  public static collectUnifiedRisks(
+    report: SecurityReport | null, 
+    passiveResults: Array<{ type: string; targetName: string; riskLevel: SecurityRiskLevel; threats: any[]; timestamp: number; recommendation: string }>
+  ): UnifiedSecurityOverview {
+    const risks: UnifiedRiskItem[] = [];
+    let riskIdCounter = 1;
+
+    // 生成唯一ID
+    const generateRiskId = () => `risk_${Date.now()}_${riskIdCounter++}`;
+
+    console.log(`report:`, report);
+    // 处理主动扫描结果
+    if (report) {
+      // 处理工具安全结果
+      report.toolResults.forEach(toolResult => {
+
+        // 1. 直接漏洞
+        toolResult.vulnerabilities.forEach(vuln => {
+          risks.push({
+            id: generateRiskId(),
+            source: toolResult.toolName,
+            sourceType: 'tool',
+            scanType: 'active',
+            riskType: 'vulnerability',
+            severity: vuln.severity,
+            title: vuln.type,
+            description: vuln.description,
+            evidence: '',
+            recommendation: vuln.recommendation,
+            timestamp: toolResult.timestamp,
+            rawData: vuln
+          });
+        });
+
+        // 2. LLM分析结果中的漏洞
+        if (toolResult.llmAnalysis) {
+          try {
+            const analysis = typeof toolResult.llmAnalysis === 'string' 
+              ? JSON.parse(toolResult.llmAnalysis) 
+              : toolResult.llmAnalysis;
+            
+            
+            if (analysis.vulnerabilities && Array.isArray(analysis.vulnerabilities)) {
+              analysis.vulnerabilities.forEach((vuln: any, index: number) => {
+                const risk: UnifiedRiskItem = {
+                  id: generateRiskId(),
+                  source: toolResult.toolName,
+                  sourceType: 'tool' as const,
+                  scanType: 'active' as const,
+                  riskType: 'llm_analysis' as const,
+                  severity: vuln.severity || 'low',
+                  title: vuln.type || 'LLM分析发现的风险',
+                  description: vuln.description || '',
+                  evidence: vuln.evidence || '',
+                  recommendation: vuln.recommendation || '',
+                  timestamp: toolResult.timestamp,
+                  rawData: vuln
+                };
+                risks.push(risk);
+              });
+            }
+          } catch (error) {
+            // 解析失败时忽略
+          }
+        }
+
+        // 3. 测试失败案例
+        toolResult.testResults.forEach((test, index) => {
+          if (!test.passed) {
+            console.log(`    + 测试失败 ${index + 1}: ${test.testCase}`);
+            let severity: SecurityRiskLevel = 'low';
+            let description = test.riskAssessment;
+            
+            // 尝试从riskAssessment中提取风险等级
+            try {
+              const assessment = typeof test.riskAssessment === 'string' 
+                ? JSON.parse(test.riskAssessment) 
+                : test.riskAssessment;
+              if (assessment.riskLevel) {
+                severity = assessment.riskLevel;
+              }
+              if (assessment.description) {
+                description = assessment.description;
+              }
+            } catch (error) {
+              // 解析失败时使用默认值
+            }
+
+            risks.push({
+              id: generateRiskId(),
+              source: toolResult.toolName,
+              sourceType: 'tool' as const,
+              scanType: 'active' as const,
+              riskType: 'test_failure' as const,
+              severity,
+              title: `测试失败: ${test.testCase}`,
+              description,
+              evidence: JSON.stringify(test.result),
+              recommendation: '检查测试失败的原因并修复',
+              timestamp: toolResult.timestamp,
+              testCase: test.testCase,
+              rawData: test
+            });
+          }
+        });
+      });
+
+      // 处理提示安全结果
+      report.promptResults.forEach(promptResult => {
+        promptResult.threats.forEach(threat => {
+          risks.push({
+            id: generateRiskId(),
+            source: promptResult.promptName,
+            sourceType: 'prompt',
+            scanType: 'active',
+            riskType: 'threat',
+            severity: threat.severity,
+            title: threat.type,
+            description: threat.description,
+            evidence: threat.evidence,
+            recommendation: threat.recommendation,
+            timestamp: promptResult.timestamp,
+            rawData: threat
+          });
+        });
+      });
+
+      // 处理资源安全结果
+      report.resourceResults.forEach(resourceResult => {
+        resourceResult.risks.forEach(risk => {
+          risks.push({
+            id: generateRiskId(),
+            source: resourceResult.resourceUri,
+            sourceType: 'resource',
+            scanType: 'active',
+            riskType: 'risk',
+            severity: risk.severity,
+            title: risk.type,
+            description: risk.description,
+            evidence: risk.evidence,
+            recommendation: risk.recommendation,
+            timestamp: resourceResult.timestamp,
+            rawData: risk
+          });
+        });
+      });
+    }
+
+    // 处理被动检测结果
+    passiveResults.forEach(result => {
+      result.threats.forEach(threat => {
+        risks.push({
+          id: generateRiskId(),
+          source: result.targetName,
+          sourceType: result.type as 'tool' | 'prompt' | 'resource',
+          scanType: 'passive',
+          riskType: 'threat',
+          severity: threat.severity,
+          title: threat.type,
+          description: threat.description,
+          evidence: threat.evidence || '',
+          recommendation: result.recommendation,
+          timestamp: result.timestamp,
+          rawData: threat
+        });
+      });
+    });
+
+    // 计算统计数据
+    const overview: UnifiedSecurityOverview = {
+      totalRisks: risks.length,
+      risksBySeverity: {
+        critical: risks.filter(r => r.severity === 'critical').length,
+        high: risks.filter(r => r.severity === 'high').length,
+        medium: risks.filter(r => r.severity === 'medium').length,
+        low: risks.filter(r => r.severity === 'low').length,
+      },
+      risksBySource: {
+        tool: risks.filter(r => r.sourceType === 'tool').length,
+        prompt: risks.filter(r => r.sourceType === 'prompt').length,
+        resource: risks.filter(r => r.sourceType === 'resource').length,
+      },
+      risksByScanType: {
+        active: risks.filter(r => r.scanType === 'active').length,
+        passive: risks.filter(r => r.scanType === 'passive').length,
+      },
+      risksByType: {
+        vulnerability: risks.filter(r => r.riskType === 'vulnerability').length,
+        threat: risks.filter(r => r.riskType === 'threat').length,
+        risk: risks.filter(r => r.riskType === 'risk').length,
+        test_failure: risks.filter(r => r.riskType === 'test_failure').length,
+        llm_analysis: risks.filter(r => r.riskType === 'llm_analysis').length,
+      },
+      risks
+    };
+
+    return overview;
+  }
+
+  /**
+   * 根据统一风险数据生成简化的统计摘要
+   */
+  public static generateUnifiedSummary(overview: UnifiedSecurityOverview) {
+    return {
+      totalIssues: overview.totalRisks,
+      criticalIssues: overview.risksBySeverity.critical,
+      highIssues: overview.risksBySeverity.high,
+      mediumIssues: overview.risksBySeverity.medium,
+      lowIssues: overview.risksBySeverity.low
+    };
   }
 }
 

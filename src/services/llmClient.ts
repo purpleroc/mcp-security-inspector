@@ -185,7 +185,6 @@ Important: Please respond in English, all field names and descriptions should be
 
 \`\`\`json
 {
-  "riskLevel": "critical|high|medium|low",
   "vulnerabilities": [
     {
       "type": "injection|privilege|leak|access",
@@ -805,6 +804,14 @@ ${languageRequirement}
 - 是否绕过了预期的安全限制
 - 根据判定条件的具体要求进行判断
 
+注意：
+- 只分析测试结果中明确存在的事实
+- 不要推测可能的问题或风险
+- 如果没有明确证据表明存在安全问题，判定为low
+- 所有字段都必须提供，不能为空
+- 只返回JSON格式，不要其他内容
+- 只需要返回JSON格式，不需要任何分析说明
+
 请严格按照以下JSON格式返回结果：
 {
   "riskLevel": "low|medium|high|critical",
@@ -812,13 +819,6 @@ ${languageRequirement}
   "evidence": "具体的测试结果证据",
   "recommendation": "基于实际发现的具体改进建议"
 }
-
-注意：
-- 只分析测试结果中明确存在的事实
-- 不要推测可能的问题或风险
-- 如果没有明确证据表明存在安全问题，判定为low
-- 所有字段都必须提供，不能为空
-- 只返回JSON格式，不要其他内容
 
 ${languageRequirement}`;
 

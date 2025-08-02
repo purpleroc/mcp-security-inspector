@@ -1,7 +1,6 @@
 import { 
   DetectionRule, 
   DetectionRuleMatch, 
-  SecurityRiskLevel, 
   DetectionScope,
   RuleValidationResult 
 } from '../types/mcp';

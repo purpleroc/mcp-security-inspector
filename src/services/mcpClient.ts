@@ -11,10 +11,14 @@ import {
   InitializeResult,
   SecurityCheckResult,
   SecurityRiskLevel,
-  AuthConfig,
-  SecurityCheckConfig
+  SecurityCheckConfig,
+  ComponentParameterAnalysis,
+  EnhancedMCPTool,
+  EnhancedMCPPrompt,
+  EnhancedMCPResource
 } from '@/types/mcp';
 import { i18n } from '../i18n';
+import { securityEngine } from './securityEngine';
 
 // 导入被动检测相关类型
 export interface PassiveDetectionResult {
@@ -63,6 +67,13 @@ export class MCPClient {
   private passiveResults: PassiveDetectionResult[] = [];
   private passiveDetectionCallbacks: ((result: PassiveDetectionResult) => void)[] = [];
 
+  // 增强组件缓存（连接时预处理）
+  private enhancedTools: EnhancedMCPTool[] = [];
+  private enhancedPrompts: EnhancedMCPPrompt[] = [];
+  private enhancedResources: EnhancedMCPResource[] = [];
+  private enhancedResourceTemplates: EnhancedMCPResource[] = [];
+  private componentsInitialized = false;
+
   constructor() {}
 
   /**
@@ -72,6 +83,274 @@ export class MCPClient {
     console.log('[MCPClient] 启用被动检测:', config);
     this.passiveDetectionEnabled = true;
     this.securityConfig = config;
+  }
+
+  /**
+   * 分析工具参数
+   */
+  private analyzeToolParameters(tool: MCPTool): ComponentParameterAnalysis {
+    const inputSchema = tool.inputSchema;
+    const properties = inputSchema?.properties || {};
+    const required = inputSchema?.required || [];
+    
+    const parameters = Object.entries(properties).map(([name, schema]) => ({
+      name,
+      type: schema.type,
+      description: schema.description,
+      required: required.includes(name),
+      isOptional: !required.includes(name)
+    }));
+
+    return {
+      hasParameters: parameters.length > 0,
+      parameterCount: parameters.length,
+      parameters,
+      requiresLLMGeneration: parameters.length > 0
+    };
+  }
+
+  /**
+   * 分析提示参数
+   */
+  private analyzePromptParameters(prompt: MCPPrompt): ComponentParameterAnalysis {
+    const args = prompt.arguments || [];
+    
+    const parameters = args.map(arg => ({
+      name: arg.name,
+      description: arg.description,
+      required: arg.required || false,
+      isOptional: !arg.required
+    }));
+
+    return {
+      hasParameters: parameters.length > 0,
+      parameterCount: parameters.length,
+      parameters,
+      requiresLLMGeneration: parameters.length > 0
+    };
+  }
+
+  /**
+   * 分析资源参数
+   */
+  private analyzeResourceParameters(resource: MCPResource): ComponentParameterAnalysis {
+    const uriTemplate = (resource as any).uriTemplate;
+    
+    if (!uriTemplate) {
+      return {
+        hasParameters: false,
+        parameterCount: 0,
+        parameters: [],
+        requiresLLMGeneration: false
+      };
+    }
+
+    // 提取模板中的参数
+    const paramMatches = uriTemplate.match(/\{([^}]+)\}/g) || [];
+    const parameters = paramMatches.map((match: string) => {
+      const paramName = match.slice(1, -1);
+      return {
+        name: paramName,
+        type: 'string',
+        description: `URI模板参数: ${paramName}`,
+        required: true,
+        isOptional: false
+      };
+    });
+
+    return {
+      hasParameters: parameters.length > 0,
+      parameterCount: parameters.length,
+      parameters,
+      requiresLLMGeneration: parameters.length > 0
+    };
+  }
+
+  /**
+   * 预处理工具组件
+   */
+  private preprocessTool(tool: MCPTool): EnhancedMCPTool {
+    const parameterAnalysis = this.analyzeToolParameters(tool);
+    
+    return {
+      ...tool,
+      parameterAnalysis,
+      componentType: 'tool'
+    };
+  }
+
+  /**
+   * 预处理提示组件
+   */
+  private preprocessPrompt(prompt: MCPPrompt): EnhancedMCPPrompt {
+    const parameterAnalysis = this.analyzePromptParameters(prompt);
+    
+    return {
+      ...prompt,
+      parameterAnalysis,
+      componentType: 'prompt'
+    };
+  }
+
+  /**
+   * 预处理资源组件
+   */
+  private preprocessResource(resource: MCPResource): EnhancedMCPResource {
+    const parameterAnalysis = this.analyzeResourceParameters(resource);
+    const uriTemplate = (resource as any).uriTemplate;
+    
+    return {
+      ...resource,
+      parameterAnalysis,
+      componentType: 'resource',
+      resourceType: uriTemplate ? '动态资源' : '静态资源'
+    };
+  }
+
+  /**
+   * 初始化组件（在连接时执行）
+   */
+  private async initializeComponents(): Promise<void> {
+    if (this.componentsInitialized) {
+      console.log('[MCPClient] 组件已初始化，跳过重复初始化');
+      return;
+    }
+
+    try {
+      console.log('[MCPClient] 开始初始化组件...');
+
+      // 获取原始组件
+      const [tools, prompts, resources, resourceTemplates] = await Promise.all([
+        this.listTools(),
+        this.listPrompts(),
+        this.listResources(),
+        this.listResourceTemplates()
+      ]);
+
+      console.log(`[MCPClient] 获取到组件: ${tools.length}个工具, ${prompts.length}个提示, ${resources.length}个资源, ${resourceTemplates.length}个资源模板`);
+
+      // 过滤和去重
+      const validResourceTemplates = resourceTemplates.filter(template => template !== null);
+      const processedResourceUris = new Set<string>();
+      
+      const filteredResources = resources.filter(resource => {
+        // 检查资源的有效性
+        if (!resource || (!resource.name && !resource.uri)) {
+          console.warn('[MCPClient] 发现无效的资源对象，已过滤:', resource);
+          return false;
+        }
+        
+        const uri = resource.uri;
+        if (!uri) {
+          console.warn('[MCPClient] 资源缺少URI，已过滤:', resource);
+          return false;
+        }
+        
+        if (processedResourceUris.has(uri)) {
+          return false;
+        }
+        processedResourceUris.add(uri);
+        return true;
+      });
+
+      const filteredResourceTemplates = validResourceTemplates.filter(template => {
+        // 检查资源模板的有效性
+        if (!template || (!template.name && !template.uri && !(template as any).uriTemplate)) {
+          console.warn('[MCPClient] 发现无效的资源模板对象，已过滤:', template);
+          return false;
+        }
+        
+        const uri = (template as any).uriTemplate || template.uri;
+        if (!uri) {
+          console.warn('[MCPClient] 资源模板缺少URI/uriTemplate，已过滤:', template);
+          return false;
+        }
+        
+        if (processedResourceUris.has(uri)) {
+          return false;
+        }
+        processedResourceUris.add(uri);
+        return true;
+      });
+
+      // 预处理组件
+      this.enhancedTools = tools.map(tool => this.preprocessTool(tool));
+      this.enhancedPrompts = prompts.map(prompt => this.preprocessPrompt(prompt));
+      this.enhancedResources = filteredResources.map(resource => {
+        const enhanced = this.preprocessResource(resource);
+        console.log(`[MCPClient] 预处理静态资源:`, {
+          name: resource.name,
+          uri: resource.uri,
+          enhanced_uri: enhanced.uri,
+          hasParameters: enhanced.parameterAnalysis.hasParameters
+        });
+        return enhanced;
+      });
+      this.enhancedResourceTemplates = filteredResourceTemplates.map(template => {
+        const enhanced = this.preprocessResource(template);
+        console.log(`[MCPClient] 预处理资源模板:`, {
+          name: template.name,
+          uri: template.uri,
+          uriTemplate: (template as any).uriTemplate,
+          enhanced_uri: enhanced.uri,
+          hasParameters: enhanced.parameterAnalysis.hasParameters
+        });
+        return enhanced;
+      });
+
+      // 统计信息
+      const toolsWithParams = this.enhancedTools.filter(t => t.parameterAnalysis.hasParameters).length;
+      const promptsWithParams = this.enhancedPrompts.filter(p => p.parameterAnalysis.hasParameters).length;
+      const resourcesWithParams = this.enhancedResources.filter(r => r.parameterAnalysis.hasParameters).length;
+      const templatesWithParams = this.enhancedResourceTemplates.filter(rt => rt.parameterAnalysis.hasParameters).length;
+
+      console.log(`[MCPClient] 组件预处理完成: 工具 ${this.enhancedTools.length}个(${toolsWithParams}个有参数), 提示 ${this.enhancedPrompts.length}个(${promptsWithParams}个有参数), 资源 ${this.enhancedResources.length}个(${resourcesWithParams}个有参数), 资源模板 ${this.enhancedResourceTemplates.length}个(${templatesWithParams}个有参数)`);
+
+      this.componentsInitialized = true;
+    } catch (error) {
+      console.error('[MCPClient] 组件初始化失败:', error);
+      // 初始化失败时，设置为空数组
+      this.enhancedTools = [];
+      this.enhancedPrompts = [];
+      this.enhancedResources = [];
+      this.enhancedResourceTemplates = [];
+      this.componentsInitialized = false;
+    }
+  }
+
+  /**
+   * 获取增强的工具列表
+   */
+  public getEnhancedTools(): EnhancedMCPTool[] {
+    return [...this.enhancedTools];
+  }
+
+  /**
+   * 获取增强的提示列表
+   */
+  public getEnhancedPrompts(): EnhancedMCPPrompt[] {
+    return [...this.enhancedPrompts];
+  }
+
+  /**
+   * 获取增强的资源列表
+   */
+  public getEnhancedResources(): EnhancedMCPResource[] {
+    return [...this.enhancedResources];
+  }
+
+  /**
+   * 获取增强的资源模板列表
+   */
+  public getEnhancedResourceTemplates(): EnhancedMCPResource[] {
+    return [...this.enhancedResourceTemplates];
+  }
+
+  /**
+   * 检查组件是否已初始化
+   */
+  public isComponentsInitialized(): boolean {
+    return this.componentsInitialized;
   }
 
   /**
@@ -109,6 +388,13 @@ export class MCPClient {
    */
   public clearPassiveDetectionResults(): void {
     this.passiveResults = [];
+  }
+
+  /**
+   * 获取当前服务器配置
+   */
+  public getCurrentConfig(): MCPServerConfig | null {
+    return this.config;
   }
 
   /**
@@ -310,6 +596,17 @@ export class MCPClient {
    */
   configure(config: MCPServerConfig): void {
     this.config = config;
+    
+    // 配置新服务器时清空相关状态
+    this.clearPassiveDetectionResults();
+    this.componentsInitialized = false;
+    this.enhancedTools = [];
+    this.enhancedPrompts = [];
+    this.enhancedResources = [];
+    this.enhancedResourceTemplates = [];
+    
+    // 同时清空SecurityEngine状态
+    securityEngine.clearAllStates();
   }
 
   /**
@@ -342,6 +639,12 @@ export class MCPClient {
       console.log('MCP初始化成功:', initResult);
       
       this.status = 'connected';
+
+      // 连接成功后立即初始化组件
+      console.log('开始预处理组件...');
+      await this.initializeComponents();
+      console.log('组件预处理完成');
+      
       return initResult;
     } catch (error) {
       console.error('连接失败:', error);
@@ -798,6 +1101,17 @@ export class MCPClient {
     this.sessionIdParamName = 'session_id'; // 重置为默认值
     this.messageEndpoint = null; // 清理message端点
     this.status = 'disconnected';
+    
+    // 清空所有状态
+    this.clearPassiveDetectionResults();
+    this.componentsInitialized = false;
+    this.enhancedTools = [];
+    this.enhancedPrompts = [];
+    this.enhancedResources = [];
+    this.enhancedResourceTemplates = [];
+    
+    // 清空SecurityEngine状态
+    securityEngine.clearAllStates();
   }
 
   /**
@@ -920,9 +1234,29 @@ export class MCPClient {
       params: {}
     };
 
+    console.log('[MCPClient] 发送获取资源列表请求...');
     const response = await this.sendRequest(request);
     const result = response.result as { resources?: MCPResource[] };
-    return result?.resources || [];
+    const rawResources = result?.resources || [];
+    
+    // 过滤掉null或无效的资源
+    const resources = rawResources.filter(resource => resource !== null && resource !== undefined);
+    
+    if (rawResources.length !== resources.length) {
+      console.warn(`[MCPClient] 过滤掉 ${rawResources.length - resources.length} 个null/undefined资源`);
+    }
+    
+    console.log(`[MCPClient] 收到资源列表响应：${resources.length} 个有效资源（原始：${rawResources.length}个）`);
+    resources.forEach((resource, index) => {
+      console.log(`[MCPClient] 资源 ${index + 1}:`, {
+        name: resource?.name,
+        uri: resource?.uri,
+        description: resource?.description,
+        mimeType: resource?.mimeType
+      });
+    });
+    
+    return resources;
   }
 
   /**
@@ -988,7 +1322,15 @@ export class MCPClient {
       }
       
       console.log(`[MCPClient] 获取资源模板成功: ${validTemplates.length} 个有效模板`);
-      console.log('[MCPClient] 有效模板详情:', validTemplates);
+      validTemplates.forEach((template, index) => {
+        console.log(`[MCPClient] 资源模板 ${index + 1}:`, {
+          name: template.name,
+          uri: template.uri,
+          uriTemplate: (template as any).uriTemplate,
+          description: template.description,
+          mimeType: template.mimeType
+        });
+      });
       return validTemplates;
     } catch (error) {
       console.error('[MCPClient] 获取资源模板失败:', error);

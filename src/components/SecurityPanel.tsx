@@ -45,10 +45,11 @@ import {
   SecurityCheckConfig, 
   SecurityReport, 
   SecurityRiskLevel,
-  LLMConfig 
+  LLMConfig,
+  UnifiedSecurityOverview 
 } from '../types/mcp';
 import { useI18n } from '../hooks/useI18n';
-import { securityEngine, SecurityLogEntry } from '../services/securityEngine';
+import { SecurityEngine, securityEngine, SecurityLogEntry } from '../services/securityEngine';
 import { llmClient } from '../services/llmClient';
 import { getLLMConfigs, securityHistoryStorage } from '../utils/storage';
 import { PassiveSecurityTester } from './PassiveSecurityTester';
@@ -64,6 +65,8 @@ const SecurityPanel: React.FC = () => {
   const [form] = Form.useForm();
   const connectionStatus = useSelector((state: RootState) => state.mcp.connectionStatus);
   const serverConfig = useSelector((state: RootState) => state.mcp.serverConfig);
+  const resources = useSelector((state: RootState) => state.mcp.resources);
+  const resourceTemplates = useSelector((state: RootState) => state.mcp.resourceTemplates);
   
   // 状态管理
   const [isScanning, setIsScanning] = useState(false);
@@ -78,6 +81,7 @@ const SecurityPanel: React.FC = () => {
   
   // 被动检测结果状态
   const [passiveResults, setPassiveResults] = useState<PassiveDetectionResult[]>([]);
+  const [unifiedRiskOverview, setUnifiedRiskOverview] = useState<UnifiedSecurityOverview | null>(null);
   
   // 检测历史相关状态
   const [securityHistory, setSecurityHistory] = useState<any[]>([]);
@@ -132,11 +136,17 @@ const SecurityPanel: React.FC = () => {
   // 监听连接状态变化，连接新MCP时清空安全测试结果
   useEffect(() => {
     if (connectionStatus === 'connecting') {
-      // 清空当前的安全测试结果
+      // 清空当前的安全测试结果和所有相关状态
       setCurrentReport(null);
       setPassiveResults([]);
       setSecurityLogs([]);
+      setSecurityHistory([]);
+      setIsScanning(false);
+      setScanProgress(0);
+      setScanMessage('');
       setActiveTab('overview');
+      
+      console.log('连接新MCP服务器，已清空所有安全检测状态');
     }
   }, [connectionStatus]);
 
@@ -171,6 +181,12 @@ const SecurityPanel: React.FC = () => {
       mcpClient.removePassiveDetectionListener(handleNewPassiveResult);
     };
   }, []);
+
+  // 更新统一风险概览
+  useEffect(() => {
+    const overview = SecurityEngine.collectUnifiedRisks(currentReport, passiveResults);
+    setUnifiedRiskOverview(overview);
+  }, [currentReport, passiveResults]);
 
   // 将被动检测结果转换为主动扫描结果格式的适配器
   const convertPassiveToActiveFormat = () => {
@@ -766,6 +782,39 @@ const SecurityPanel: React.FC = () => {
 
   // 获取资源显示名称和类型（与MCP浏览器保持一致）
   const getResourceDisplayInfo = (resource: any) => {
+    // 对于被动检测的资源，特殊处理
+    if (resource.isPassive && resource.passiveData) {
+      const passiveData = resource.passiveData;
+      // 被动检测的targetName就是资源的URI或名称
+      const uri = passiveData.targetName || resource.resourceUri || resource.uri || '';
+      const isDynamic = uri.includes('{') && uri.includes('}');
+      
+      // 尝试从store中的资源列表找到对应的资源名称
+      let displayName = uri;
+      
+      // 先在静态资源中查找
+      const foundResource = resources.find(r => r.uri === uri);
+      if (foundResource && foundResource.name) {
+        displayName = foundResource.name;
+      } else {
+        // 在资源模板中查找
+        const foundTemplate = resourceTemplates.find(r => {
+          const templateUri = (r as any).uriTemplate || r.uri;
+          return templateUri === uri;
+        });
+        if (foundTemplate && foundTemplate.name) {
+          displayName = foundTemplate.name;
+        }
+      }
+      
+      return {
+        displayName,
+        isDynamic,
+        resourceType: isDynamic ? t.security.dynamicResource : t.security.staticResource,
+        uri: uri
+      };
+    }
+    
     // 优先使用uriTemplate，如果没有则使用resourceUri或uri
     const uri = resource.uriTemplate || resource.resourceUri || resource.uri || '';
     
@@ -844,6 +893,12 @@ const SecurityPanel: React.FC = () => {
           } catch (error) {
             // 解析失败时忽略
           }
+        }
+
+        // 计算测试失败案例的数量
+        if (record.testResults && Array.isArray(record.testResults)) {
+          const failedTests = record.testResults.filter((test: any) => !test.passed);
+          totalVulnerabilities += failedTests.length;
         }
         
         return totalVulnerabilities;
@@ -2483,12 +2538,27 @@ const SecurityPanel: React.FC = () => {
     // 从被动检测结果中收集问题
     passiveResults.forEach(result => {
       result.threats.forEach(threat => {
+        let displayName = result.targetName;
+        
+        // 如果是资源类型，使用和主动扫描一致的显示格式
+        if (result.type === 'resource') {
+          // 创建临时资源对象以获取正确的显示名称
+          const tempResource = {
+            isPassive: true,
+            passiveData: result,
+            resourceUri: result.targetName,
+            uri: result.targetName
+          };
+          const resourceInfo = getResourceDisplayInfo(tempResource);
+          displayName = resourceInfo.displayName;
+        }
+        
         const issue = {
           sourceType: result.type,
-          source: result.targetName,
+          source: displayName,
           scanType: 'passive',
           description: threat.description,
-          type: threat.type,
+          title: threat.type,
           severity: threat.severity,
           recommendation: result.recommendation,
           timestamp: result.timestamp
@@ -2501,38 +2571,17 @@ const SecurityPanel: React.FC = () => {
       });
     });
 
-    // 计算统计数据
-    const activeStats = currentReport ? {
-      totalIssues: currentReport.summary.totalIssues,
-      criticalIssues: currentReport.summary.criticalIssues,
-      highIssues: currentReport.summary.highIssues,
-      mediumIssues: currentReport.summary.mediumIssues,
-      lowIssues: currentReport.summary.lowIssues
-    } : {
-      totalIssues: 0,
-      criticalIssues: 0,
-      highIssues: 0,
-      mediumIssues: 0,
-      lowIssues: 0
-    };
+    // 计算统计数据 - 使用统一风险系统
+    const combinedStats = unifiedRiskOverview ? 
+      SecurityEngine.generateUnifiedSummary(unifiedRiskOverview) : {
+        totalIssues: 0,
+        criticalIssues: 0,
+        highIssues: 0,
+        mediumIssues: 0,
+        lowIssues: 0
+      };
 
-    // 计算被动检测统计数据
-    const passiveStats = {
-      totalIssues: passiveResults.length,
-      criticalIssues: passiveResults.filter(r => r.riskLevel === 'critical').length,
-      highIssues: passiveResults.filter(r => r.riskLevel === 'high').length,
-      mediumIssues: passiveResults.filter(r => r.riskLevel === 'medium').length,
-      lowIssues: 0
-    };
 
-    // 合并统计数据
-    const combinedStats = {
-      totalIssues: activeStats.totalIssues + passiveStats.totalIssues,
-      criticalIssues: activeStats.criticalIssues + passiveStats.criticalIssues,
-      highIssues: activeStats.highIssues + passiveStats.highIssues,
-      mediumIssues: activeStats.mediumIssues + passiveStats.mediumIssues,
-      lowIssues: activeStats.lowIssues + 0
-    };
 
     // 如果没有数据，显示空状态
     if (!currentReport && passiveResults.length === 0) {
@@ -2753,7 +2802,7 @@ const SecurityPanel: React.FC = () => {
                   <Col span={6}>
                     <Statistic
                       title="总检测次数"
-                      value={passiveStats.totalIssues}
+                      value={passiveResults.length}
                       prefix={<AlertOutlined />}
                       valueStyle={{ color: '#1890ff' }}
                     />
@@ -2761,7 +2810,7 @@ const SecurityPanel: React.FC = () => {
                   <Col span={6}>
                     <Statistic
                       title="严重风险"
-                      value={passiveStats.criticalIssues}
+                      value={passiveResults.filter(r => r.riskLevel === 'critical').length}
                       prefix={<ExclamationCircleOutlined />}
                       valueStyle={{ color: '#ff4d4f' }}
                     />
@@ -2769,7 +2818,7 @@ const SecurityPanel: React.FC = () => {
                   <Col span={6}>
                     <Statistic
                       title="高风险"
-                      value={passiveStats.highIssues}
+                      value={passiveResults.filter(r => r.riskLevel === 'high').length}
                       prefix={<WarningOutlined />}
                       valueStyle={{ color: '#ff7a45' }}
                     />
@@ -2777,7 +2826,7 @@ const SecurityPanel: React.FC = () => {
                   <Col span={6}>
                     <Statistic
                       title="中等风险"
-                      value={passiveStats.mediumIssues}
+                      value={passiveResults.filter(r => r.riskLevel === 'medium').length}
                       prefix={<SafetyCertificateOutlined />}
                       valueStyle={{ color: '#ffa940' }}
                     />
@@ -2826,7 +2875,7 @@ const SecurityPanel: React.FC = () => {
                       }
                       description={
                         <div style={{ fontSize: '12px' }}>
-                          <div><strong>{t.security.riskType}:</strong> {issue.type}</div>
+                          <div><strong>{t.security.riskType}:</strong> {issue.title}</div>
                           <div><strong>{t.security.suggestion}:</strong> {issue.recommendation}</div>
                           {issue.scanType === 'passive' && issue.timestamp && (
                             <div><strong>检测时间:</strong> {new Date(issue.timestamp).toLocaleString()}</div>
@@ -2865,7 +2914,7 @@ const SecurityPanel: React.FC = () => {
                       }
                       description={
                         <div style={{ fontSize: '12px' }}>
-                          <div><strong>{t.security.riskType}:</strong> {issue.type}</div>
+                          <div><strong>{t.security.riskType}:</strong> {issue.title}</div>
                           <div><strong>{t.security.suggestion}:</strong> {issue.recommendation}</div>
                           {issue.scanType === 'passive' && issue.timestamp && (
                             <div><strong>检测时间:</strong> {new Date(issue.timestamp).toLocaleString()}</div>

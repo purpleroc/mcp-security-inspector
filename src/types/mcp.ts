@@ -526,4 +526,99 @@ export interface RuleValidationResult {
 }
 
 // 规则统计信息
+
+/**
+ * 组件参数分析结果
+ */
+export interface ComponentParameterAnalysis {
+  hasParameters: boolean;
+  parameterCount: number;
+  parameters: Array<{
+    name: string;
+    type?: string;
+    description?: string;
+    required?: boolean;
+    isOptional?: boolean;
+  }>;
+  requiresLLMGeneration: boolean; // 是否需要LLM生成参数
+}
+
+/**
+ * 增强的工具定义（包含参数分析）
+ */
+export interface EnhancedMCPTool extends MCPTool {
+  parameterAnalysis: ComponentParameterAnalysis;
+  componentType: 'tool';
+}
+
+/**
+ * 增强的提示定义（包含参数分析）
+ */
+export interface EnhancedMCPPrompt extends MCPPrompt {
+  parameterAnalysis: ComponentParameterAnalysis;
+  componentType: 'prompt';
+}
+
+/**
+ * 增强的资源定义（包含参数分析）
+ */
+export interface EnhancedMCPResource extends MCPResource {
+  parameterAnalysis: ComponentParameterAnalysis;
+  componentType: 'resource';
+  resourceType: '静态资源' | '动态资源';
+}
+
+/**
+ * 统一的增强组件类型
+ */
+export type EnhancedMCPComponent = EnhancedMCPTool | EnhancedMCPPrompt | EnhancedMCPResource;
+
+/**
+ * 统一的风险条目
+ */
+export interface UnifiedRiskItem {
+  id: string; // 唯一标识
+  source: string; // 来源（工具名/提示名/资源URI）
+  sourceType: 'tool' | 'prompt' | 'resource'; // 来源类型
+  scanType: 'active' | 'passive'; // 扫描类型
+  riskType: 'vulnerability' | 'threat' | 'risk' | 'test_failure' | 'llm_analysis'; // 风险类型
+  severity: SecurityRiskLevel; // 严重程度
+  title: string; // 标题
+  description: string; // 描述
+  evidence?: string; // 证据
+  recommendation?: string; // 建议
+  timestamp: number; // 时间戳
+  testCase?: string; // 测试用例名称（如果是测试失败）
+  rawData?: any; // 原始数据
+}
+
+/**
+ * 统一的安全概览数据
+ */
+export interface UnifiedSecurityOverview {
+  totalRisks: number;
+  risksBySeverity: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+  risksBySource: {
+    tool: number;
+    prompt: number;
+    resource: number;
+  };
+  risksByScanType: {
+    active: number;
+    passive: number;
+  };
+  risksByType: {
+    vulnerability: number;
+    threat: number;
+    risk: number;
+    test_failure: number;
+    llm_analysis: number;
+  };
+  risks: UnifiedRiskItem[];
+}
  

@@ -226,17 +226,16 @@ const SecurityLogViewer: React.FC<SecurityLogViewerProps> = ({
                   
                   <div style={{ marginTop: '4px' }}>
                     <Text style={{ fontSize: '13px' }}>{log.message}</Text>
-                    {log.details && Object.keys(log.details).length > 0 && (
-                      <Button
-                        type="link"
-                        size="small"
-                        icon={<EyeOutlined />}
-                        onClick={() => showLogDetails(log)}
-                        style={{ padding: '0 4px', marginLeft: '8px' }}
-                      >
-                        {t.security.detailsLabel}
-                      </Button>
-                    )}
+                    {/* 统一为所有日志添加详情按钮，即使没有额外details */}
+                    <Button
+                      type="link"
+                      size="small"
+                      icon={<EyeOutlined />}
+                      onClick={() => showLogDetails(log)}
+                      style={{ padding: '0 4px', marginLeft: '8px' }}
+                    >
+                      {t.security.detailsLabel}
+                    </Button>
                   </div>
                   
                   {log.metadata?.toolName && (
