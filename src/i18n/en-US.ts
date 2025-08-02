@@ -395,6 +395,10 @@ export const enUS: TranslationKey = {
      testDescription: 'Description',
      testEvidence: 'Evidence',
      improvementMeasures: 'Improvement Measures',
+     // Resource display related translations
+     resourceDisplayName: 'Resource Name',
+     staticResource: 'Static Resource',
+     dynamicResource: 'Dynamic Resource',
      checkTypes: {
        tool: 'Tool Detection',
        prompt: 'Prompt Detection',

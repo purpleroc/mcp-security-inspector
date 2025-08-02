@@ -764,6 +764,35 @@ const SecurityPanel: React.FC = () => {
     return '#d9d9d9'; // 默认：灰色
   };
 
+  // 获取资源显示名称和类型（与MCP浏览器保持一致）
+  const getResourceDisplayInfo = (resource: any) => {
+    // 优先使用uriTemplate，如果没有则使用resourceUri或uri
+    const uri = resource.uriTemplate || resource.resourceUri || resource.uri || '';
+    
+    // 判断是否为动态资源（包含模板参数）
+    const isDynamic = uri.includes('{') && uri.includes('}');
+    
+    // 获取资源名称，与MCP浏览器逻辑一致
+    let displayName;
+    if (resource.name) {
+      // 如果有name字段，优先使用name
+      displayName = resource.name;
+    } else if (isDynamic) {
+      // 动态资源使用uriTemplate
+      displayName = resource.uriTemplate || uri;
+    } else {
+      // 静态资源使用uri
+      displayName = uri;
+    }
+    
+    return {
+      displayName,
+      isDynamic,
+      resourceType: isDynamic ? t.security.dynamicResource : t.security.staticResource,
+      uri: uri  // 返回URI供显示使用
+    };
+  };
+
   const toolColumns = [
     {
       title: t.security.toolName,
@@ -1700,8 +1729,9 @@ const SecurityPanel: React.FC = () => {
   };
 
   const showResourceDetail = (resource: any) => {
+    const resourceInfo = getResourceDisplayInfo(resource);
     Modal.info({
-      title: `${t.security.resourceSecurityAnalysis}: ${resource.resourceUri}`,
+      title: `${t.security.resourceSecurityAnalysis}: ${resourceInfo.displayName}`,
       width: 900,
       content: (
         <div>
@@ -2262,13 +2292,13 @@ const SecurityPanel: React.FC = () => {
                     }
                   >
                     <div style={{ fontSize: '13px' }}>
-                      {/* 资源名 */}
-                      <div style={{ marginBottom: 8 }}>
-                        <Text strong>{t.security.resourceName}:</Text>
-                        <div style={{ marginTop: 4, color: '#666', fontSize: '12px' }}>
-                          {resource.resourceUri}
-                        </div>
-                      </div>
+                                             {/* 资源名 */}
+                       <div style={{ marginBottom: 8 }}>
+                         <Text strong>{t.security.resourceName}:</Text>
+                         <div style={{ marginTop: 4, color: '#666', fontSize: '12px' }}>
+                           {resourceInfo.displayName}
+                         </div>
+                       </div>
                       
                       {/* 是否成功 */}
                       <div style={{ marginBottom: 8 }}>
@@ -2434,9 +2464,10 @@ const SecurityPanel: React.FC = () => {
       // 从资源结果中收集问题
       currentReport.resourceResults.forEach(resource => {
         resource.risks.forEach(risk => {
+          const resourceInfo = getResourceDisplayInfo(resource);
           const issue = {
             sourceType: 'resource',
-            source: resource.resourceUri,
+            source: resourceInfo.displayName,
             scanType: 'active',
             ...risk
           };
@@ -3199,19 +3230,30 @@ const SecurityPanel: React.FC = () => {
                           dataSource={filteredResults}
                           columns={[
                             {
-                              title: t.security.resourceUri,
+                              title: t.security.resourceDisplayName,
                               dataIndex: 'resourceUri',
                               key: 'resourceUri',
-                              render: (uri: string, record: any) => (
-                                <Space>
-                                  <span>{uri}</span>
-                                  {record.isPassive ? (
-                                    <Tag color="blue">被动检测</Tag>
-                                  ) : (
-                                    <Tag color="green">主动扫描</Tag>
-                                  )}
-                                </Space>
-                              ),
+                                                             render: (uri: string, record: any) => {
+                                 const resourceInfo = getResourceDisplayInfo(record);
+                                 return (
+                                   <div>
+                                     <div style={{ marginBottom: 4 }}>
+                                       <span style={{ fontWeight: 'bold' }}>{resourceInfo.displayName}</span>
+                                       <Tag color={resourceInfo.isDynamic ? 'blue' : 'default'} style={{ marginLeft: 8 }}>
+                                         {resourceInfo.resourceType}
+                                       </Tag>
+                                       {record.isPassive ? (
+                                         <Tag color="blue" style={{ marginLeft: 4 }}>被动检测</Tag>
+                                       ) : (
+                                         <Tag color="green" style={{ marginLeft: 4 }}>主动扫描</Tag>
+                                       )}
+                                     </div>
+                                     <div style={{ fontSize: '12px', color: '#666' }}>
+                                       {t.security.resourceUri}: {resourceInfo.uri}
+                                     </div>
+                                   </div>
+                                 );
+                               },
                             },
                             {
                               title: t.security.riskLevel,

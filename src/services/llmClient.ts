@@ -612,6 +612,11 @@ ${languageRequirement}`;
 - riskLevel：风险等级（low/medium/high/critical）
 - riskDescription：风险描述
 
+## 测试用例生成要求
+1、禁止任何形式的超长测试用例
+2、测试用例禁止使用repeat方法
+3、禁止任何形式的超长输入测试：\w\.repeat\(\d+\)
+
 ## 示例安全测试用例
 {
   "riskType": "空字符串验证",
@@ -631,12 +636,6 @@ ${languageRequirement}`;
 模板参数: ${JSON.stringify((resource as any).parameters || [], null, 2)}
 
 请严格遵守安全要求，生成${maxTestCases}个不同测试目的的安全测试用例，JSON格式输出测试用例列表。
-！！！禁止任何形式的超长测试用例！！！
-！！！禁止任何形式的超长测试用例！！！
-！！！禁止任何形式的超长测试用例！！！
-！！！测试用例禁止使用repeat方法！！！
-！！！测试用例禁止使用repeat方法！！！
-！！！测试用例禁止使用repeat方法！！！
 
 ${languageRequirement}`;
 

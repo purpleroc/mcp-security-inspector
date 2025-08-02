@@ -395,6 +395,10 @@ export const zhCN: TranslationKey = {
      testDescription: '描述',
      testEvidence: '证据',
      improvementMeasures: '改进措施',
+     // 资源显示相关翻译
+     resourceDisplayName: '资源名称',
+     staticResource: '静态资源',
+     dynamicResource: '动态资源',
      checkTypes: {
        tool: '工具检测',
        prompt: '提示检测',

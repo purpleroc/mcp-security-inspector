@@ -378,6 +378,10 @@ export interface TranslationKey {
     testDescription: string;
     testEvidence: string;
     improvementMeasures: string;
+    // 资源显示相关翻译
+    resourceDisplayName: string;
+    staticResource: string;
+    dynamicResource: string;
     checkTypes: {
       tool: string;
       prompt: string;

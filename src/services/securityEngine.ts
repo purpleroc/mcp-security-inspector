@@ -1438,8 +1438,11 @@ export class SecurityEngine {
         await this.performBasicResourceTests(resource, result);
       }
 
-      // 第二步：生成并执行智能测试用例
-      if (config.autoGenerate) {
+      // 第二步：生成并执行智能测试用例（仅对动态资源和复杂资源）
+      // 静态资源无需参数，不需要生成额外的测试用例
+      const shouldGenerateTestCases = config.autoGenerate && (isDynamicResource || !isSimpleResource);
+      
+      if (shouldGenerateTestCases) {
         this.addLog({
           type: 'step',
           phase: 'test_generation',
@@ -1447,6 +1450,18 @@ export class SecurityEngine {
           message: `${t().security.logMessages.forResource} ${resource.uri} ${t().security.logMessages.generateSecurityTests}`,
           metadata: { resourceUri: resource.uri }
         });
+      } else if (config.autoGenerate && isSimpleResource) {
+        // 对于静态资源，记录跳过测试用例生成的原因
+        this.addLog({
+          type: 'info',
+          phase: 'test_generation',
+          title: '跳过静态资源测试用例生成',
+          message: `${t().security.logMessages.forResource} ${resource.uri} 为静态资源，无需生成额外的参数化测试用例`,
+          metadata: { resourceUri: resource.uri }
+        });
+      }
+      
+      if (shouldGenerateTestCases) {
 
         let testCases: Array<{
           testType: string;
@@ -2842,7 +2857,9 @@ ${llmClient.getLanguageOutputRequirement()}
         result.llmAnalysis = '';
         break;
       case 'resource':
-        result.resourceUri = (target as MCPResource).uri;
+        result.resourceUri = (target as MCPResource).uri || (target as any).uriTemplate;
+        result.name = (target as MCPResource).name;
+        result.uriTemplate = (target as any).uriTemplate;
         result.risks = [];
         result.accessTests = [];
         result.llmAnalysis = '';
