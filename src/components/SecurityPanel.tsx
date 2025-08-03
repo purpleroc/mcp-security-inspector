@@ -193,37 +193,23 @@ const SecurityPanel: React.FC = () => {
     const toolResults: any[] = [];
     const promptResults: any[] = [];
     const resourceResults: any[] = [];
-
+    // 转换成  SecurityTestResult 格式
+    
     passiveResults.forEach(result => {
       const threats = result.threats || [];
       const convertedResult = {
-        toolName: result.targetName,
-        promptName: result.targetName,
-        resourceUri: result.targetName,
+        name: result.targetName,
         riskLevel: result.riskLevel,
         timestamp: result.timestamp,
-        threats: threats.map(threat => ({
-          type: threat.type,
-          severity: threat.severity,
-          description: threat.description,
-          evidence: threat.evidence || '',
-          recommendation: result.recommendation
-        })),
         vulnerabilities: threats.map(threat => ({
           type: threat.type,
           severity: threat.severity,
-          description: threat.description,
-          recommendation: result.recommendation
-        })),
-        risks: threats.map(threat => ({
-          type: threat.type,
-          severity: threat.severity,
+          testCase: "",
           description: threat.description,
           evidence: threat.evidence || '',
           recommendation: result.recommendation
         })),
         testResults: [], // 被动检测没有测试结果
-        accessTests: [], // 被动检测没有访问测试
         llmAnalysis: '', // 被动检测没有LLM分析
         isPassive: true,
         passiveData: result
@@ -762,11 +748,6 @@ const SecurityPanel: React.FC = () => {
     return null;
   };
 
-  // 新增：获取风险等级的显示文本
-  const getRiskLevelText = (level: SecurityRiskLevel | null): string => {
-    if (!level) return '';
-    return t.security.riskLevelTags[level as keyof typeof t.security.riskLevelTags] || '';
-  };
 
   // 新增：获取测试结果的状态颜色
   const getTestResultBorderColor = (test: any): string => {
@@ -1220,26 +1201,18 @@ const SecurityPanel: React.FC = () => {
                     const analysis = typeof tool.llmAnalysis === 'string' 
                       ? JSON.parse(tool.llmAnalysis) 
                       : tool.llmAnalysis;
+                      console.log("======>  ", analysis)
                     
                     return (
                       <div>
-                        {/* 风险等级 */}
-                        <div style={{ marginBottom: 16 }}>
-                          <Space>
-                            <Text strong>{t.security.riskLevel}:</Text>
-                            <Tag color={getRiskLevelColor(analysis.riskLevel)}>
-                              {t.security.riskLevels[analysis.riskLevel as keyof typeof t.security.riskLevels] || analysis.riskLevel}
-                            </Tag>
-                          </Space>
-                        </div>
                         
                         {/* 漏洞列表 */}
-                        {analysis.vulnerabilities && analysis.vulnerabilities.length > 0 && (
+                        {analysis.length > 0 && (
                           <div>
                             <Text strong style={{ display: 'block', marginBottom: 12 }}>
-                              {t.security.vulnerabilities} ({analysis.vulnerabilities.length}):
+                              {t.security.vulnerabilities} ({analysis.length}):
                             </Text>
-                            {analysis.vulnerabilities.map((vuln: any, index: number) => (
+                            {analysis.map((vuln: any, index: number) => (
                               <Card 
                                 key={index}
                                 size="small" 
@@ -1685,23 +1658,14 @@ const SecurityPanel: React.FC = () => {
                     
                     return (
                       <div>
-                        {/* 风险等级 */}
-                        <div style={{ marginBottom: 16 }}>
-                          <Space>
-                            <Text strong>{t.security.riskLevel}:</Text>
-                            <Tag color={getRiskLevelColor(analysis.riskLevel)}>
-                              {t.security.riskLevels[analysis.riskLevel as keyof typeof t.security.riskLevels] || analysis.riskLevel}
-                            </Tag>
-                          </Space>
-                        </div>
                         
                         {/* 威胁列表 */}
-                        {analysis.threats && analysis.threats.length > 0 && (
+                        {analysis.length > 0 && (
                           <div>
                             <Text strong style={{ display: 'block', marginBottom: 12 }}>
-                              {t.security.threats} ({analysis.threats.length}):
+                              {t.security.threats} ({analysis.length}):
                             </Text>
-                            {analysis.threats.map((threat: any, index: number) => (
+                            {analysis.map((threat: any, index: number) => (
                               <Card 
                                 key={index}
                                 size="small" 
@@ -1959,86 +1923,14 @@ const SecurityPanel: React.FC = () => {
                     
                     return (
                       <div>
-                        {/* 风险等级 */}
-                        {analysis.riskLevel && (
-                          <div style={{ marginBottom: 16 }}>
-                            <Space>
-                              <Text strong>{t.security.riskLevel}:</Text>
-                              <Tag color={getRiskLevelColor(analysis.riskLevel)}>
-                                {t.security.riskLevels[analysis.riskLevel as keyof typeof t.security.riskLevels] || analysis.riskLevel}
-                              </Tag>
-                            </Space>
-                          </div>
-                        )}
-                        
-                        {/* 摘要信息 */}
-                        {analysis.summary && (
-                          <div style={{ marginBottom: 16 }}>
-                            <Text strong>{t.security.analysisSummary}:</Text>
-                            <div style={{ 
-                              marginTop: 4,
-                              color: '#666',
-                              fontSize: '12px',
-                              lineHeight: '1.4'
-                            }}>
-                              {analysis.summary}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* 分析详情 */}
-                        {analysis.analysis && (
-                          <div style={{ marginBottom: 16 }}>
-                            <Text strong>{t.security.detailedAnalysis}:</Text>
-                            <div style={{ 
-                              marginTop: 4,
-                              color: '#666',
-                              fontSize: '12px',
-                              lineHeight: '1.4'
-                            }}>
-                              {analysis.analysis.description && (
-                                <div style={{ marginBottom: 8 }}>
-                                  <Text strong>{t.security.description}:</Text>
-                                  <div style={{ marginTop: 2, color: '#666' }}>
-                                    {analysis.analysis.description}
-                                  </div>
-                                </div>
-                              )}
-                              {analysis.analysis.potentialImpact && (
-                                <div style={{ marginBottom: 8 }}>
-                                  <Text strong>{t.security.potentialImpact}:</Text>
-                                  <div style={{ marginTop: 2, color: '#666' }}>
-                                    {analysis.analysis.potentialImpact}
-                                  </div>
-                                </div>
-                              )}
-                              {analysis.analysis.mitigation && (
-                                <div style={{ marginBottom: 8 }}>
-                                  <Text strong>{t.security.mitigationSuggestion}:</Text>
-                                  <div style={{ marginTop: 2, color: '#666' }}>
-                                    {analysis.analysis.mitigation}
-                                  </div>
-                                </div>
-                              )}
-                              {analysis.analysis.sideEffects && (
-                                <div style={{ marginBottom: 8 }}>
-                                  <Text strong>{t.security.sideEffects}:</Text>
-                                  <div style={{ marginTop: 2, color: '#666' }}>
-                                    {analysis.analysis.sideEffects}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                        
+                      
                         {/* 风险列表 */}
-                        {analysis.risks && analysis.risks.length > 0 && (
+                        {analysis.length > 0 && (
                           <div>
                             <Text strong style={{ display: 'block', marginBottom: 12 }}>
-                              {t.security.risks} ({analysis.risks.length}):
+                              {t.security.risks} ({analysis.length}):
                             </Text>
-                            {analysis.risks.map((risk: any, index: number) => (
+                            {analysis.map((risk: any, index: number) => (
                               <Card 
                                 key={index}
                                 size="small" 
@@ -2096,83 +1988,6 @@ const SecurityPanel: React.FC = () => {
                           </div>
                         )}
                         
-                        {/* 威胁列表 */}
-                        {analysis.threats && analysis.threats.length > 0 && (
-                          <div>
-                            <Text strong style={{ display: 'block', marginBottom: 12 }}>
-                              {t.security.threats} ({analysis.threats.length}):
-                            </Text>
-                            {analysis.threats.map((threat: any, index: number) => (
-                              <Card 
-                                key={index}
-                                size="small" 
-                                style={{ 
-                                  marginBottom: 8,
-                                  border: `2px solid ${getRiskLevelColor(threat.severity)}`,
-                                  borderRadius: '6px'
-                                }}
-                              >
-                                <div style={{ fontSize: '13px' }}>
-                                  <div style={{ marginBottom: 8 }}>
-                                    <Space>
-                                      <Text strong>{t.security.threatType}:</Text>
-                                      <Tag color="orange">{threat.type}</Tag>
-                                    </Space>
-                                  </div>
-                                  
-                                  <div style={{ marginBottom: 8 }}>
-                                    <Space>
-                                      <Text strong>{t.security.securityLevel}:</Text>
-                                      <Tag color={getRiskLevelColor(threat.severity)}>
-                                        {t.security.riskLevels[threat.severity as keyof typeof t.security.riskLevels] || threat.severity}
-                                      </Tag>
-                                    </Space>
-                                  </div>
-                                  
-                                  <div style={{ marginBottom: 8 }}>
-                                    <Text strong>{t.security.description}:</Text>
-                                    <div style={{ 
-                                      marginTop: 4,
-                                      color: '#666',
-                                      fontSize: '12px',
-                                      lineHeight: '1.4'
-                                    }}>
-                                      {threat.description}
-                                    </div>
-                                  </div>
-                                  
-                                  {threat.evidence && (
-                                    <div style={{ marginBottom: 8 }}>
-                                      <Text strong>{t.security.evidence}:</Text>
-                                      <div style={{ 
-                                        marginTop: 4,
-                                        color: '#666',
-                                        fontSize: '12px',
-                                        lineHeight: '1.4'
-                                      }}>
-                                        {threat.evidence}
-                                      </div>
-                                    </div>
-                                  )}
-                                  
-                                  {threat.recommendation && (
-                                    <div>
-                                      <Text strong>{t.security.recommendation}:</Text>
-                                      <div style={{ 
-                                        marginTop: 4,
-                                        color: '#666',
-                                        fontSize: '12px',
-                                        lineHeight: '1.4'
-                                      }}>
-                                        {threat.recommendation}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </Card>
-                            ))}
-                          </div>
-                        )}
                         
                         {/* 漏洞列表 */}
                         {analysis.vulnerabilities && analysis.vulnerabilities.length > 0 && (
@@ -2482,12 +2297,14 @@ const SecurityPanel: React.FC = () => {
 
     // 从主动扫描结果中收集问题
     if (currentReport) {
+      console.log("currentReport ===> " , currentReport);
+      console.log("currentReport.promptResults ===> ", currentReport.promptResults);
       // 从工具结果中收集问题
       currentReport.toolResults.forEach(tool => {
         tool.vulnerabilities.forEach(vuln => {
           const issue = {
             sourceType: 'tool',
-            source: tool.toolName,
+            source: tool.name,
             scanType: 'active',
             ...vuln
           };
@@ -2501,10 +2318,10 @@ const SecurityPanel: React.FC = () => {
 
       // 从提示结果中收集问题
       currentReport.promptResults.forEach(prompt => {
-        prompt.threats.forEach(threat => {
+        prompt.vulnerabilities.forEach(threat => {
           const issue = {
             sourceType: 'prompt',
-            source: prompt.promptName,
+            source: prompt.name,
             scanType: 'active',
             ...threat
           };
@@ -2518,7 +2335,7 @@ const SecurityPanel: React.FC = () => {
 
       // 从资源结果中收集问题
       currentReport.resourceResults.forEach(resource => {
-        resource.risks.forEach(risk => {
+        resource.vulnerabilities.forEach(risk => {
           const resourceInfo = getResourceDisplayInfo(resource);
           const issue = {
             sourceType: 'resource',
@@ -2710,7 +2527,7 @@ const SecurityPanel: React.FC = () => {
                 title={t.security.totalIssues}
                 value={combinedStats.totalIssues}
                 prefix={<AlertOutlined />}
-                valueStyle={{ color: combinedStats.totalIssues > 0 ? '#ff4d4f' : '#52c41a', textAlign: 'center' }}
+                valueStyle={{ color: '#898989', textAlign: 'center' }}
               />
             </Card>
           </Col>

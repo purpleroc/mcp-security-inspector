@@ -324,14 +324,15 @@ export interface LLMAnalysisResult {
 /**
  * 工具安全检测结果
  */
-export interface ToolSecurityResult {
-  toolName: string;
+export interface SecurityTestResult {
+  name: string;  // toolName, promptName, resourceName
   riskLevel: SecurityRiskLevel;
   vulnerabilities: Array<{
     type: string;
     severity: SecurityRiskLevel;
     description: string;
     testCase?: string;
+    evidence?: string;
     recommendation: string;
   }>;
   testResults: Array<{
@@ -346,63 +347,23 @@ export interface ToolSecurityResult {
 }
 
 /**
- * 提示安全检测结果
- */
-export interface PromptSecurityResult {
-  promptName: string;
-  riskLevel: SecurityRiskLevel;
-  threats: Array<{
-    type: 'injection' | 'manipulation' | 'leak' | 'malicious';
-    severity: SecurityRiskLevel;
-    description: string;
-    evidence: string;
-    recommendation: string;
-  }>;
-  testResults?: Array<{
-    testCase: string;
-    parameters: Record<string, unknown>;
-    result: any;
-    riskAssessment: string;
-    passed: boolean;
-  }>;
-  llmAnalysis: string;
-  timestamp: number;
-}
-
-/**
- * 资源安全检测结果
- */
-export interface ResourceSecurityResult {
-  resourceUri: string;
-  riskLevel: SecurityRiskLevel;
-  risks: Array<{
-    type: 'access' | 'leak' | 'traversal' | 'injection';
-    severity: SecurityRiskLevel;
-    description: string;
-    evidence: string;
-    recommendation: string;
-  }>;
-  accessTests: Array<{
-    testType: string;
-    uri: string;
-    success: boolean;
-    riskAssessment: string;
-  }>;
-  llmAnalysis: string;
-  timestamp: number;
-}
-
-/**
- * 综合安全报告
+ * 综合安全报告 
+ * const accessTest = {
+          testType: 'direct_access',
+          success: !error,
+          duration: duration,
+          result: testResult,
+          riskAssessment: 'low'
+        };
  */
 export interface SecurityReport {
   id: string;
   serverName: string;
   timestamp: number;
   overallRisk: SecurityRiskLevel;
-  toolResults: ToolSecurityResult[];
-  promptResults: PromptSecurityResult[];
-  resourceResults: ResourceSecurityResult[];
+  toolResults: SecurityTestResult[];
+  promptResults: SecurityTestResult[];
+  resourceResults: SecurityTestResult[];
   summary: {
     totalIssues: number;
     criticalIssues: number;

@@ -181,19 +181,15 @@ Important: Please respond in English, all field names and descriptions should be
    - 是否包含心理操纵或胁迫性语言
 
 ## 统一的输出格式
-请以JSON格式返回分析结果，格式如下：
+请以JSON数组格式返回分析结果，格式如下：
 
 \`\`\`json
-{
-  "vulnerabilities": [
-    {
-      "type": "injection|privilege|leak|access",
-      "severity": "critical|high|medium|low",
-      "description": "漏洞描述",
-      "recommendation": "修复建议"
-    }
-  ]
-}
+[{
+  "type": "injection|privilege|leak|access",
+  "severity": "critical|high|medium|low",
+  "description": "漏洞描述",
+  "recommendation": "修复建议"
+}]
 \`\`\`
 
 ${languageRequirement}`;
