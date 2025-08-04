@@ -13,6 +13,9 @@ import SecurityPanel from './components/SecurityPanel';
 import { MCPServerConfig } from './types/mcp';
 import { useI18n } from './hooks/useI18n';
 
+// 版本号
+const APP_VERSION = '2.0.1';
+
 const { Header, Content, Sider } = Layout;
 
 const App: React.FC = () => {
@@ -132,6 +135,9 @@ const App: React.FC = () => {
         <Space size="large">
           <span style={{ fontSize: '12px', color: '#666' }}>
             {t.app.description}
+          </span>
+          <span style={{ fontSize: '11px', color: '#999', fontWeight: 'normal' }}>
+            {t.app.version} {APP_VERSION}
           </span>
           <LanguageSwitcher />
         </Space>
