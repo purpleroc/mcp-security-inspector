@@ -26,6 +26,7 @@ export interface PassiveDetectionResult {
   timestamp: number;
   type: 'tool' | 'resource' | 'prompt';
   targetName: string;
+  uri?: string;
   parameters: Record<string, unknown>;
   result: any;
   riskLevel: SecurityRiskLevel;
@@ -404,7 +405,8 @@ export class MCPClient {
     type: 'tool' | 'resource' | 'prompt',
     targetName: string,
     parameters: Record<string, unknown>,
-    result: any
+    result: any,
+    uri?: string
   ): Promise<void> {
     console.log(`[被动检测] 开始执行: type=${type}, targetName=${targetName}`);
     if (!this.passiveDetectionEnabled || !this.securityConfig) {
@@ -500,6 +502,7 @@ export class MCPClient {
         timestamp: Date.now(),
         type,
         targetName,
+        uri,
         parameters,
         result,
         riskLevel: maxRiskLevel,
@@ -1373,7 +1376,7 @@ export class MCPClient {
   /**
    * 读取资源
    */
-  async readResource(uri: string): Promise<MCPResourceContent> {
+  async readResource(uri: string, name: string): Promise<MCPResourceContent> {
     const request: JSONRPCRequest = {
       jsonrpc: '2.0',
       id: this.getNextRequestId(),
@@ -1387,7 +1390,7 @@ export class MCPClient {
     // 触发被动安全检测
     if (this.passiveDetectionEnabled) {
       // 异步执行，不阻塞主流程
-      this.performPassiveDetection('resource', uri, { uri }, result).catch(error => {
+      this.performPassiveDetection('resource', name, { uri }, result, uri).catch(error => {
         console.error('被动检测执行失败:', error);
       });
     }

@@ -8,6 +8,7 @@ export interface PassiveDetectionResult {
   timestamp: number;
   type: 'tool' | 'resource' | 'prompt';
   targetName: string;
+  uri?: string;
   parameters: Record<string, unknown>;
   result: any;
   riskLevel: SecurityRiskLevel;
@@ -326,12 +327,16 @@ export interface LLMAnalysisResult {
  */
 export interface SecurityTestResult {
   name: string;  // toolName, promptName, resourceName
+  scanType: string;  // active, passive
+  uri?: string;
   riskLevel: SecurityRiskLevel;
   vulnerabilities: Array<{
     type: string;
     severity: SecurityRiskLevel;
     description: string;
+    uri?: string;
     testCase?: string;
+    source?: string;
     evidence?: string;
     recommendation: string;
   }>;

@@ -45,12 +45,12 @@ import {
   SecurityCheckConfig, 
   SecurityReport, 
   SecurityRiskLevel,
+  SecurityTestResult,
   LLMConfig,
   UnifiedSecurityOverview 
 } from '../types/mcp';
 import { useI18n } from '../hooks/useI18n';
 import { SecurityEngine, securityEngine, SecurityLogEntry } from '../services/securityEngine';
-import { llmClient } from '../services/llmClient';
 import { getLLMConfigs, securityHistoryStorage } from '../utils/storage';
 import { PassiveSecurityTester } from './PassiveSecurityTester';
 import SecurityLogViewer from './SecurityLogViewer';
@@ -188,77 +188,18 @@ const SecurityPanel: React.FC = () => {
     setUnifiedRiskOverview(overview);
   }, [currentReport, passiveResults]);
 
-  // 将被动检测结果转换为主动扫描结果格式的适配器
-  const convertPassiveToActiveFormat = () => {
-    const toolResults: any[] = [];
-    const promptResults: any[] = [];
-    const resourceResults: any[] = [];
-    // 转换成  SecurityTestResult 格式
-    
-    passiveResults.forEach(result => {
-      const threats = result.threats || [];
-      const convertedResult = {
-        name: result.targetName,
-        riskLevel: result.riskLevel,
-        timestamp: result.timestamp,
-        vulnerabilities: threats.map(threat => ({
-          type: threat.type,
-          severity: threat.severity,
-          testCase: "",
-          description: threat.description,
-          evidence: threat.evidence || '',
-          recommendation: result.recommendation
-        })),
-        testResults: [], // 被动检测没有测试结果
-        llmAnalysis: '', // 被动检测没有LLM分析
-        isPassive: true,
-        passiveData: result
-      };
-
-      if (result.type === 'tool') {
-        toolResults.push(convertedResult);
-      } else if (result.type === 'prompt') {
-        promptResults.push(convertedResult);
-      } else if (result.type === 'resource') {
-        resourceResults.push(convertedResult);
-      }
-    });
-
-    return { toolResults, promptResults, resourceResults };
-  };
-
-  // 获取合并后的结果（主动扫描 + 被动检测）
-  const getMergedResults = () => {
-    const passiveFormatted = convertPassiveToActiveFormat();
-    
-    const mergedResults = {
-      toolResults: [
-        ...(currentReport?.toolResults || []).map(item => ({ ...item, isPassive: false })),
-        ...passiveFormatted.toolResults
-      ],
-      promptResults: [
-        ...(currentReport?.promptResults || []).map(item => ({ ...item, isPassive: false })),
-        ...passiveFormatted.promptResults
-      ],
-      resourceResults: [
-        ...(currentReport?.resourceResults || []).map(item => ({ ...item, isPassive: false })),
-        ...passiveFormatted.resourceResults
-      ]
-    };
-
-    return mergedResults;
-  };
-
   // 过滤结果函数
-  const filterResults = (results: any[], riskLevelFilter: SecurityRiskLevel | 'all', scanTypeFilter: 'all' | 'active' | 'passive') => {
+  const filterResults = (results: SecurityTestResult[] | undefined, riskLevelFilter: SecurityRiskLevel | 'all', scanTypeFilter: 'all' | 'active' | 'passive') => {
+    if (!results) return [];
+    
     return results.filter(item => {
       // 风险等级过滤
       const riskMatch = riskLevelFilter === 'all' || item.riskLevel === riskLevelFilter;
       
       // 扫描类型过滤
       const scanMatch = scanTypeFilter === 'all' || 
-        (scanTypeFilter === 'active' && !item.isPassive) ||
-        (scanTypeFilter === 'passive' && item.isPassive);
+        (scanTypeFilter === 'active' && item.scanType === 'active') ||
+        (scanTypeFilter === 'passive' && item.scanType === 'passive');
       
       return riskMatch && scanMatch;
     });
@@ -484,15 +425,15 @@ const SecurityPanel: React.FC = () => {
     }
 
     // 创建合并的检测记录
-    const mergedResults = getMergedResults();
+    // const mergedResults = getMergedResults();
     const combinedReport = {
       id: `combined_${Date.now()}`,
       serverName: serverConfig?.name || 'MCP Server',
       timestamp: Date.now(),
       overallRisk: currentReport?.overallRisk || 'low',
-      toolResults: mergedResults.toolResults,
-      promptResults: mergedResults.promptResults,
-      resourceResults: mergedResults.resourceResults,
+      toolResults: currentReport?.toolResults,
+      promptResults: currentReport?.promptResults,
+      resourceResults: currentReport?.resourceResults,
       summary: {
         totalIssues: (currentReport?.summary.totalIssues || 0) + passiveResults.length,
         criticalIssues: (currentReport?.summary.criticalIssues || 0) + passiveResults.filter(r => r.riskLevel === 'critical').length,
@@ -830,8 +771,8 @@ const SecurityPanel: React.FC = () => {
       key: 'toolName',
       render: (name: string, record: any) => (
         <Space>
-          <span>{name}</span>
-          {record.isPassive ? (
+          <span>{record.name}</span>
+          {record.scanType === 'passive' ? (
             <Tag color="blue">被动检测</Tag>
           ) : (
             <Tag color="green">主动扫描</Tag>
@@ -856,10 +797,7 @@ const SecurityPanel: React.FC = () => {
       key: 'vulnerabilityCount',
       align: 'center' as const,
       render: (vulnerabilities: any[], record: any) => {
-        if (record.isPassive) {
-          return record.threats?.length || 0;
-        }
-        
+
         let totalVulnerabilities = vulnerabilities?.length || 0;
         
         // 如果有LLM静态分析，也计算其中的漏洞数量
@@ -868,18 +806,12 @@ const SecurityPanel: React.FC = () => {
             const analysis = typeof record.llmAnalysis === 'string' 
               ? JSON.parse(record.llmAnalysis) 
               : record.llmAnalysis;
-            if (analysis.vulnerabilities && Array.isArray(analysis.vulnerabilities)) {
-              totalVulnerabilities += analysis.vulnerabilities.length;
+            if (analysis && Array.isArray(analysis)) {
+              totalVulnerabilities += analysis.length;
             }
           } catch (error) {
             // 解析失败时忽略
           }
-        }
-
-        // 计算测试失败案例的数量
-        if (record.testResults && Array.isArray(record.testResults)) {
-          const failedTests = record.testResults.filter((test: any) => !test.passed);
-          totalVulnerabilities += failedTests.length;
         }
         
         return totalVulnerabilities;
@@ -891,9 +823,7 @@ const SecurityPanel: React.FC = () => {
       key: 'testCount',
       align: 'center' as const,
       render: (testResults: any[], record: any) => {
-        if (record.isPassive) {
-          return 0; // 被动检测没有测试用例
-        }
+
         return testResults?.length || 0;
       },
     },
@@ -1031,7 +961,7 @@ const SecurityPanel: React.FC = () => {
 
   const showToolDetail = (tool: any) => {
     Modal.info({
-      title: `${t.security.toolSecurityAnalysis}: ${tool.toolName}`,
+      title: `${t.security.toolSecurityAnalysis}: ${tool.name}`,
       width: 900,
       content: (
         <div>
@@ -1041,21 +971,21 @@ const SecurityPanel: React.FC = () => {
               <Tag color={getRiskLevelColor(tool.riskLevel)}>
                 {t.security.riskLevels[tool.riskLevel as keyof typeof t.security.riskLevels] || tool.riskLevel}
               </Tag>
-              {tool.isPassive ? (
+              {tool.scanType === 'passive' ? (
                 <Tag color="blue">被动检测</Tag>
               ) : (
                 <Tag color="green">主动扫描</Tag>
               )}
             </Space>
-            {tool.isPassive && tool.timestamp && (
+            {tool.timestamp && (
               <div style={{ marginTop: 8, fontSize: '12px', color: '#666' }}>
                 <Text>检测时间: {new Date(tool.timestamp).toLocaleString()}</Text>
               </div>
             )}
             
             {/* 显示调用参数 */}
-            {(tool.isPassive && tool.passiveData && tool.passiveData.parameters) || 
-             (!tool.isPassive && tool.testResults && tool.testResults.length > 0 && tool.testResults[0].parameters) ? (
+            {(tool.scanType === 'passive' && tool.passiveData && tool.passiveData.parameters) || 
+             (tool.scanType !== 'passive' && tool.testResults && tool.testResults.length > 0 && tool.testResults[0].parameters) ? (
               <div style={{ marginTop: 16 }}>
                 <Title level={5}>调用参数</Title>
                 <div style={{
@@ -1069,7 +999,7 @@ const SecurityPanel: React.FC = () => {
                   overflow: 'auto'
                 }}>
                   <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                    {tool.isPassive 
+                    {tool.scanType === 'passive' 
                       ? JSON.stringify(tool.passiveData.parameters, null, 2)
                       : JSON.stringify(tool.testResults[0].parameters, null, 2)
                     }
@@ -1079,8 +1009,8 @@ const SecurityPanel: React.FC = () => {
             ) : null}
 
             {/* 显示返回结果 */}
-            {(tool.isPassive && tool.passiveData && tool.passiveData.result) || 
-             (!tool.isPassive && tool.testResults && tool.testResults.length > 0 && tool.testResults[0].result) ? (
+            {(tool.scanType === 'passive' && tool.passiveData && tool.passiveData.result) || 
+             (tool.scanType !== 'passive' && tool.testResults && tool.testResults.length > 0 && tool.testResults[0].result) ? (
               <div style={{ marginTop: 16 }}>
                 <Title level={5}>返回结果</Title>
                 <div style={{
@@ -1094,7 +1024,7 @@ const SecurityPanel: React.FC = () => {
                   overflow: 'auto'
                 }}>
                   <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                    {tool.isPassive 
+                    {tool.scanType === 'passive' 
                       ? JSON.stringify(tool.passiveData.result, null, 2)
                       : JSON.stringify(tool.testResults[0].result, null, 2)
                     }
@@ -1105,7 +1035,7 @@ const SecurityPanel: React.FC = () => {
           </div>
 
           {/* 显示被动检测威胁详情 */}
-          {tool.isPassive && tool.threats && tool.threats.length > 0 && (
+          {tool.scanType === 'passive' && tool.threats && tool.threats.length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <Title level={5}>被动检测威胁详情</Title>
               <div style={{ marginBottom: 16 }}>
@@ -1201,7 +1131,6 @@ const SecurityPanel: React.FC = () => {
                     const analysis = typeof tool.llmAnalysis === 'string' 
                       ? JSON.parse(tool.llmAnalysis) 
                       : tool.llmAnalysis;
-                      console.log("======>  ", analysis)
                     
                     return (
                       <div>
@@ -1494,21 +1423,21 @@ const SecurityPanel: React.FC = () => {
               <Tag color={getRiskLevelColor(prompt.riskLevel)}>
                 {t.security.riskLevels[prompt.riskLevel as keyof typeof t.security.riskLevels] || prompt.riskLevel}
               </Tag>
-              {prompt.isPassive ? (
+              {prompt.scanType === 'passive' ? (
                 <Tag color="blue">被动检测</Tag>
               ) : (
                 <Tag color="green">主动扫描</Tag>
               )}
             </Space>
-            {prompt.isPassive && prompt.timestamp && (
+            {prompt.timestamp && (
               <div style={{ marginTop: 8, fontSize: '12px', color: '#666' }}>
                 <Text>检测时间: {new Date(prompt.timestamp).toLocaleString()}</Text>
               </div>
             )}
             
             {/* 显示调用参数 */}
-            {(prompt.isPassive && prompt.passiveData && prompt.passiveData.parameters) || 
-             (!prompt.isPassive && prompt.threats && prompt.threats.length > 0 && prompt.threats[0].evidence) ? (
+            {(prompt.scanType === 'passive' && prompt.passiveData && prompt.passiveData.parameters) || 
+             (prompt.scanType !== 'passive' && prompt.threats && prompt.threats.length > 0 && prompt.threats[0].evidence) ? (
               <div style={{ marginTop: 16 }}>
                 <Title level={5}>调用参数</Title>
                 <div style={{
@@ -1522,7 +1451,7 @@ const SecurityPanel: React.FC = () => {
                   overflow: 'auto'
                 }}>
                   <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                    {prompt.isPassive 
+                    {prompt.scanType === 'passive' 
                       ? JSON.stringify(prompt.passiveData.parameters, null, 2)
                       : prompt.threats[0].evidence
                     }
@@ -1532,8 +1461,8 @@ const SecurityPanel: React.FC = () => {
             ) : null}
 
             {/* 显示返回结果 */}
-            {(prompt.isPassive && prompt.passiveData && prompt.passiveData.result) || 
-             (!prompt.isPassive && prompt.threats && prompt.threats.length > 0 && prompt.threats[0].evidence) ? (
+            {(prompt.scanType === 'passive' && prompt.passiveData && prompt.passiveData.result) || 
+             (prompt.scanType !== 'passive' && prompt.threats && prompt.threats.length > 0 && prompt.threats[0].evidence) ? (
               <div style={{ marginTop: 16 }}>
                 <Title level={5}>返回结果</Title>
                 <div style={{
@@ -1547,7 +1476,7 @@ const SecurityPanel: React.FC = () => {
                   overflow: 'auto'
                 }}>
                   <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                    {prompt.isPassive 
+                    {prompt.scanType === 'passive' 
                       ? JSON.stringify(prompt.passiveData.result, null, 2)
                       : prompt.threats[0].evidence
                     }
@@ -1748,7 +1677,9 @@ const SecurityPanel: React.FC = () => {
   };
 
   const showResourceDetail = (resource: any) => {
+    console.log("resource ====> ", resource);
     const resourceInfo = getResourceDisplayInfo(resource);
+    console.log("resourceInfo ====> ", resourceInfo);
     Modal.info({
       title: `${t.security.resourceSecurityAnalysis}: ${resourceInfo.displayName}`,
       width: 900,
@@ -1760,21 +1691,21 @@ const SecurityPanel: React.FC = () => {
               <Tag color={getRiskLevelColor(resource.riskLevel)}>
                 {t.security.riskLevels[resource.riskLevel as keyof typeof t.security.riskLevels] || resource.riskLevel}
               </Tag>
-              {resource.isPassive ? (
+              {resource.scanType === 'passive' ? (
                 <Tag color="blue">被动检测</Tag>
               ) : (
                 <Tag color="green">主动扫描</Tag>
               )}
             </Space>
-            {resource.isPassive && resource.timestamp && (
+            {resource.timestamp && (
               <div style={{ marginTop: 8, fontSize: '12px', color: '#666' }}>
                 <Text>检测时间: {new Date(resource.timestamp).toLocaleString()}</Text>
               </div>
             )}
             
             {/* 显示调用参数 */}
-            {(resource.isPassive && resource.passiveData && resource.passiveData.parameters) || 
-             (!resource.isPassive && resource.risks && resource.risks.length > 0 && resource.risks[0].evidence) ? (
+            {(resource.scanType === 'passive' && resource.passiveData && resource.passiveData.parameters) || 
+             (resource.scanType !== 'passive' && resource.risks && resource.risks.length > 0 && resource.risks[0].evidence) ? (
               <div style={{ marginTop: 16 }}>
                 <Title level={5}>调用参数</Title>
                 <div style={{
@@ -1788,7 +1719,7 @@ const SecurityPanel: React.FC = () => {
                   overflow: 'auto'
                 }}>
                   <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                    {resource.isPassive 
+                    {resource.scanType === 'passive' 
                       ? JSON.stringify(resource.passiveData.parameters, null, 2)
                       : resource.risks[0].evidence
                     }
@@ -1798,8 +1729,8 @@ const SecurityPanel: React.FC = () => {
             ) : null}
 
             {/* 显示返回结果 */}
-            {(resource.isPassive && resource.passiveData && resource.passiveData.result) || 
-             (!resource.isPassive && resource.risks && resource.risks.length > 0 && resource.risks[0].evidence) ? (
+            {(resource.scanType === 'passive' && resource.passiveData && resource.passiveData.result) || 
+             (resource.scanType !== 'passive' && resource.risks && resource.risks.length > 0 && resource.risks[0].evidence) ? (
               <div style={{ marginTop: 16 }}>
                 <Title level={5}>返回结果</Title>
                 <div style={{
@@ -1813,7 +1744,7 @@ const SecurityPanel: React.FC = () => {
                   overflow: 'auto'
                 }}>
                   <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                    {resource.isPassive 
+                    {resource.scanType === 'passive' 
                       ? JSON.stringify(resource.passiveData.result, null, 2)
                       : resource.risks[0].evidence
                     }
@@ -1824,15 +1755,15 @@ const SecurityPanel: React.FC = () => {
           </div>
 
           {/* 显示主要风险列表 */}
-          {resource.risks && resource.risks.length > 0 && (
+          {resource.vulnerabilities && resource.vulnerabilities.length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <Title level={5}>主要风险列表</Title>
               <div style={{ marginBottom: 16 }}>
                 <Text type="secondary">
-                  总风险数: {resource.risks.length}
+                  总风险数: {resource.vulnerabilities.length}
                 </Text>
               </div>
-              {resource.risks.map((risk: any, index: number) => (
+              {resource.vulnerabilities.map((risk: any, index: number) => (
                 <Card 
                   key={index} 
                   size="small" 
@@ -1848,7 +1779,7 @@ const SecurityPanel: React.FC = () => {
                         #{index + 1}
                       </Tag>
                       <Text strong style={{ fontSize: '14px' }}>
-                        {risk.type}
+                        {resource.name} - {risk.type}
                       </Text>
                       <Tag color={getRiskLevelColor(risk.severity)}>
                         {t.security.riskLevels[risk.severity as keyof typeof t.security.riskLevels] || risk.severity}
@@ -1887,6 +1818,25 @@ const SecurityPanel: React.FC = () => {
                         </div>
                       </div>
                     )}
+
+                    {risk.testCase && (
+                      <div style={{ marginBottom: 8 }}>
+                        <Text strong>测试用例:</Text>
+                        <div style={{ 
+                          backgroundColor: '#f5f5f5', 
+                          padding: '8px 12px', 
+                          borderRadius: '6px',
+                          fontFamily: 'monospace',
+                          fontSize: '12px',
+                          border: '1px solid #e8e8e8',
+                          maxHeight: '120px',
+                          overflow: 'auto',
+                          marginTop: 4
+                        }}>
+                          {risk.testCase}
+                        </div>
+                      </div>
+                    )}
                     
                     <div>
                       <Text strong>{t.security.recommendation}:</Text>
@@ -1897,6 +1847,17 @@ const SecurityPanel: React.FC = () => {
                         lineHeight: '1.4'
                       }}>
                         {risk.recommendation}
+                      </div>
+                    </div>
+                    <div>
+                      <Text strong>告警来源:</Text>
+                      <div style={{ 
+                        marginTop: 4,
+                        color: '#666',
+                        fontSize: '12px',
+                        lineHeight: '1.4'
+                      }}>
+                        {risk.source}
                       </div>
                     </div>
                   </div>
@@ -1987,102 +1948,6 @@ const SecurityPanel: React.FC = () => {
                             ))}
                           </div>
                         )}
-                        
-                        
-                        {/* 漏洞列表 */}
-                        {analysis.vulnerabilities && analysis.vulnerabilities.length > 0 && (
-                          <div>
-                            <Text strong style={{ display: 'block', marginBottom: 12 }}>
-                              {t.security.vulnerabilities} ({analysis.vulnerabilities.length}):
-                            </Text>
-                            {analysis.vulnerabilities.map((vuln: any, index: number) => (
-                              <Card 
-                                key={index}
-                                size="small" 
-                                style={{ 
-                                  marginBottom: 8,
-                                  border: `2px solid ${getRiskLevelColor(vuln.severity)}`,
-                                  borderRadius: '6px'
-                                }}
-                              >
-                                <div style={{ fontSize: '13px' }}>
-                                  <div style={{ marginBottom: 8 }}>
-                                    <Space>
-                                      <Text strong>{t.security.testCategory}:</Text>
-                                      <Tag color="red">{vuln.type}</Tag>
-                                    </Space>
-                                  </div>
-                                  
-                                  <div style={{ marginBottom: 8 }}>
-                                    <Space>
-                                      <Text strong>{t.security.securityLevel}:</Text>
-                                      <Tag color={getRiskLevelColor(vuln.severity)}>
-                                        {t.security.riskLevels[vuln.severity as keyof typeof t.security.riskLevels] || vuln.severity}
-                                      </Tag>
-                                    </Space>
-                                  </div>
-                                  
-                                  <div style={{ marginBottom: 8 }}>
-                                    <Text strong>{t.security.description}:</Text>
-                                    <div style={{ 
-                                      marginTop: 4,
-                                      color: '#666',
-                                      fontSize: '12px',
-                                      lineHeight: '1.4'
-                                    }}>
-                                      {vuln.description}
-                                    </div>
-                                  </div>
-                                  
-                                  {vuln.testCase && (
-                                    <div style={{ marginBottom: 8 }}>
-                                      <Text strong>{t.security.testCase}:</Text>
-                                      <div style={{ 
-                                        marginTop: 4,
-                                        color: '#666',
-                                        fontSize: '12px',
-                                        lineHeight: '1.4',
-                                        fontFamily: 'monospace'
-                                      }}>
-                                        {vuln.testCase}
-                                      </div>
-                                    </div>
-                                  )}
-                                  
-                                  {vuln.recommendation && (
-                                    <div>
-                                      <Text strong>{t.security.recommendation}:</Text>
-                                      <div style={{ 
-                                        marginTop: 4,
-                                        color: '#666',
-                                        fontSize: '12px',
-                                        lineHeight: '1.4'
-                                      }}>
-                                        {vuln.recommendation}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </Card>
-                            ))}
-                          </div>
-                        )}
-                        
-                        {/* 如果没有结构化数据，显示原始内容 */}
-                        {!analysis.riskLevel && !analysis.summary && !analysis.analysis && 
-                         !analysis.risks && !analysis.threats && !analysis.vulnerabilities && (
-                          <div style={{ 
-                            fontFamily: 'monospace',
-                            fontSize: '12px',
-                            whiteSpace: 'pre-wrap',
-                            color: '#666'
-                          }}>
-                            {typeof resource.llmAnalysis === 'string' 
-                              ? resource.llmAnalysis 
-                              : JSON.stringify(resource.llmAnalysis, null, 2)
-                            }
-                          </div>
-                        )}
                       </div>
                     );
                   } catch (error) {
@@ -2103,18 +1968,18 @@ const SecurityPanel: React.FC = () => {
                 })()}
               </div>
             </div>
-          )}          
+          )}
 
           {/* 显示访问测试结果 */}
-          {resource.accessTests && resource.accessTests.length > 0 && (
+          {resource.testResults && resource.testResults.length > 0 && (
             <div>
               <Title level={5}>访问测试结果</Title>
               <div style={{ marginBottom: 16 }}>
                 <Text type="secondary">
-                  总测试数: {resource.accessTests.length}
+                  总测试数: {resource.testResults.length}
                 </Text>
               </div>
-              {resource.accessTests.map((test: any, index: number) => {
+              {resource.testResults.map((test: any, index: number) => {
                 // 解析风险评估，提取风险等级
                 const riskLevel = extractRiskLevelFromAssessment(test.riskAssessment || '');
                 const borderColor = getRiskLevelColor(riskLevel || 'low');
@@ -2148,11 +2013,11 @@ const SecurityPanel: React.FC = () => {
                           #{index + 1}
                         </Tag>
                         <Text strong style={{ fontSize: '14px' }}>
-                          {test.testType}
+                          {test.testCase}
                         </Text>
-                        <Tag color={test.success ? 'green' : 'red'}>
-                          {test.success ? t.security.passed : t.security.failed}
-                        </Tag>
+                        {/* <Tag color={test.passed ? 'green' : 'red'}>
+                          {test.passed ? t.security.passed : t.security.failed}
+                        </Tag> */}
                         {riskLevel && (
                           <Tag color={getRiskLevelColor(riskLevel)}>
                             {t.security.riskLevels[riskLevel as keyof typeof t.security.riskLevels] || riskLevel}
@@ -2170,32 +2035,15 @@ const SecurityPanel: React.FC = () => {
                          </div>
                        </div>
                       
-                      {/* 是否成功 */}
+                      {/* 是否成功
                       <div style={{ marginBottom: 8 }}>
                         <Text strong>{t.security.successStatus}:</Text>
                         <div style={{ marginTop: 4 }}>
-                          <Tag color={test.success ? 'green' : 'red'}>
-                            {test.success ? t.security.passed : t.security.failed}
+                          <Tag color={test.passed ? 'green' : 'red'}>
+                            {test.passed ? t.security.passed : t.security.failed}
                           </Tag>
                         </div>
-                      </div>
-                      
-                      {/* 测试URI */}
-                      <div style={{ marginBottom: 8 }}>
-                        <Text strong>{t.security.testURI}:</Text>
-                        <div style={{ 
-                          marginTop: 4,
-                          color: '#666',
-                          fontSize: '12px',
-                          fontFamily: 'monospace',
-                          backgroundColor: '#f5f5f5',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          wordBreak: 'break-all'
-                        }}>
-                          {test.uri}
-                        </div>
-                      </div>
+                      </div> */}
                       
                       {/* 返回结果 */}
                       {test.result && (
@@ -2352,42 +2200,6 @@ const SecurityPanel: React.FC = () => {
       });
     }
 
-    // 从被动检测结果中收集问题
-    passiveResults.forEach(result => {
-      result.threats.forEach(threat => {
-        let displayName = result.targetName;
-        
-        // 如果是资源类型，使用和主动扫描一致的显示格式
-        if (result.type === 'resource') {
-          // 创建临时资源对象以获取正确的显示名称
-          const tempResource = {
-            isPassive: true,
-            passiveData: result,
-            resourceUri: result.targetName,
-            uri: result.targetName
-          };
-          const resourceInfo = getResourceDisplayInfo(tempResource);
-          displayName = resourceInfo.displayName;
-        }
-        
-        const issue = {
-          sourceType: result.type,
-          source: displayName,
-          scanType: 'passive',
-          description: threat.description,
-          title: threat.type,
-          severity: threat.severity,
-          recommendation: result.recommendation,
-          timestamp: result.timestamp
-        };
-        if (threat.severity === 'critical') {
-          criticalIssues.push(issue);
-        } else if (threat.severity === 'high') {
-          highRiskIssues.push(issue);
-        }
-      });
-    });
-
     // 计算统计数据 - 使用统一风险系统
     const combinedStats = unifiedRiskOverview ? 
       SecurityEngine.generateUnifiedSummary(unifiedRiskOverview) : {
@@ -2527,7 +2339,7 @@ const SecurityPanel: React.FC = () => {
                 title={t.security.totalIssues}
                 value={combinedStats.totalIssues}
                 prefix={<AlertOutlined />}
-                valueStyle={{ color: '#898989', textAlign: 'center' }}
+                valueStyle={{ color: currentReport ? getRiskLevelColor(currentReport.overallRisk) : '#52c41a', textAlign: 'center' }}
               />
             </Card>
           </Col>
@@ -2939,16 +2751,14 @@ const SecurityPanel: React.FC = () => {
                 <Space>
                   {t.security.toolSecurity}
                   {(() => {
-                    const mergedResults = getMergedResults();
-                    const totalCount = mergedResults.toolResults.length;
-                    return totalCount > 0 ? <Tag color="blue">{totalCount}</Tag> : null;
+                    const totalCount = currentReport?.toolResults.length;
+                    return totalCount && totalCount > 0 ? <Tag color="blue">{totalCount}</Tag> : null;
                   })()}
                 </Space>
               ),
               children: (() => {
                 try {
-                  const mergedResults = getMergedResults();
-                  const filteredResults = filterResults(mergedResults.toolResults, toolRiskFilter, toolScanTypeFilter);
+                  const filteredResults = filterResults(currentReport?.toolResults, toolRiskFilter, toolScanTypeFilter);
                   
                   return (
                     <div>
@@ -2957,7 +2767,7 @@ const SecurityPanel: React.FC = () => {
                         <Table
                           dataSource={filteredResults}
                           columns={toolColumns}
-                          rowKey={(record) => `${record.toolName}-${record.isPassive ? 'passive' : 'active'}`}
+                          rowKey={(record) => `${record.name}-${record.scanType}`}
                           pagination={{ pageSize: 10 }}
                         />
                       ) : (
@@ -2977,16 +2787,14 @@ const SecurityPanel: React.FC = () => {
                 <Space>
                   {t.security.promptSecurity}
                   {(() => {
-                    const mergedResults = getMergedResults();
-                    const totalCount = mergedResults.promptResults.length;
-                    return totalCount > 0 ? <Tag color="blue">{totalCount}</Tag> : null;
+                    const totalCount = currentReport?.promptResults.length;
+                    return totalCount && totalCount > 0 ? <Tag color="blue">{totalCount}</Tag> : null;
                   })()}
                 </Space>
               ),
                             children: (() => {
                 try {
-                  const mergedResults = getMergedResults();
-                  const filteredResults = filterResults(mergedResults.promptResults, promptRiskFilter, promptScanTypeFilter);
+                  const filteredResults = filterResults(currentReport?.promptResults, promptRiskFilter, promptScanTypeFilter);
                   
                   return (
                     <div>
@@ -3002,7 +2810,7 @@ const SecurityPanel: React.FC = () => {
                               render: (name: string, record: any) => (
                                 <Space>
                                   <span>{name}</span>
-                                  {record.isPassive ? (
+                                  {record.scanType === 'passive' ? (
                                     <Tag color="blue">被动检测</Tag>
                                   ) : (
                                     <Tag color="green">主动扫描</Tag>
@@ -3036,7 +2844,7 @@ const SecurityPanel: React.FC = () => {
                                       ? JSON.parse(record.llmAnalysis) 
                                       : record.llmAnalysis;
                                     if (analysis.threats && Array.isArray(analysis.threats)) {
-                                      totalThreats += analysis.threats.length;
+                                      totalThreats += analysis.length;
                                     }
                                   } catch (error) {
                                     // 解析失败时忽略
@@ -3057,7 +2865,7 @@ const SecurityPanel: React.FC = () => {
                               ),
                             },
                           ]}
-                          rowKey={(record) => `${record.promptName}-${record.isPassive ? 'passive' : 'active'}`}
+                          rowKey={(record) => `${record.name}-${record.scanType}`}
                           pagination={{ pageSize: 10 }}
                         />
                       ) : (
@@ -3077,16 +2885,14 @@ const SecurityPanel: React.FC = () => {
                 <Space>
                   {t.security.resourceSecurity}
                   {(() => {
-                    const mergedResults = getMergedResults();
-                    const totalCount = mergedResults.resourceResults.length;
-                    return totalCount > 0 ? <Tag color="blue">{totalCount}</Tag> : null;
+                    const totalCount = currentReport?.resourceResults.length;
+                    return totalCount && totalCount > 0 ? <Tag color="blue">{totalCount}</Tag> : null;
                   })()}
                 </Space>
               ),
                             children: (() => {
                 try {
-                  const mergedResults = getMergedResults();
-                  const filteredResults = filterResults(mergedResults.resourceResults, resourceRiskFilter, resourceScanTypeFilter);
+                  const filteredResults = filterResults(currentReport?.resourceResults, resourceRiskFilter, resourceScanTypeFilter);
                   
                   return (
                     <div>
@@ -3108,7 +2914,7 @@ const SecurityPanel: React.FC = () => {
                                        <Tag color={resourceInfo.isDynamic ? 'blue' : 'default'} style={{ marginLeft: 8 }}>
                                          {resourceInfo.resourceType}
                                        </Tag>
-                                       {record.isPassive ? (
+                                       {record.scanType === 'passive' ? (
                                          <Tag color="blue" style={{ marginLeft: 4 }}>被动检测</Tag>
                                        ) : (
                                          <Tag color="green" style={{ marginLeft: 4 }}>主动扫描</Tag>
@@ -3138,7 +2944,7 @@ const SecurityPanel: React.FC = () => {
                               key: 'riskCount',
                               align: 'center' as const,
                               render: (risks: any[], record: any) => {
-                                let totalRisks = risks?.length || 0;
+                                let totalRisks = record.vulnerabilities?.length || 0;
                                 
                                 // 如果有访问测试结果，也计算其中的数量
                                 if (record.accessTests && Array.isArray(record.accessTests)) {
@@ -3151,8 +2957,8 @@ const SecurityPanel: React.FC = () => {
                                     const analysis = typeof record.llmAnalysis === 'string' 
                                       ? JSON.parse(record.llmAnalysis) 
                                       : record.llmAnalysis;
-                                    if (analysis.risks && Array.isArray(analysis.risks)) {
-                                      totalRisks += analysis.risks.length;
+                                    if (Array.isArray(analysis)) {
+                                      totalRisks += analysis.length;
                                     }
                                   } catch (error) {
                                     // 解析失败时忽略
@@ -3173,7 +2979,7 @@ const SecurityPanel: React.FC = () => {
                               ),
                             },
                           ]}
-                          rowKey={(record) => `${record.resourceUri}-${record.isPassive ? 'passive' : 'active'}`}
+                          rowKey={(record) => `${record.name}-${record.scanType}`}
                           pagination={{ pageSize: 10 }}
                         />
                       ) : (

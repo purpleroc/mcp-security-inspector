@@ -12,7 +12,8 @@ import {
   EnhancedMCPResource,
   EnhancedMCPComponent,
   UnifiedRiskItem,
-  UnifiedSecurityOverview
+  UnifiedSecurityOverview,
+  PassiveDetectionResult
 } from '../types/mcp';
 import { LLMClientService } from './llmClient';
 import { t } from '../i18n';
@@ -552,13 +553,6 @@ export class SecurityEngine {
 
         try {
           const toolStartTime = Date.now();
-          // this.addLog({
-          //   type: 'step',
-          //   phase: 'tool_analysis',
-          //   title: t().security.logMessages.analyzingTool,
-          //   message: `${t().security.logMessages.analyzingTool}: ${tool.name}`,
-          //   metadata: { toolName: tool.name }
-          // });
 
           const result = await this.analyzeToolEnhanced(tool, config);
           report.toolResults.push(result);
@@ -698,12 +692,13 @@ export class SecurityEngine {
           this.addLog({
             type: 'step',
             phase: 'resource_analysis',
-            title: t().security.logMessages.analyzingResource,
-            message: `${t().security.logMessages.analyzingResource}: ${resource.name || resource.uri}`,
+            title: `分析资源: ${resource.name || resource.uri}`,
+            message: `资源类型: ${resource.resourceType} - ${resource.parameterAnalysis.hasParameters ? '需要参数' : '无需参数'} (${resource.parameterAnalysis.parameterCount}个参数)`,
             metadata: { resourceUri: resource.uri }
           });
+      
+          const result = await this.performEnhancedComponentAnalysis('resource', resource, config) as SecurityTestResult;
 
-          const result = await this.analyzeResourceEnhanced(resource, config);
           report.resourceResults.push(result);
           
           const resourceDuration = Date.now() - resourceStartTime;
@@ -771,7 +766,16 @@ export class SecurityEngine {
             metadata: { resourceUri: resourceTemplate.uri || (resourceTemplate as any).uriTemplate }
           });
 
-          const result = await this.analyzeResourceEnhanced(resourceTemplate, config);
+          this.addLog({
+            type: 'step',
+            phase: 'resource_analysis',
+            title: `分析资源: ${resourceTemplate.name || resourceTemplate.uri}`,
+            message: `资源类型: ${resourceTemplate.resourceType} - ${resourceTemplate.parameterAnalysis.hasParameters ? '需要参数' : '无需参数'} (${resourceTemplate.parameterAnalysis.parameterCount}个参数)`,
+            metadata: { resourceUri: resourceTemplate.uri }
+          });
+      
+          const result = await this.performEnhancedComponentAnalysis('resource', resourceTemplate, config) as SecurityTestResult;
+
           report.resourceResults.push(result);
           
           const resourceDuration = Date.now() - resourceStartTime;
@@ -802,6 +806,17 @@ export class SecurityEngine {
           console.error(`${t().security.logMessages.checkingResource} ${resourceTemplate.uri} (模板) ${t().security.logMessages.failed}:`, error);
         }
       }
+
+      // 汇总被动检测结果到报告中
+      this.addLog({
+        type: 'step',
+        phase: 'summary',
+        title: '汇总被动检测结果',
+        message: '收集被动检测结果并汇总到扫描报告中',
+        progress: 90
+      });
+
+      await this.consolidatePassiveDetectionResults(report);
 
       // 生成综合报告
       this.addLog({
@@ -865,21 +880,6 @@ export class SecurityEngine {
   }
 
   /**
-   * 增强版资源安全分析
-   */
-  private async analyzeResourceEnhanced(resource: EnhancedMCPResource, config: SecurityCheckConfig): Promise<SecurityTestResult> {
-    this.addLog({
-      type: 'step',
-      phase: 'resource_analysis',
-      title: `分析资源: ${resource.name || resource.uri}`,
-      message: `资源类型: ${resource.resourceType} - ${resource.parameterAnalysis.hasParameters ? '需要参数' : '无需参数'} (${resource.parameterAnalysis.parameterCount}个参数)`,
-      metadata: { resourceUri: resource.uri }
-    });
-
-    return await this.performEnhancedComponentAnalysis('resource', resource, config) as SecurityTestResult;
-  }
-
-  /**
    * 增强的组件分析函数 - 根据参数情况执行差异化测试
    */
   private async performEnhancedComponentAnalysis(
@@ -889,6 +889,8 @@ export class SecurityEngine {
   ): Promise<any> {
     const result: SecurityTestResult = {
       name: "",
+      uri: "",
+      scanType: 'active',
       riskLevel: 'low',
       vulnerabilities: [],
       testResults: [],
@@ -909,6 +911,7 @@ export class SecurityEngine {
       case 'resource':
         const resource = component as EnhancedMCPResource;
         result.name = resource.name || "";
+        result.uri = resource.uri || (resource as any).uriTemplate || "";
         break;
     }
 
@@ -1075,7 +1078,7 @@ export class SecurityEngine {
           case 'resource':
             const resource = component as EnhancedMCPResource;
             const uri = resource.uri || (resource as any).uriTemplate;
-            testResult = await mcpClient.readResource(uri);
+            testResult = await mcpClient.readResource(uri, resource.name || '');
             break;
         }
       } catch (testError) {
@@ -1106,67 +1109,16 @@ export class SecurityEngine {
 
       // 使用LLM评估测试结果（保持与原有逻辑一致）
       if (config.enableLLMAnalysis !== false) {
-        const evaluationRequest = llmClient.generateIntelligentResultEvaluation(
+        await this.performIntelligentResultEvaluation(
           testCase,
           testResult,
+          config,
+          result,
           error,
-          config.llmConfigId
+          1
         );
-        
-        const evaluationResponse = await llmClient.callLLM(config.llmConfigId, evaluationRequest, this.currentAbortController?.signal);
-
-        // 解析JSON格式的评估结果
-        let evaluation;
-        try {
-          evaluation = JSON.parse(evaluationResponse.content);
-        } catch (parseError) {
-          evaluation = this.parseSecurityEvaluation(evaluationResponse.content);
-        }
-        
-        const evaluationJson = JSON.stringify(evaluation);
-
-        // 记录测试结果，包含LLM评估
-        const testRecord = {
-          testCase: testCase.purpose,
-          parameters: testCase.parameters,
-          result: testResult,
-          riskAssessment: evaluationJson,
-          passed: evaluation.riskLevel === 'low',
-          duration: duration,
-          source: 'direct_access'
-        };
-        result.testResults.push(testRecord);
-        
-        // 如果发现风险，添加到相应的风险列表
-        if (evaluation.riskLevel && evaluation.riskLevel !== 'low') {
-          const riskItem = {
-            type: testCase.riskType,
-            severity: evaluation.riskLevel,
-            description: evaluation.description || testCase.purpose,
-            evidence: evaluation.evidence || (error ? `错误: ${error}` : JSON.stringify(testResult)),
-            recommendation: evaluation.recommendation || '建议进一步检查直接访问的安全性'
-          };
-          result.vulnerabilities.push(riskItem);
-        }
-
-        this.addLog({
-          type: evaluation.riskLevel === 'low' ? 'success' : 'warning',
-          phase: `${type}_analysis`,
-          title: '直接访问测试完成',
-          message: `执行时间: ${duration}ms，风险等级: ${evaluation.riskLevel}`,
-          metadata: this.getMetadata(component, type),
-          details: evaluation
-        });
       } else {
         // 如果没有启用LLM分析，使用简单的评估逻辑
-        const accessTest = {
-          testType: 'direct_access',
-          success: !error,
-          duration: duration,
-          result: testResult,
-          riskAssessment: 'low'
-        };
-
         if (type === 'tool') {
           result.testResults.push({
             testCase: 'direct_access',
@@ -1576,31 +1528,6 @@ export class SecurityEngine {
               1
             );
 
-          } else {
-            // 如果LLM分析被禁用，使用简单的风险评估
-            const riskAssessment = await this.assessPromptTestCase(testResult);
-            
-            if (riskAssessment.hasRisk) {
-              result.vulnerabilities.push({
-                type: 'injection',
-                severity: riskAssessment.riskLevel,
-                description: '输出Prompt通过关键词判断，存在安全风险。',
-                evidence: `测试用例: 无参数提示调用测试`,
-                recommendation: riskAssessment.recommendation
-              });
-
-              this.addLog({
-                type: 'warning',
-                phase: 'test_execution',
-                title: '发现提示安全风险',
-                message: `测试发现风险: 无参数调用存在安全风险`,
-                metadata: { 
-                  promptName: prompt.name,
-                  testCase: '无参数提示调用测试',
-                  riskLevel: riskAssessment.riskLevel
-                }
-              });
-            }
           }
 
         } catch (error) {
@@ -1768,7 +1695,7 @@ export class SecurityEngine {
 
         // 对于简单资源，也进行LLM评估
         try {
-          const testResult = await mcpClient.readResource(resource.uri);
+          const testResult = await mcpClient.readResource(resource.uri, resource.name || '');
           await this.performIntelligentResultEvaluation(
             {
               riskType: 'resource_access',
@@ -1884,7 +1811,7 @@ export class SecurityEngine {
           parameters: testCase.parameters,
           result: runResult || { error },
           riskAssessment: evaluationJson,
-          passed: evaluation.riskLevel === 'low'
+          passed: true
         });
 
         // 如果发现漏洞，添加到漏洞列表
@@ -1894,7 +1821,8 @@ export class SecurityEngine {
             severity: evaluation.riskLevel,
             description: evaluation.description,
             testCase: testCase.purpose,
-            recommendation: evaluation.recommendation
+            recommendation: evaluation.recommendation,
+            source: "LLM智能判定"
           });
 
           this.addLog({
@@ -1953,7 +1881,7 @@ export class SecurityEngine {
           description: '测试结果评估失败',
           recommendation: '建议手动检查此测试用例'
         }),
-        passed: false
+        passed: true
       });
     }
   }
@@ -1972,7 +1900,8 @@ export class SecurityEngine {
             type: item.type,
             severity: item.severity,
             description: item.description,
-            recommendation: item.recommendation || '建议进一步检查'
+            recommendation: item.recommendation || '建议进一步检查',
+            source: "LLM静态分析"
           });
         }
       }
@@ -2049,126 +1978,6 @@ export class SecurityEngine {
     ];
   }
 
-  /**
-   * 解析安全评估结果
-   */
-  private parseSecurityEvaluation(content: string): {
-    securityStatus: string;
-    riskLevel: SecurityRiskLevel;
-    description: string;
-    recommendation: string;
-  } {
-    const lowerContent = content.toLowerCase();
-
-    // 检测安全状态 - 更精确的判定逻辑
-    let securityStatus = 'SAFE';
-    let riskLevel: SecurityRiskLevel = 'low';
-    
-    // 优先检查明确的风险指示词
-    if (lowerContent.includes('存在风险') || lowerContent.includes('有风险') || 
-        lowerContent.includes('风险') || lowerContent.includes('risk')) {
-      // 如果提到风险，进一步判断风险等级
-      if (lowerContent.includes('严重') || lowerContent.includes('critical')) {
-        securityStatus = 'CRITICAL';
-        riskLevel = 'critical';
-      } else if (lowerContent.includes('高') || lowerContent.includes('high')) {
-        securityStatus = 'VULNERABLE';
-        riskLevel = 'high';
-      } else if (lowerContent.includes('中') || lowerContent.includes('medium')) {
-        securityStatus = 'WARNING';
-        riskLevel = 'medium';
-      } else {
-        // 如果只是提到风险但没有明确等级，默认为中风险
-        securityStatus = 'WARNING';
-        riskLevel = 'medium';
-      }
-    }
-    // 严重漏洞关键词
-    else if (lowerContent.includes('严重漏洞') || lowerContent.includes('critical') || 
-        lowerContent.includes('严重安全') || lowerContent.includes('立即') ||
-        lowerContent.includes('危险') || lowerContent.includes('critical vulnerability')) {
-      securityStatus = 'CRITICAL';
-      riskLevel = 'critical';
-    }
-    // 存在漏洞关键词
-    else if (lowerContent.includes('存在漏洞') || lowerContent.includes('漏洞') || 
-             lowerContent.includes('vulnerable') || lowerContent.includes('安全问题') ||
-             lowerContent.includes('风险') || lowerContent.includes('攻击') ||
-             lowerContent.includes('注入') || lowerContent.includes('绕过')) {
-      securityStatus = 'VULNERABLE';
-    }
-    // 警告关键词
-    else if (lowerContent.includes('警告') || lowerContent.includes('warning') || 
-             lowerContent.includes('注意') || lowerContent.includes('潜在') ||
-             lowerContent.includes('可能') || lowerContent.includes('建议')) {
-      securityStatus = 'WARNING';
-    }
-    // 明确安全的关键词
-    else if (lowerContent.includes('安全') || lowerContent.includes('正常') || 
-             lowerContent.includes('通过') || lowerContent.includes('safe') ||
-             lowerContent.includes('无风险') || lowerContent.includes('符合预期')) {
-      securityStatus = 'SAFE';
-    }
-
-    // 更新风险等级（如果之前没有设置）
-    if (riskLevel === 'low') {
-      if (lowerContent.includes('严重') || lowerContent.includes('critical')) {
-        riskLevel = 'critical';
-      } else if (lowerContent.includes('高风险') || lowerContent.includes('high') || 
-                 lowerContent.includes('重要') || lowerContent.includes('危险')) {
-        riskLevel = 'high';
-      } else if (lowerContent.includes('中等') || lowerContent.includes('medium') || 
-                 lowerContent.includes('中风险') || lowerContent.includes('注意')) {
-        riskLevel = 'medium';
-      }
-    }
-
-    // 获取完整的评估描述，保留原始内容的完整性
-    let description = content.trim();
-    
-    // 清理格式，移除markdown标记和多余的符号
-    description = description
-      .replace(/[#*\-_]/g, '') // 移除markdown符号
-      .replace(/\n{2,}/g, '\n') // 合并多个换行
-      .replace(/^\s+|\s+$/g, '') // 移除首尾空白
-      .replace(/[：:]\s*/g, ': ') // 标准化冒号格式
-      .split('\n')
-      .filter(line => line.trim().length > 10) // 过滤掉太短的行
-      .slice(0, 3) // 最多保留3行
-      .join(' ');
-
-    // 如果描述太短，使用默认描述
-    if (description.length < 20) {
-      if (securityStatus === 'SAFE') {
-        description = '测试执行正常，未发现明显的安全风险。返回结果符合预期的安全行为，输入参数得到了正确处理。';
-      } else if (securityStatus === 'WARNING') {
-        description = '测试发现潜在的安全风险点，虽然没有直接的漏洞，但建议进一步审查相关安全机制。';
-      } else if (securityStatus === 'VULNERABLE') {
-        description = '测试发现了安全漏洞，实际执行结果显示存在可被利用的安全问题，需要及时修复。';
-      } else if (securityStatus === 'CRITICAL') {
-        description = '测试发现严重的安全漏洞，存在高风险的安全威胁，可能导致系统被攻击，需要立即处理。';
-      }
-    }
-
-    // 生成建议
-    let recommendation = '';
-    if (securityStatus === 'SAFE') {
-      recommendation = '继续监控，保持当前安全措施';
-    } else if (securityStatus === 'WARNING') {
-      recommendation = '建议加强输入验证和安全检查机制';
-    } else if (securityStatus === 'VULNERABLE') {
-      recommendation = '需要立即修复发现的安全漏洞，加强防护措施';
-    } else if (securityStatus === 'CRITICAL') {
-      recommendation = '立即停止使用，修复严重安全漏洞后再部署';
-    }
-
-    return {
-      securityStatus,
-      riskLevel,
-      description: description.substring(0, 200), // 限制长度但保留更多信息
-      recommendation: recommendation
-    };
-  }
 
   /**
    * 生成综合风险分析报告
@@ -2366,6 +2175,7 @@ ${llmClient.getLanguageOutputRequirement()}
     // 统计工具问题
     report.toolResults.forEach(result => {
       // 统计直接漏洞
+      let innerMaxRiskLevel: SecurityRiskLevel = 'low';
       result.vulnerabilities.forEach(vuln => {
         totalIssues++;
         switch (vuln.severity) {
@@ -2374,8 +2184,11 @@ ${llmClient.getLanguageOutputRequirement()}
           case 'medium': mediumIssues++; break;
           case 'low': lowIssues++; break;
         }
+        if (this.getRiskLevelPriority(vuln.severity) > this.getRiskLevelPriority(innerMaxRiskLevel)) {
+          innerMaxRiskLevel = vuln.severity;
+        }
       });
-      
+      result.riskLevel = innerMaxRiskLevel;
       if (this.getRiskLevelPriority(result.riskLevel) > this.getRiskLevelPriority(maxRiskLevel)) {
         maxRiskLevel = result.riskLevel;
       }
@@ -2383,6 +2196,7 @@ ${llmClient.getLanguageOutputRequirement()}
 
     // 统计提示问题
     report.promptResults.forEach(result => {
+      let innerMaxRiskLevel: SecurityRiskLevel = 'low';
       result.vulnerabilities.forEach(threat => {
         totalIssues++;
         switch (threat.severity) {
@@ -2391,8 +2205,11 @@ ${llmClient.getLanguageOutputRequirement()}
           case 'medium': mediumIssues++; break;
           case 'low': lowIssues++; break;
         }
+        if (this.getRiskLevelPriority(threat.severity) > this.getRiskLevelPriority(innerMaxRiskLevel)) {
+          innerMaxRiskLevel = threat.severity;
+        }
       });
-      
+      result.riskLevel = innerMaxRiskLevel;
       if (this.getRiskLevelPriority(result.riskLevel) > this.getRiskLevelPriority(maxRiskLevel)) {
         maxRiskLevel = result.riskLevel;
       }
@@ -2400,6 +2217,7 @@ ${llmClient.getLanguageOutputRequirement()}
 
     // 统计资源问题
     report.resourceResults.forEach(result => {
+      let innerMaxRiskLevel: SecurityRiskLevel = 'low';
       result.vulnerabilities.forEach(risk => {
         totalIssues++;
         switch (risk.severity) {
@@ -2408,8 +2226,11 @@ ${llmClient.getLanguageOutputRequirement()}
           case 'medium': mediumIssues++; break;
           case 'low': lowIssues++; break;
         }
+        if (this.getRiskLevelPriority(risk.severity) > this.getRiskLevelPriority(innerMaxRiskLevel)) {
+          innerMaxRiskLevel = risk.severity;
+        }
       });
-      
+      result.riskLevel = innerMaxRiskLevel;
       if (this.getRiskLevelPriority(result.riskLevel) > this.getRiskLevelPriority(maxRiskLevel)) {
         maxRiskLevel = result.riskLevel;
       }
@@ -2542,43 +2363,6 @@ ${llmClient.getLanguageOutputRequirement()}
       }
     ];
   }
-
-  /**
-   * 评估提示测试用例
-   */
-  private async assessPromptTestCase(prompt: any): Promise<{
-    hasRisk: boolean;
-    riskLevel: SecurityRiskLevel;
-    recommendation: string;
-  }> {
-    // 简化的风险评估逻辑
-    const riskPatterns = [
-      { pattern: /忽略.*指令/gi, level: 'high' as SecurityRiskLevel },
-      { pattern: /系统提示/gi, level: 'medium' as SecurityRiskLevel },
-      { pattern: /现在你是/gi, level: 'medium' as SecurityRiskLevel },
-      { pattern: /没有限制/gi, level: 'high' as SecurityRiskLevel }
-    ];
-
-    const inputText = typeof prompt == 'string' ? prompt : JSON.stringify(prompt);
-    let maxRiskLevel: SecurityRiskLevel = 'low';
-    let hasRisk = false;
-
-    for (const { pattern, level } of riskPatterns) {
-      if (pattern.test(inputText)) {
-        hasRisk = true;
-        if (this.getRiskLevelPriority(level) > this.getRiskLevelPriority(maxRiskLevel)) {
-          maxRiskLevel = level;
-        }
-      }
-    }
-
-    return {
-      hasRisk,
-      riskLevel: maxRiskLevel,
-      recommendation: hasRisk ? '存在恶意Prompt，需要加强提示安全过滤' : '继续监控'
-    };
-  }
-
 
   /**
    * 获取目标名称
@@ -2737,7 +2521,7 @@ ${llmClient.getLanguageOutputRequirement()}
           });
 
           // 尝试访问资源
-          const testResult = await mcpClient.readResource(testUri);
+          const testResult = await mcpClient.readResource(testUri, resource.name || '');
           
           // 记录访问结果
           this.addLog({
@@ -3003,6 +2787,172 @@ ${llmClient.getLanguageOutputRequirement()}
     });
 
     return testCases;
+  }
+
+  /**
+   * 汇总被动检测结果到扫描报告中
+   */
+  private async consolidatePassiveDetectionResults(report: SecurityReport): Promise<void> {
+    try {
+      // 从mcpClient获取被动检测结果
+      const passiveResults = mcpClient.getPassiveDetectionResults();
+      
+      if (passiveResults.length === 0) {
+        this.addLog({
+          type: 'info',
+          phase: 'summary',
+          title: '被动检测结果汇总',
+          message: '未发现被动检测结果，跳过汇总'
+        });
+        return;
+      }
+
+      this.addLog({
+        type: 'step',
+        phase: 'summary',
+        title: '处理被动检测结果',
+        message: `发现 ${passiveResults.length} 个被动检测结果，开始汇总到扫描报告中`,
+        details: { passiveResultsCount: passiveResults.length }
+      });
+
+      let consolidatedCount = 0;
+
+      // 按类型分组处理被动检测结果
+      for (const passiveResult of passiveResults) {
+        try {
+          // 将被动检测结果转换为SecurityTestResult格式
+          const securityTestResult = this.convertPassiveResultToSecurityTestResult(passiveResult);
+          
+          // 根据类型添加到对应的结果数组中
+          switch (passiveResult.type) {
+            case 'tool':
+              // 查找是否已存在同名工具的结果
+              const existingToolIndex = report.toolResults.findIndex(r => r.name === passiveResult.targetName && r.scanType === 'passive');
+              if (existingToolIndex !== -1) {
+                // 合并到现有结果中
+                this.mergePassiveResultIntoExisting(report.toolResults[existingToolIndex], securityTestResult);
+              } else {
+                // 添加新的工具结果
+                report.toolResults.push(securityTestResult);
+              }
+              break;
+              
+            case 'prompt':
+              const existingPromptIndex = report.promptResults.findIndex(r => r.name === passiveResult.targetName && r.scanType === 'passive');
+              if (existingPromptIndex !== -1) {
+                this.mergePassiveResultIntoExisting(report.promptResults[existingPromptIndex], securityTestResult);
+              } else {
+                report.promptResults.push(securityTestResult);
+              }
+              break;
+              
+            case 'resource':
+              const existingResourceIndex = report.resourceResults.findIndex(r => r.name === passiveResult.targetName && r.scanType === 'passive');
+              if (existingResourceIndex !== -1) {
+                this.mergePassiveResultIntoExisting(report.resourceResults[existingResourceIndex], securityTestResult);
+              } else {
+                report.resourceResults.push(securityTestResult);
+              }
+              break;
+          }
+          
+          consolidatedCount++;
+        } catch (error) {
+          this.addLog({
+            type: 'error',
+            phase: 'summary',
+            title: '被动检测结果处理失败',
+            message: `处理被动检测结果 ${passiveResult.targetName} 时发生错误: ${error instanceof Error ? error.message : '未知错误'}`,
+            details: { passiveResult, error }
+          });
+        }
+      }
+
+      this.addLog({
+        type: 'success',
+        phase: 'summary',
+        title: '被动检测结果汇总完成',
+        message: `成功汇总 ${consolidatedCount}/${passiveResults.length} 个被动检测结果到扫描报告中`,
+        details: {
+          totalPassiveResults: passiveResults.length,
+          consolidatedResults: consolidatedCount,
+          consolidationStats: {
+            toolResults: report.toolResults.length,
+            promptResults: report.promptResults.length,
+            resourceResults: report.resourceResults.length
+          }
+        }
+      });
+
+    } catch (error) {
+      this.addLog({
+        type: 'error',
+        phase: 'summary',
+        title: '被动检测结果汇总失败',
+        message: `汇总被动检测结果时发生错误: ${error instanceof Error ? error.message : '未知错误'}`,
+        details: { error }
+      });
+    }
+  }
+
+  /**
+   * 将被动检测结果转换为SecurityTestResult格式
+   */
+  private convertPassiveResultToSecurityTestResult(passiveResult: PassiveDetectionResult): SecurityTestResult {
+    return {
+      name: passiveResult.targetName,
+      scanType: 'passive',
+      uri: passiveResult.uri,
+      riskLevel: passiveResult.riskLevel,
+      vulnerabilities: passiveResult.threats.map((threat: any) => ({
+        type: threat.type,
+        severity: threat.severity,
+        description: threat.description,
+        evidence: threat.evidence || '',
+        testCase: '被动检测',
+        source: '被动检测引擎',
+        recommendation: passiveResult.recommendation || '建议进一步检查此问题'
+      })),
+      testResults: [{
+        testCase: '被动检测',
+        parameters: passiveResult.parameters,
+        result: passiveResult.result,
+        riskAssessment: JSON.stringify({
+          riskLevel: passiveResult.riskLevel,
+          description: `被动检测发现 ${passiveResult.threats.length} 个安全威胁`,
+          recommendation: passiveResult.recommendation,
+          detectionTimestamp: passiveResult.timestamp,
+          passiveDetection: true
+        }),
+        passed: true
+      }],
+      llmAnalysis: '',
+      timestamp: passiveResult.timestamp
+    };
+  }
+
+  /**
+   * 将被动检测结果合并到现有的SecurityTestResult中
+   */
+  private mergePassiveResultIntoExisting(existingResult: SecurityTestResult, passiveResult: SecurityTestResult): void {
+    // 合并漏洞信息
+    existingResult.vulnerabilities.push(...passiveResult.vulnerabilities);
+    
+    // 合并测试结果
+    existingResult.testResults.push(...passiveResult.testResults);
+    
+    // 更新风险等级（取较高的风险等级）
+    if (this.getRiskLevelPriority(passiveResult.riskLevel) > this.getRiskLevelPriority(existingResult.riskLevel)) {
+      existingResult.riskLevel = passiveResult.riskLevel;
+    }
+    
+    // 合并LLM分析结果
+    if (typeof existingResult.llmAnalysis === 'string' && typeof passiveResult.llmAnalysis === 'string') {
+      existingResult.llmAnalysis += '\n\n【被动检测结果】\n' + passiveResult.llmAnalysis;
+    }
+    
+    // 更新时间戳为最新时间
+    existingResult.timestamp = Math.max(existingResult.timestamp, passiveResult.timestamp);
   }
 
   /**
