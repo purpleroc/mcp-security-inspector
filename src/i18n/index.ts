@@ -409,6 +409,38 @@ export interface TranslationKey {
     logsExported: string;
     logsCleared: string;
     riskAnalysisGuide: string;
+    // SecurityPanel新增的翻译字段
+    activeScanResults: string;
+    passiveDetectionResults: string;
+    noDetectionResults: string;
+    saveDetectionResults: string;
+    passiveDetectionStats: string;
+    totalDetectionCount: string;
+    noRecommendations: string;
+    passiveDetectionThreats: string;
+    realTimeUpdate: string;
+    // activeScan 和 passiveDetection 已在history中定义
+    combined: string;
+    includeActiveAndPassive: string;
+    activeResultsOnly: string;
+    passiveResultsOnly: string;
+    stopped: string;
+    passiveResultsRealtime: string;
+    saveResultsHint: string;
+    activeAndPassiveHint: string;
+    onlyPassiveDetection: string;
+    onlyActiveScan: string;
+    detectionResultsManagement: string;
+    accessTestResults: string;
+    detectedThreatsCount: string;
+    totalTestsCount: string;
+    mainRiskList: string;
+    totalRiskCount: string;
+    detectionTime: string;
+    riskEvidence: string;
+    riskDescription: string;
+    alertSource: string;
+    llmIntelligentAnalysis: string;
     // 检测历史相关
     history: {
       title: string;

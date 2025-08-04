@@ -1822,7 +1822,7 @@ export class SecurityEngine {
             description: evaluation.description,
             testCase: testCase.purpose,
             recommendation: evaluation.recommendation,
-            source: "LLM智能判定"
+            source: t().security.llmIntelligentAnalysis
           });
 
           this.addLog({
@@ -1901,7 +1901,7 @@ export class SecurityEngine {
             severity: item.severity,
             description: item.description,
             recommendation: item.recommendation || '建议进一步检查',
-            source: "LLM静态分析"
+            source: t().security.llmStaticAnalysis
           });
         }
       }
