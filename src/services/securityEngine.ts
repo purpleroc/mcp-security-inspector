@@ -2587,6 +2587,14 @@ ${llmClient.getLanguageOutputRequirement()}
             },
             details: { error: errorMessage }
           });
+
+          result.testResults.push({
+            testCase: JSON.stringify(testCase),
+            parameters: testCase.parameters,
+            result: { error: errorMessage },
+            riskAssessment: "error",
+            passed: false
+          })
         }
       }
     } catch (error) {

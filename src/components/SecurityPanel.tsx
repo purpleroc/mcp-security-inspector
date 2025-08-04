@@ -799,21 +799,6 @@ const SecurityPanel: React.FC = () => {
       render: (vulnerabilities: any[], record: any) => {
 
         let totalVulnerabilities = vulnerabilities?.length || 0;
-        
-        // 如果有LLM静态分析，也计算其中的漏洞数量
-        if (record.llmAnalysis) {
-          try {
-            const analysis = typeof record.llmAnalysis === 'string' 
-              ? JSON.parse(record.llmAnalysis) 
-              : record.llmAnalysis;
-            if (analysis && Array.isArray(analysis)) {
-              totalVulnerabilities += analysis.length;
-            }
-          } catch (error) {
-            // 解析失败时忽略
-          }
-        }
-        
         return totalVulnerabilities;
       },
     },
@@ -982,9 +967,119 @@ const SecurityPanel: React.FC = () => {
                 <Text>检测时间: {new Date(tool.timestamp).toLocaleString()}</Text>
               </div>
             )}
-            
+             {/* 显示主要风险列表 */}
+          {tool.vulnerabilities && tool.vulnerabilities.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <Title level={5}>主要风险列表</Title>
+              <div style={{ marginBottom: 16 }}>
+                <Text type="secondary">
+                  总风险数: {tool.vulnerabilities.length}
+                </Text>
+              </div>
+              {tool.vulnerabilities.map((risk: any, index: number) => (
+                <Card 
+                  key={index} 
+                  size="small" 
+                  style={{ 
+                    marginBottom: 12,
+                    border: `2px solid ${getRiskLevelColor(risk.severity)}`,
+                    borderRadius: '8px',
+                    backgroundColor: '#fafafa'
+                  }}
+                  title={
+                    <Space>
+                      <Tag color="blue" style={{ fontSize: '12px' }}>
+                        #{index + 1}
+                      </Tag>
+                      <Text strong style={{ fontSize: '14px' }}>
+                        {tool.name} - {risk.type}
+                      </Text>
+                      <Tag color={getRiskLevelColor(risk.severity)}>
+                        {t.security.riskLevels[risk.severity as keyof typeof t.security.riskLevels] || risk.severity}
+                      </Tag>
+                    </Space>
+                  }
+                >
+                  <div style={{ fontSize: '13px', marginBottom: 12 }}>
+                    <div style={{ marginBottom: 8 }}>
+                      <Text strong>{t.security.description}:</Text>
+                      <div style={{ 
+                        marginTop: 4,
+                        color: '#666',
+                        fontSize: '12px',
+                        lineHeight: '1.4'
+                      }}>
+                        {risk.description}
+                      </div>
+                    </div>
+                    
+                    {risk.evidence && (
+                      <div style={{ marginBottom: 8 }}>
+                        <Text strong>风险证据:</Text>
+                        <div style={{ 
+                          backgroundColor: '#f5f5f5', 
+                          padding: '8px 12px', 
+                          borderRadius: '6px',
+                          fontFamily: 'monospace',
+                          fontSize: '12px',
+                          border: '1px solid #e8e8e8',
+                          maxHeight: '120px',
+                          overflow: 'auto',
+                          marginTop: 4
+                        }}>
+                          {risk.evidence}
+                        </div>
+                      </div>
+                    )}
+
+                    {risk.testCase && (
+                      <div style={{ marginBottom: 8 }}>
+                        <Text strong>测试用例:</Text>
+                        <div style={{ 
+                          backgroundColor: '#f5f5f5', 
+                          padding: '8px 12px', 
+                          borderRadius: '6px',
+                          fontFamily: 'monospace',
+                          fontSize: '12px',
+                          border: '1px solid #e8e8e8',
+                          maxHeight: '120px',
+                          overflow: 'auto',
+                          marginTop: 4
+                        }}>
+                          {risk.testCase}
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div>
+                      <Text strong>{t.security.recommendation}:</Text>
+                      <div style={{ 
+                        marginTop: 4,
+                        color: '#666',
+                        fontSize: '12px',
+                        lineHeight: '1.4'
+                      }}>
+                        {risk.recommendation}
+                      </div>
+                    </div>
+                    <div>
+                      <Text strong>告警来源:</Text>
+                      <div style={{ 
+                        marginTop: 4,
+                        color: '#666',
+                        fontSize: '12px',
+                        lineHeight: '1.4'
+                      }}>
+                        {risk.source}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
             {/* 显示调用参数 */}
-            {(tool.scanType === 'passive' && tool.passiveData && tool.passiveData.parameters) || 
+            {/* {(tool.scanType === 'passive' && tool.passiveData && tool.passiveData.parameters) || 
              (tool.scanType !== 'passive' && tool.testResults && tool.testResults.length > 0 && tool.testResults[0].parameters) ? (
               <div style={{ marginTop: 16 }}>
                 <Title level={5}>调用参数</Title>
@@ -1006,10 +1101,10 @@ const SecurityPanel: React.FC = () => {
                   </pre>
                 </div>
               </div>
-            ) : null}
+            ) : null} */}
 
             {/* 显示返回结果 */}
-            {(tool.scanType === 'passive' && tool.passiveData && tool.passiveData.result) || 
+            {/* {(tool.scanType === 'passive' && tool.passiveData && tool.passiveData.result) || 
              (tool.scanType !== 'passive' && tool.testResults && tool.testResults.length > 0 && tool.testResults[0].result) ? (
               <div style={{ marginTop: 16 }}>
                 <Title level={5}>返回结果</Title>
@@ -1031,7 +1126,7 @@ const SecurityPanel: React.FC = () => {
                   </pre>
                 </div>
               </div>
-            ) : null}
+            ) : null} */}
           </div>
 
           {/* 显示被动检测威胁详情 */}
@@ -1435,8 +1530,119 @@ const SecurityPanel: React.FC = () => {
               </div>
             )}
             
+          {/* 显示主要风险列表 */}
+          {prompt.vulnerabilities && prompt.vulnerabilities.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <Title level={5}>主要风险列表</Title>
+              <div style={{ marginBottom: 16 }}>
+                <Text type="secondary">
+                  总风险数: {prompt.vulnerabilities.length}
+                </Text>
+              </div>
+              {prompt.vulnerabilities.map((risk: any, index: number) => (
+                <Card 
+                  key={index} 
+                  size="small" 
+                  style={{ 
+                    marginBottom: 12,
+                    border: `2px solid ${getRiskLevelColor(risk.severity)}`,
+                    borderRadius: '8px',
+                    backgroundColor: '#fafafa'
+                  }}
+                  title={
+                    <Space>
+                      <Tag color="blue" style={{ fontSize: '12px' }}>
+                        #{index + 1}
+                      </Tag>
+                      <Text strong style={{ fontSize: '14px' }}>
+                        {prompt.name} - {risk.type}
+                      </Text>
+                      <Tag color={getRiskLevelColor(risk.severity)}>
+                        {t.security.riskLevels[risk.severity as keyof typeof t.security.riskLevels] || risk.severity}
+                      </Tag>
+                    </Space>
+                  }
+                >
+                  <div style={{ fontSize: '13px', marginBottom: 12 }}>
+                    <div style={{ marginBottom: 8 }}>
+                      <Text strong>{t.security.description}:</Text>
+                      <div style={{ 
+                        marginTop: 4,
+                        color: '#666',
+                        fontSize: '12px',
+                        lineHeight: '1.4'
+                      }}>
+                        {risk.description}
+                      </div>
+                    </div>
+                    
+                    {risk.evidence && (
+                      <div style={{ marginBottom: 8 }}>
+                        <Text strong>风险证据:</Text>
+                        <div style={{ 
+                          backgroundColor: '#f5f5f5', 
+                          padding: '8px 12px', 
+                          borderRadius: '6px',
+                          fontFamily: 'monospace',
+                          fontSize: '12px',
+                          border: '1px solid #e8e8e8',
+                          maxHeight: '120px',
+                          overflow: 'auto',
+                          marginTop: 4
+                        }}>
+                          {risk.evidence}
+                        </div>
+                      </div>
+                    )}
+
+                    {risk.testCase && (
+                      <div style={{ marginBottom: 8 }}>
+                        <Text strong>测试用例:</Text>
+                        <div style={{ 
+                          backgroundColor: '#f5f5f5', 
+                          padding: '8px 12px', 
+                          borderRadius: '6px',
+                          fontFamily: 'monospace',
+                          fontSize: '12px',
+                          border: '1px solid #e8e8e8',
+                          maxHeight: '120px',
+                          overflow: 'auto',
+                          marginTop: 4
+                        }}>
+                          {risk.testCase}
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div>
+                      <Text strong>{t.security.recommendation}:</Text>
+                      <div style={{ 
+                        marginTop: 4,
+                        color: '#666',
+                        fontSize: '12px',
+                        lineHeight: '1.4'
+                      }}>
+                        {risk.recommendation}
+                      </div>
+                    </div>
+                    <div>
+                      <Text strong>告警来源:</Text>
+                      <div style={{ 
+                        marginTop: 4,
+                        color: '#666',
+                        fontSize: '12px',
+                        lineHeight: '1.4'
+                      }}>
+                        {risk.source}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
             {/* 显示调用参数 */}
-            {(prompt.scanType === 'passive' && prompt.passiveData && prompt.passiveData.parameters) || 
+            {/* {(prompt.scanType === 'passive' && prompt.passiveData && prompt.passiveData.parameters) || 
              (prompt.scanType !== 'passive' && prompt.threats && prompt.threats.length > 0 && prompt.threats[0].evidence) ? (
               <div style={{ marginTop: 16 }}>
                 <Title level={5}>调用参数</Title>
@@ -1458,10 +1664,10 @@ const SecurityPanel: React.FC = () => {
                   </pre>
                 </div>
               </div>
-            ) : null}
+            ) : null} */}
 
             {/* 显示返回结果 */}
-            {(prompt.scanType === 'passive' && prompt.passiveData && prompt.passiveData.result) || 
+            {/* {(prompt.scanType === 'passive' && prompt.passiveData && prompt.passiveData.result) || 
              (prompt.scanType !== 'passive' && prompt.threats && prompt.threats.length > 0 && prompt.threats[0].evidence) ? (
               <div style={{ marginTop: 16 }}>
                 <Title level={5}>返回结果</Title>
@@ -1483,8 +1689,8 @@ const SecurityPanel: React.FC = () => {
                   </pre>
                 </div>
               </div>
-            ) : null}
-          </div>
+            ) : null} */}
+          </div> 
 
           {/* 显示威胁信息 */}
           {prompt.threats && prompt.threats.length > 0 && (
@@ -2835,21 +3041,21 @@ const SecurityPanel: React.FC = () => {
                               key: 'threatCount',
                               align: 'center' as const,
                               render: (threats: any[], record: any) => {
-                                let totalThreats = threats?.length || 0;
+                                let totalThreats = record.vulnerabilities?.length || 0;
                                 
-                                // 如果有LLM静态分析，也计算其中的威胁数量
-                                if (record.llmAnalysis) {
-                                  try {
-                                    const analysis = typeof record.llmAnalysis === 'string' 
-                                      ? JSON.parse(record.llmAnalysis) 
-                                      : record.llmAnalysis;
-                                    if (analysis.threats && Array.isArray(analysis.threats)) {
-                                      totalThreats += analysis.length;
-                                    }
-                                  } catch (error) {
-                                    // 解析失败时忽略
-                                  }
-                                }
+                                // // 如果有LLM静态分析，也计算其中的威胁数量
+                                // if (record.llmAnalysis) {
+                                //   try {
+                                //     const analysis = typeof record.llmAnalysis === 'string' 
+                                //       ? JSON.parse(record.llmAnalysis) 
+                                //       : record.llmAnalysis;
+                                //     if (analysis.threats && Array.isArray(analysis.threats)) {
+                                //       totalThreats += analysis.length;
+                                //     }
+                                //   } catch (error) {
+                                //     // 解析失败时忽略
+                                //   }
+                                // }
                                 
                                 return totalThreats;
                               },
@@ -2905,7 +3111,7 @@ const SecurityPanel: React.FC = () => {
                               title: t.security.resourceDisplayName,
                               dataIndex: 'resourceUri',
                               key: 'resourceUri',
-                                                             render: (uri: string, record: any) => {
+                                 render: (uri: string, record: any) => {
                                  const resourceInfo = getResourceDisplayInfo(record);
                                  return (
                                    <div>
@@ -2946,24 +3152,24 @@ const SecurityPanel: React.FC = () => {
                               render: (risks: any[], record: any) => {
                                 let totalRisks = record.vulnerabilities?.length || 0;
                                 
-                                // 如果有访问测试结果，也计算其中的数量
-                                if (record.accessTests && Array.isArray(record.accessTests)) {
-                                  totalRisks += record.accessTests.length;
-                                }
+                                // // 如果有访问测试结果，也计算其中的数量
+                                // if (record.accessTests && Array.isArray(record.accessTests)) {
+                                //   totalRisks += record.accessTests.length;
+                                // }
                                 
-                                // 如果有LLM静态分析，也计算其中的风险数量
-                                if (record.llmAnalysis) {
-                                  try {
-                                    const analysis = typeof record.llmAnalysis === 'string' 
-                                      ? JSON.parse(record.llmAnalysis) 
-                                      : record.llmAnalysis;
-                                    if (Array.isArray(analysis)) {
-                                      totalRisks += analysis.length;
-                                    }
-                                  } catch (error) {
-                                    // 解析失败时忽略
-                                  }
-                                }
+                                // // 如果有LLM静态分析，也计算其中的风险数量
+                                // if (record.llmAnalysis) {
+                                //   try {
+                                //     const analysis = typeof record.llmAnalysis === 'string' 
+                                //       ? JSON.parse(record.llmAnalysis) 
+                                //       : record.llmAnalysis;
+                                //     if (Array.isArray(analysis)) {
+                                //       totalRisks += analysis.length;
+                                //     }
+                                //   } catch (error) {
+                                //     // 解析失败时忽略
+                                //   }
+                                // }
                                 
                                 return totalRisks;
                               },
