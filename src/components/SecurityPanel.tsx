@@ -1507,7 +1507,7 @@ const SecurityPanel: React.FC = () => {
 
   const showPromptDetail = (prompt: any) => {
     Modal.info({
-      title: `${t.security.promptSecurityAnalysis}: ${prompt.promptName}`,
+      title: `${t.security.promptSecurityAnalysis}: ${prompt.name}`,
       width: 900,
       content: (
         <div>
@@ -3014,7 +3014,7 @@ const SecurityPanel: React.FC = () => {
                               key: 'promptName',
                               render: (name: string, record: any) => (
                                 <Space>
-                                  <span>{name}</span>
+                                  <span>{record.name}</span>
                                   {record.scanType === 'passive' ? (
                                     <Tag color="blue">{t.security.history.passiveDetection}</Tag>
                                   ) : (
