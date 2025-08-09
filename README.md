@@ -19,7 +19,8 @@
 <a id="chinese"></a>
 ## 🚀 项目概述
 
-MCP Security Inspector 是专为 Model Context Protocol (MCP) 服务器设计的AI增强安全检测Chrome扩展。该项目结合主动扫描和被动监控两种方式，深度集成多种LLM服务（OpenAI GPT、Claude、Gemini等），让AI直接参与测试样例的生成和安全分析，确保安全检测既全面又实时。
+MCP Security Inspector 是专为 Model Context Protocol (MCP) 服务器设计的AI增强安全检测Chrome扩展。该项目结合主动扫描和被动监控两种方式，深度集成多种LLM服务（OpenAI GPT、Claude、Gemini等），让AI直接参与测试样例的生成和安全分析，确保安全检测既全面又实时。[《MCP Security Inspector：AI驱动的MCP协议安全检测工具》](https://mp.weixin.qq.com/s/kTlgse3SPNL3AkjaGt-QHg)
+
 
 ### ✨ 核心特性
 
@@ -262,6 +263,11 @@ class CustomLLMProvider implements LLMProvider {
 3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 创建Pull Request
+
+## 公众号
+![qrcode_for_gh_d03233d4aa7d_258](https://github.com/user-attachments/assets/bb1ec96d-1be9-4141-bd6f-690d760354f8)
+
+欢迎关注，一起交流...
 
 
 ---
