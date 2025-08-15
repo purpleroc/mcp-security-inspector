@@ -84,51 +84,98 @@ export const connectToServer = createAsyncThunk(
       mcpClient.configure(config);
       const serverInfo = await mcpClient.connect();
       
-      // 连接成功后，独立获取各种数据（避免一个失败导致全部失败）
+      // 连接成功后，使用MCPClient已经预处理好的组件数据
       let hasAnyData = false;
       
-      // 获取工具列表
-      try {
-        const tools = await mcpClient.listTools();
-        console.log('获取工具列表成功:', tools.length, '个工具');
+      // 检查组件是否已初始化
+      if (mcpClient.isComponentsInitialized()) {
+        console.log('使用MCPClient已预处理的组件数据');
+        
+        // 获取已预处理的数据
+        const enhancedTools = mcpClient.getEnhancedTools();
+        const enhancedResources = mcpClient.getEnhancedResources();
+        const enhancedResourceTemplates = mcpClient.getEnhancedResourceTemplates();
+        const enhancedPrompts = mcpClient.getEnhancedPrompts();
+        
+        // 转换为Redux store需要的格式（去掉增强信息）
+        const tools = enhancedTools.map(tool => ({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema
+        }));
+        
+        const resources = enhancedResources.map(resource => ({
+          name: resource.name,
+          uri: resource.uri,
+          description: resource.description,
+          mimeType: resource.mimeType
+        }));
+        
+        const resourceTemplates = enhancedResourceTemplates.map(template => ({
+          name: template.name,
+          uri: template.uri,
+          description: template.description,
+          mimeType: template.mimeType
+        }));
+        
+        const prompts = enhancedPrompts.map(prompt => ({
+          name: prompt.name,
+          description: prompt.description,
+          arguments: prompt.arguments
+        }));
+        
+        console.log(`从MCPClient获取预处理数据: ${tools.length}个工具, ${resources.length}个资源, ${resourceTemplates.length}个资源模板, ${prompts.length}个提示`);
+        
+        // 更新Redux store
         dispatch(setTools(tools));
-        if (tools.length > 0) hasAnyData = true;
-      } catch (error) {
-        console.warn('获取工具列表失败:', error);
-        dispatch(setTools([]));
-      }
-      
-      // 获取资源列表
-      try {
-        const resources = await mcpClient.listResources();
-        console.log('获取资源列表成功:', resources.length, '个资源');
         dispatch(setResources(resources));
-        if (resources.length > 0) hasAnyData = true;
-      } catch (error) {
-        console.warn('获取资源列表失败:', error);
-        dispatch(setResources([]));
-      }
-      
-      // 获取资源模板列表
-      try {
-        const resourceTemplates = await mcpClient.listResourceTemplates();
-        console.log('获取资源模板列表成功:', resourceTemplates.length, '个模板');
         dispatch(setResourceTemplates(resourceTemplates));
-        if (resourceTemplates.length > 0) hasAnyData = true;
-      } catch (error) {
-        console.warn('获取资源模板列表失败:', error);
-        dispatch(setResourceTemplates([]));
-      }
-      
-      // 获取提示列表
-      try {
-        const prompts = await mcpClient.listPrompts();
-        console.log('获取提示列表成功:', prompts.length, '个提示');
         dispatch(setPrompts(prompts));
-        if (prompts.length > 0) hasAnyData = true;
-      } catch (error) {
-        console.warn('获取提示列表失败:', error);
-        dispatch(setPrompts([]));
+        
+        hasAnyData = tools.length > 0 || resources.length > 0 || resourceTemplates.length > 0 || prompts.length > 0;
+      } else {
+        console.warn('MCPClient组件未初始化，回退到独立获取');
+        
+        // 回退到独立获取（保持原有逻辑）
+        try {
+          const tools = await mcpClient.listTools();
+          console.log('获取工具列表成功:', tools.length, '个工具');
+          dispatch(setTools(tools));
+          if (tools.length > 0) hasAnyData = true;
+        } catch (error) {
+          console.warn('获取工具列表失败:', error);
+          dispatch(setTools([]));
+        }
+        
+        try {
+          const resources = await mcpClient.listResources();
+          console.log('获取资源列表成功:', resources.length, '个资源');
+          dispatch(setResources(resources));
+          if (resources.length > 0) hasAnyData = true;
+        } catch (error) {
+          console.warn('获取资源列表失败:', error);
+          dispatch(setResources([]));
+        }
+        
+        try {
+          const resourceTemplates = await mcpClient.listResourceTemplates();
+          console.log('获取资源模板列表成功:', resourceTemplates.length, '个模板');
+          dispatch(setResourceTemplates(resourceTemplates));
+          if (resourceTemplates.length > 0) hasAnyData = true;
+        } catch (error) {
+          console.warn('获取资源模板列表失败:', error);
+          dispatch(setResourceTemplates([]));
+        }
+        
+        try {
+          const prompts = await mcpClient.listPrompts();
+          console.log('获取提示列表成功:', prompts.length, '个提示');
+          dispatch(setPrompts(prompts));
+          if (prompts.length > 0) hasAnyData = true;
+        } catch (error) {
+          console.warn('获取提示列表失败:', error);
+          dispatch(setPrompts([]));
+        }
       }
       
       // 根据获取到的数据决定切换到哪个tab
