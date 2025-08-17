@@ -234,6 +234,9 @@ class CustomLLMProvider implements LLMProvider {
 
 ## 📊 更新日志
 
+### v2.0.2
+- ✅ 适配streamable模式MCP服务端
+
 ### v2.0.1 - 统一检测引擎
 - ✅ 引入统一安全检测引擎
 - ✅ 支持工具、提示、资源三种组件类型
