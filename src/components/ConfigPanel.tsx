@@ -4,7 +4,7 @@ import { ApiOutlined, SaveOutlined, DisconnectOutlined } from '@ant-design/icons
 import { useDispatch, useSelector } from 'react-redux';
 import { connectToServer, disconnectFromServer } from '../store/mcpSlice';
 import { RootState } from '../store';
-import { MCPServerConfig } from '../types/mcp';
+import { MCPServerConfig, MCPTransportMode } from '../types/mcp';
 import { storage } from '../utils/storage';
 import AuthConfigComponent from './AuthConfig';
 import { useI18n } from '../hooks/useI18n';
@@ -29,6 +29,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
       form.setFieldsValue({
         name: selectedConfig.name,
         host: selectedConfig.host,
+        transport: selectedConfig.transport,
         ssePath: selectedConfig.ssePath,
         sessionId: selectedConfig.sessionId
       });
@@ -42,9 +43,9 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
       const serverConfig: MCPServerConfig = {
         name: values.name || 'MCP Server', // 如果没有填写名称，使用默认值
         host: values.host,
-        ssePath: values.ssePath,
+        ssePath: values.ssePath, // 两种模式都需要路径
         messagePath: '', // 现在从SSE自动获取，不需要配置
-        transport: 'sse', // 固定为SSE传输方式
+        transport: values.transport as MCPTransportMode, // 使用选择的传输方式
         sessionId: values.sessionId || undefined,
         headers: values.headers ? JSON.parse(values.headers || '{}') : undefined,
         auth: authConfig // 添加认证配置
@@ -106,9 +107,9 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
       const serverConfig: MCPServerConfig = {
         name: values.name || 'MCP Server',
         host: values.host,
-        ssePath: values.ssePath,
+        ssePath: values.ssePath, // 两种模式都需要路径
         messagePath: '',
-        transport: 'sse',
+        transport: values.transport as MCPTransportMode,
         sessionId: values.sessionId || undefined,
         headers: values.headers ? JSON.parse(values.headers || '{}') : undefined,
         auth: authConfig
@@ -153,6 +154,18 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
           </Form.Item>
 
           <Form.Item
+            name="transport"
+            label={t.config.transportMode}
+            rules={[{ required: true, message: t.config.messages.transportModeRequired }]}
+            tooltip={t.config.transportModeTooltip}
+          >
+            <Select placeholder={t.config.transportModePlaceholder}>
+              <Select.Option value="sse">{t.config.transportModes.sse}</Select.Option>
+              <Select.Option value="streamable">{t.config.transportModes.streamable}</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
             name="host"
             label={t.config.serverHost}
             rules={[
@@ -168,12 +181,37 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
           </Form.Item>
 
           <Form.Item
-            name="ssePath"
-            label={t.config.ssePath}
-            rules={[{ required: true, message: t.config.messages.ssePathRequired }]}
-            tooltip={t.config.ssePathPlaceholder}
+            noStyle
+            shouldUpdate={(prevValues, currentValues) => prevValues.transport !== currentValues.transport}
           >
-            <Input placeholder={t.config.ssePathPlaceholder} />
+            {({ getFieldValue, setFieldsValue }) => {
+              const transport = getFieldValue('transport');
+              
+              // 当传输模式改变时，自动更新路径默认值（移除useEffect，直接在渲染时检查）
+              const currentPath = getFieldValue('ssePath');
+              if (!currentPath || currentPath === '/sse' || currentPath === '/mcp') {
+                const newPath = transport === 'sse' ? '/sse' : '/mcp';
+                if (currentPath !== newPath) {
+                  // 使用 setTimeout 避免在渲染过程中更新状态
+                  setTimeout(() => {
+                    setFieldsValue({
+                      ssePath: newPath
+                    });
+                  }, 0);
+                }
+              }
+              
+              return (
+                <Form.Item
+                  name="ssePath"
+                  label={transport === 'sse' ? t.config.ssePath : t.config.mcpPath}
+                  rules={[{ required: true, message: transport === 'sse' ? t.config.messages.ssePathRequired : t.config.messages.mcpPathRequired }]}
+                  tooltip={transport === 'sse' ? t.config.ssePathPlaceholder : t.config.mcpPathPlaceholder}
+                >
+                  <Input placeholder={transport === 'sse' ? t.config.ssePathPlaceholder : t.config.mcpPathPlaceholder} />
+                </Form.Item>
+              );
+            }}
           </Form.Item>
 
           <Form.Item label={t.config.authentication}>
@@ -223,6 +261,11 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
             <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 4 }}>
               <p><strong>{t.config.connectionStatus.connected}:</strong> {serverConfig?.name}</p>
               <p><strong>{t.config.serverHost}:</strong> {serverConfig?.host}</p>
+              <p><strong>{t.config.transportMode}:</strong> {
+                serverConfig?.transport === 'streamable' 
+                  ? t.config.transportModes.streamable 
+                  : t.config.transportModes.sse
+              }</p>
               <p><strong>{t.config.authType}:</strong> {
                 (() => {
                   const authType = serverConfig?.auth?.type;

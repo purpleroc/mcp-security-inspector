@@ -171,14 +171,19 @@ export interface MCPResourceContent {
 }
 
 /**
+ * MCP 传输模式
+ */
+export type MCPTransportMode = 'sse' | 'streamable';
+
+/**
  * MCP 服务器配置
  */
 export interface MCPServerConfig {
   name: string;
   host: string; // 主机地址，如 http://127.0.0.1:8020
-  ssePath: string; // SSE路径，如 /sse
+  ssePath?: string; // MCP路径，如 /sse (SSE模式) 或 /mcp (Streamable模式)
   messagePath?: string; // 消息路径，现在从SSE自动获取，可选
-  transport: 'sse';
+  transport: MCPTransportMode; // 传输模式：'sse' | 'streamable'
   sessionId?: string;
   headers?: Record<string, string>;
   auth?: AuthConfig; // 认证配置

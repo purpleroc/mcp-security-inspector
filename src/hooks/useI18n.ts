@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { i18n, Language, TranslationKey } from '../i18n';
 
 export const useI18n = () => {
-  const [language, setLanguageState] = useState<Language>(i18n.getCurrentLanguage());
-  const [translations, setTranslations] = useState<TranslationKey>(i18n.t());
+  const [language, setLanguageState] = useState<Language>(() => i18n.getCurrentLanguage());
+  const [translations, setTranslations] = useState<TranslationKey>(() => i18n.t());
 
   useEffect(() => {
     const handleLanguageChange = (newLanguage: Language) => {

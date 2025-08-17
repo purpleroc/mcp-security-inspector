@@ -43,8 +43,8 @@ export default defineConfig({
       }
     },
     target: 'esnext',
-    minify: true, // 生产环境压缩
-    sourcemap: false,
+    minify: process.env.NODE_ENV === 'production', // 只在生产环境压缩
+    sourcemap: process.env.NODE_ENV !== 'production',
     chunkSizeWarningLimit: 1000 // 调整警告阈值到 1000KB，antd-vendor 大小是合理的
   },
   server: {

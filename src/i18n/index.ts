@@ -54,8 +54,17 @@ export interface TranslationKey {
     serverNamePlaceholder: string;
     serverHost: string;
     serverHostPlaceholder: string;
+    transportMode: string;
+    transportModePlaceholder: string;
+    transportModeTooltip: string;
+    transportModes: {
+      sse: string;
+      streamable: string;
+    };
     ssePath: string;
     ssePathPlaceholder: string;
+    mcpPath: string;
+    mcpPathPlaceholder: string;
     messagePath: string;
     messagePathPlaceholder: string;
     authentication: string;
@@ -82,7 +91,9 @@ export interface TranslationKey {
       serverNameRequired: string;
       serverHostRequired: string;
       serverHostFormat: string;
+      transportModeRequired: string;
       ssePathRequired: string;
+      mcpPathRequired: string;
       connectSuccess: string;
       connectFailed: string;
       disconnectSuccess: string;
