@@ -80,9 +80,9 @@ class BrowserStreamableTransport {
   async send(message: StreamableMessage | StreamableMessage[]): Promise<void> {
     try {
       const headers = await this.getCommonHeaders();
-      console.log('Streamable发送请求到:', this.url.toString());
-      console.log('请求头:', headers);
-      console.log('请求体:', JSON.stringify(message, null, 2));
+      console.log('[Streamable] 发送请求到:', this.url.toString());
+      // console.log('请求头:', headers);
+      console.log('[Streamable] 请求体:', JSON.stringify(message, null, 2));
       
       const response = await fetch(this.url.toString(), {
         method: 'POST',
@@ -92,12 +92,12 @@ class BrowserStreamableTransport {
         ...this.requestInit
       });
 
-      console.log('收到响应状态:', response.status, response.statusText);
+      console.log('[Streamable] 收到响应状态:', response.status, response.headers.values(), response.statusText);
 
       // 处理session ID
       const sessionId = response.headers.get('mcp-session-id');
       if (sessionId) {
-        console.log('设置session ID:', sessionId);
+        console.log('[Streamable] 设置session ID:', sessionId);
         this._sessionId = sessionId;
       }
 
@@ -110,7 +110,7 @@ class BrowserStreamableTransport {
 
       // 如果是202 Accepted，表示请求已接受，可能通过其他方式返回响应
       if (response.status === 202) {
-        console.log('请求已接受 (202)');
+        console.log('[Streamable] 请求已接受 (202)');
         return;
       }
 
@@ -118,17 +118,17 @@ class BrowserStreamableTransport {
       const contentType = response.headers.get('content-type');
       if (contentType?.includes('application/json')) {
         const data = await response.json();
-        console.log('收到JSON响应:', data);
+        console.log('[Streamable] 收到JSON响应:', data);
         const responseMessages = Array.isArray(data) ? data : [data];
         
         for (const msg of responseMessages) {
           this.onmessage?.(msg);
         }
       } else if (contentType?.includes('text/event-stream')) {
-        console.log('收到SSE流响应，开始处理...');
+        console.log('[Streamable] 收到event-stream流响应，开始处理...');
         await this.handleEventStream(response);
       } else {
-        console.log('收到非JSON响应，Content-Type:', contentType);
+        console.log('[Streamable] 收到响应，Content-Type:', contentType);
       }
     } catch (error) {
       console.error('Streamable send error:', error);
@@ -228,6 +228,7 @@ class BrowserMCPClient {
     resolve: (value: any) => void;
     reject: (error: any) => void;
   }>();
+  private requestId = 0; // 请求ID生成器
 
   constructor(options: { name: string; version: string }) {
     // 客户端初始化
@@ -342,6 +343,7 @@ class BrowserMCPClient {
           pending.reject(new Error(message.error.message || 'Unknown error'));
         } else {
           console.log('[BrowserMCPClient] 收到成功响应:', message.result);
+          console.log('[BrowserMCPClient] 完整消息对象:', message);
           
           // 如果是初始化响应，设置协议版本
           if (message.result && message.result.protocolVersion && this.transport) {
@@ -350,7 +352,13 @@ class BrowserMCPClient {
           }
           
           console.log('[BrowserMCPClient] 准备resolve Promise, ID:', message.id);
-          pending.resolve(message.result || message);
+          // 确保返回正确的响应格式
+          const response = {
+            result: message.result,
+            error: message.error,
+            id: message.id
+          };
+          pending.resolve(response);
           console.log('[BrowserMCPClient] Promise已resolve, ID:', message.id);
         }
       } else {
@@ -361,38 +369,15 @@ class BrowserMCPClient {
       console.log('[BrowserMCPClient] 收到通知消息:', message);
     }
   }
-
-  async listTools(): Promise<any> {
-    return this.sendRequest({
-      jsonrpc: '2.0',
-      id: Date.now(),
-      method: 'tools/list',
-      params: {}
-    });
-  }
-
-  async listResources(): Promise<any> {
-    return this.sendRequest({
-      jsonrpc: '2.0',
-      id: Date.now(),
-      method: 'resources/list',
-      params: {}
-    });
-  }
-
-  async listPrompts(): Promise<any> {
-    return this.sendRequest({
-      jsonrpc: '2.0',
-      id: Date.now(),
-      method: 'prompts/list',
-      params: {}
-    });
+  
+  private getNextRequestId(): number {
+    return ++this.requestId;
   }
 
   async callTool(params: { name: string; arguments: any }): Promise<any> {
     return this.sendRequest({
       jsonrpc: '2.0',
-      id: Date.now(),
+      id: this.getNextRequestId(),
       method: 'tools/call',
       params
     });
@@ -401,7 +386,7 @@ class BrowserMCPClient {
   async readResource(params: { uri: string }): Promise<any> {
     return this.sendRequest({
       jsonrpc: '2.0',
-      id: Date.now(),
+      id: this.getNextRequestId(),
       method: 'resources/read',
       params
     });
@@ -410,13 +395,13 @@ class BrowserMCPClient {
   async getPrompt(params: { name: string; arguments?: any }): Promise<any> {
     return this.sendRequest({
       jsonrpc: '2.0',
-      id: Date.now(),
+      id: this.getNextRequestId(),
       method: 'prompts/get',
       params
     });
   }
 
-  private async sendRequest(message: StreamableMessage): Promise<any> {
+  public async sendRequest(message: StreamableMessage): Promise<any> {
     if (!this.transport) {
       throw new Error('Transport not connected');
     }
@@ -485,6 +470,7 @@ export class MCPClient {
   private mcpClient: BrowserMCPClient | null = null;
   private transport: BrowserStreamableTransport | null = null;
   private serverInfo: any = null; // 存储服务器初始化信息
+  private streamableRequestId = 0; // Streamable模式专用请求ID
   
   // 共用属性
   private requestId = 0;
@@ -1365,21 +1351,21 @@ export class MCPClient {
     }
 
     try {
-      console.log('开始建立Streamable连接...');
+      console.log('[Streamable] 开始建立连接...');
       
       // 初始化MCP客户端
       this.mcpClient = new BrowserMCPClient({ 
         name: 'mcp-security-inspector', 
         version: '1.0.0' 
       });
-      console.log('MCP客户端实例已创建');
+      console.log('[Streamable] MCP客户端实例已创建');
 
       // 初始化传输层
       const baseUrl = this.config.host.replace(/\/$/, '');
       const mcpPath = this.config.ssePath || '/mcp';
       const fullUrl = `${baseUrl}${mcpPath}`;
       const url = new URL(fullUrl);
-      console.log('连接URL:', fullUrl);
+      console.log('[Streamable] 连接URL:', fullUrl);
       
       // 构建请求选项，包含认证信息
       const requestInit: RequestInit = {};
@@ -1389,26 +1375,26 @@ export class MCPClient {
         const headers: Record<string, string> = {};
         this.applyAuthHeaders(headers);
         requestInit.headers = headers;
-        console.log('应用认证配置:', Object.keys(headers));
+        console.log('[Streamable] 应用认证配置:', Object.keys(headers));
       }
       
       this.transport = new BrowserStreamableTransport(url, { requestInit });
-      console.log('传输层已创建');
+      console.log('[Streamable] 传输层已创建');
 
       // 设置传输层事件处理
       this.setupStreamableTransport();
-      console.log('传输层事件处理器已设置');
+      console.log('[Streamable] 传输层事件处理器已设置');
 
       // 连接到服务器并获取初始化结果
       const initResult = await this.mcpClient.connect(this.transport);
-      console.log('收到初始化结果:', initResult);
+      console.log('[Streamable] 收到初始化结果:', initResult);
       
       // 存储服务器信息供后续使用
       this.serverInfo = initResult;
       
-      console.log('Streamable HTTP连接建立成功');
+      console.log('[Streamable] 连接建立成功');
     } catch (error) {
-      console.error('Streamable连接失败:', error);
+      console.error('[Streamable] 连接失败:', error);
       throw new Error(`建立Streamable连接失败: ${error}`);
     }
   }
@@ -1420,7 +1406,7 @@ export class MCPClient {
     if (!this.transport) return;
 
     this.transport.onclose = () => {
-      console.log('Streamable传输连接关闭');
+      console.log('[Streamable] 传输连接关闭');
       // 避免无限递归，只设置状态但不调用cleanup
       if (this.status === 'connected') {
         this.status = 'disconnected';
@@ -1428,7 +1414,7 @@ export class MCPClient {
     };
 
     this.transport.onerror = (error: Error) => {
-      console.error('Streamable传输错误:', error);
+      console.error('[Streamable] 传输错误:', error);
       // 避免无限递归，只设置状态但不调用cleanup
       if (this.status !== 'error') {
         this.status = 'error';
@@ -1444,7 +1430,7 @@ export class MCPClient {
 
     // 如果配置了组合认证，优先使用Fetch方式（支持自定义请求头）
     if (this.config.auth?.type === 'combined') {
-      console.log('检测到组合认证方式，使用Fetch方式建立SSE连接以支持自定义请求头');
+      console.log('[Streamable] 检测到组合认证方式，使用Fetch方式建立SSE连接以支持自定义请求头');
       return this.establishFetchSSEConnection();
     }
 
@@ -1461,12 +1447,12 @@ export class MCPClient {
     return new Promise((resolve, reject) => {
       // 使用新的SSE端点获取方法
       const sseEndpoint = this.getSSEEndpoint();
-      console.log('建立EventSource连接到:', sseEndpoint);
+      console.log('[SSE] 建立EventSource连接到:', sseEndpoint);
 
       try {
         this.eventSource = new EventSource(sseEndpoint);
       } catch (error) {
-        console.error('创建EventSource失败:', error);
+        console.error('[SSE] 创建EventSource失败:', error);
         reject(new Error('无法创建SSE连接'));
         return;
       }
@@ -1474,13 +1460,13 @@ export class MCPClient {
       let resolved = false;
       
       this.eventSource.onopen = () => {
-        console.log('SSE连接已建立，等待服务器推送endpoint信息...');
+        console.log('[SSE] 连接已建立，等待服务器推送endpoint信息...');
       };
 
       // 监听特定的'endpoint'事件类型
       this.eventSource.addEventListener('endpoint', (event) => {
         try {
-          console.log('收到endpoint事件:', {
+          console.log('[SSE] 收到endpoint事件:', {
             type: event.type,
             data: event.data
           });
@@ -1496,8 +1482,8 @@ export class MCPClient {
             if (match) {
               this.sessionId = match[1];
               this.sessionIdParamName = 'sessionId';
-              console.log('从endpoint事件中获取到完整端点:', this.messageEndpoint);
-              console.log('提取的sessionId:', this.sessionId, '参数名:', this.sessionIdParamName);
+              console.log('[SSE] 从endpoint事件中获取到完整端点:', this.messageEndpoint);
+              console.log('[SSE] 提取的sessionId:', this.sessionId, '参数名:', this.sessionIdParamName);
               if (!resolved) {
                 resolved = true;
                 resolve();
@@ -1509,8 +1495,8 @@ export class MCPClient {
             if (match) {
               this.sessionId = match[1];
               this.sessionIdParamName = 'session_id';
-              console.log('从endpoint事件中获取到完整端点:', this.messageEndpoint);
-              console.log('提取的sessionId:', this.sessionId, '参数名:', this.sessionIdParamName);
+              console.log('[SSE] 从endpoint事件中获取到完整端点:', this.messageEndpoint);
+              console.log('[SSE] 提取的sessionId:', this.sessionId, '参数名:', this.sessionIdParamName);
               if (!resolved) {
                 resolved = true;
                 resolve();
@@ -1519,13 +1505,13 @@ export class MCPClient {
             }
           }
         } catch (error) {
-          console.error('处理endpoint事件失败:', error);
+          console.error('[SSE] 处理endpoint事件失败:', error);
         }
       });
 
       this.eventSource.onmessage = (event) => {
         try {
-          console.log('收到普通消息事件:', {
+          console.log('[SSE] 收到普通消息事件:', {
             type: event.type,
             data: event.data,
             lastEventId: event.lastEventId
@@ -1542,8 +1528,8 @@ export class MCPClient {
               if (match) {
                 this.sessionId = match[1];
                 this.sessionIdParamName = 'sessionId';
-                console.log('从普通消息中获取到完整端点:', this.messageEndpoint);
-                console.log('提取的sessionId:', this.sessionId, '参数名:', this.sessionIdParamName);
+                console.log('[SSE] 从普通消息中获取到完整端点:', this.messageEndpoint);
+                console.log('[SSE] 提取的sessionId:', this.sessionId, '参数名:', this.sessionIdParamName);
                 if (!resolved) {
                   resolved = true;
                   resolve();
@@ -1555,8 +1541,8 @@ export class MCPClient {
               if (match) {
                 this.sessionId = match[1];
                 this.sessionIdParamName = 'session_id';
-                console.log('从普通消息中获取到完整端点:', this.messageEndpoint);
-                console.log('提取的sessionId:', this.sessionId, '参数名:', this.sessionIdParamName);
+                console.log('[SSE] 从普通消息中获取到完整端点:', this.messageEndpoint);
+                console.log('[SSE] 提取的sessionId:', this.sessionId, '参数名:', this.sessionIdParamName);
                 if (!resolved) {
                   resolved = true;
                   resolve();
@@ -1577,15 +1563,15 @@ export class MCPClient {
             this.handleResponse(response);
           } catch (e) {
             // 不是JSON格式，可能是其他消息
-            console.log('收到非JSON消息:', event.data);
+            console.log('[SSE] 收到非JSON消息:', event.data);
           }
         } catch (error) {
-          console.error('处理SSE消息失败:', error);
+          console.error('[SSE] 处理SSE消息失败:', error);
         }
       };
 
       this.eventSource.onerror = (error) => {
-        console.error('SSE连接错误:', error);
+        console.error('[SSE] 连接错误:', error);
         if (!resolved) {
           // 初次连接失败 - 关闭EventSource防止重连
           resolved = true;
@@ -1602,7 +1588,7 @@ export class MCPClient {
       setTimeout(() => {
         if (!resolved) {
           resolved = true;
-          reject(new Error('等待服务器推送session_id超时，请检查服务器是否正确实现了MCP SSE协议'));
+          reject(new Error('[SSE] 等待服务器推送session_id超时，请检查服务器是否正确实现了MCP SSE协议'));
         }
       }, 10000); // 10秒超时
     });
@@ -1816,28 +1802,38 @@ export class MCPClient {
       // Streamable模式
       try {
         console.log('[MCPClient] Streamable模式开始获取工具列表...');
-        const response = await this.mcpClient.listTools();
-        console.log('[MCPClient] Streamable模式工具列表原始响应:', response);
-        
+        const response = await this.mcpClient.sendRequest({
+          jsonrpc: '2.0',
+          id: this.getNextStreamableRequestId(),
+          method: 'tools/list',
+          params: {}
+        });
         // 处理不同的响应格式
-        let tools: MCPTool[] = [];
-        if (Array.isArray(response)) {
-          tools = response;
-        } else if (response && response.tools) {
-          tools = response.tools;
-        } else if (response && Array.isArray(response.result)) {
-          tools = response.result;
-        } else if (response && response.result && response.result.tools) {
-          tools = response.result.tools;
+        console.log('[MCPClient] Streamable模式工具列表原始响应:', response);
+        console.log('[MCPClient] Streamable模式工具列表响应类型:', typeof response);
+        console.log('[MCPClient] Streamable模式工具列表响应结构:', Object.keys(response || {}));
+        
+        // 检查响应是否包含错误
+        if (response.error) {
+          console.error('[MCPClient] 工具列表请求返回错误:', response.error);
+          // 如果是Method not found错误，说明服务器不支持该功能，返回空数组
+          if (response.error.code === -32601) {
+            console.warn('[MCPClient] 服务器不支持工具列表功能 (Method not found)，返回空数组');
+            return [];
+          }
+          throw new Error(`工具列表请求失败: ${response.error.message || 'Unknown error'}`);
         }
         
-        console.log(`[MCPClient] Streamable模式获取到 ${tools.length} 个工具`);
-        return tools;
+        const result = response.result as { tools?: MCPTool[] };
+        console.log('[MCPClient] Streamable模式工具列表解析结果:', result);
+        console.log('[MCPClient] Streamable模式工具列表结果键:', Object.keys(result || {}));
+        return result?.tools || [];
       } catch (error) {
         console.error('Streamable模式获取工具列表失败:', error);
         throw error;
       }
     } else {
+      console.log('[MCPClient] SSE模式开始获取工具列表...');
       // SSE模式
       const request: JSONRPCRequest = {
         jsonrpc: '2.0',
@@ -1848,6 +1844,7 @@ export class MCPClient {
 
       const response = await this.sendRequest(request);
       const result = response.result as { tools?: MCPTool[] };
+      console.log('[MCPClient] SSE模式工具列表原始响应:', result);
       return result?.tools || [];
     }
   }
@@ -1856,32 +1853,28 @@ export class MCPClient {
    * 获取资源列表
    */
   async listResources(): Promise<MCPResource[]> {
+    let response: JSONRPCResponse;
     if (this.config?.transport === 'streamable' && this.mcpClient) {
       // Streamable模式
       try {
         console.log('[MCPClient] Streamable模式开始获取资源列表...');
-        const response = await this.mcpClient.listResources();
+        response = await this.mcpClient.sendRequest({
+          jsonrpc: '2.0',
+          id: this.getNextStreamableRequestId(),
+          method: 'resources/list',
+          params: {}
+        });
         console.log('[MCPClient] Streamable模式资源列表原始响应:', response);
+        console.log('[MCPClient] Streamable模式资源列表响应类型:', typeof response);
+        console.log('[MCPClient] Streamable模式资源列表响应结构:', Object.keys(response || {}));
         
-        // 处理不同的响应格式
-        let rawResources: MCPResource[] = [];
-        if (Array.isArray(response)) {
-          rawResources = response;
-        } else if (response && response.resources) {
-          rawResources = response.resources;
-        } else if (response && Array.isArray(response.result)) {
-          rawResources = response.result;
-        } else if (response && response.result && response.result.resources) {
-          rawResources = response.result.resources;
-        }
-        
-        // 过滤掉null或无效的资源
-        const resources = rawResources.filter((resource: any) => resource !== null && resource !== undefined);
-        
-        console.log(`[MCPClient] Streamable模式收到资源列表：${resources.length} 个有效资源（原始：${rawResources.length}个）`);
-        return resources;
       } catch (error) {
         console.error('Streamable模式获取资源列表失败:', error);
+        // 如果是Method not found错误，说明服务器不支持资源列表功能，返回空数组
+        if (error instanceof Error && error.message.includes('Method not found')) {
+          console.warn('[MCPClient] 服务器不支持资源列表功能，返回空数组');
+          return [];
+        }
         throw error;
       }
     } else {
@@ -1893,30 +1886,46 @@ export class MCPClient {
         params: {}
       };
 
-      console.log('[MCPClient] 发送获取资源列表请求...');
-      const response = await this.sendRequest(request);
-      const result = response.result as { resources?: MCPResource[] };
-      const rawResources = result?.resources || [];
-      
-      // 过滤掉null或无效的资源
-      const resources = rawResources.filter(resource => resource !== null && resource !== undefined);
-      
-      if (rawResources.length !== resources.length) {
-        console.warn(`[MCPClient] 过滤掉 ${rawResources.length - resources.length} 个null/undefined资源`);
-      }
-      
-      console.log(`[MCPClient] 收到资源列表响应：${resources.length} 个有效资源（原始：${rawResources.length}个）`);
-      resources.forEach((resource, index) => {
-        console.log(`[MCPClient] 资源 ${index + 1}:`, {
-          name: resource?.name,
-          uri: resource?.uri,
-          description: resource?.description,
-          mimeType: resource?.mimeType
-        });
-      });
-      
-      return resources;
+      console.log('[MCPClient] SSE模式发送获取资源列表请求...');
+      response = await this.sendRequest(request);
     }
+    
+    const result = response.result as { resources?: MCPResource[] };
+    console.log('[MCPClient] 解析后的结果:', result);
+    console.log('[MCPClient] 结果类型:', typeof result);
+    console.log('[MCPClient] 结果键:', Object.keys(result || {}));
+    
+    // 检查响应是否包含错误
+    if (response.error) {
+      console.error('[MCPClient] 请求返回错误:', response.error);
+      // 如果是Method not found错误，说明服务器不支持该功能，返回空数组
+      if (response.error.code === -32601) {
+        console.warn('[MCPClient] 服务器不支持资源列表功能 (Method not found)，返回空数组');
+        return [];
+      }
+      throw new Error(`资源列表请求失败: ${response.error.message || 'Unknown error'}`);
+    }
+    
+    const rawResources = result?.resources || [];
+    
+    // 过滤掉null或无效的资源
+    const resources = rawResources.filter(resource => resource !== null && resource !== undefined);
+    
+    if (rawResources.length !== resources.length) {
+      console.warn(`[MCPClient] 过滤掉 ${rawResources.length - resources.length} 个null/undefined资源`);
+    }
+    
+    console.log(`[MCPClient] 收到资源列表响应：${resources.length} 个有效资源（原始：${rawResources.length}个）`);
+    resources.forEach((resource, index) => {
+      console.log(`[MCPClient] 资源 ${index + 1}:`, {
+        name: resource?.name,
+        uri: resource?.uri,
+        description: resource?.description,
+        mimeType: resource?.mimeType
+      });
+    });
+    
+    return resources;
   }
 
   /**
@@ -1927,25 +1936,42 @@ export class MCPClient {
       // Streamable模式
       try {
         console.log('[MCPClient] Streamable模式开始获取提示列表...');
-        const response = await this.mcpClient.listPrompts();
+        // const response = await this.mcpClient.listPrompts();
+        const response = await this.mcpClient.sendRequest({
+          jsonrpc: '2.0',
+          id: this.getNextStreamableRequestId(),
+          method: 'prompts/list',
+          params: {}
+        });
         console.log('[MCPClient] Streamable模式提示列表原始响应:', response);
+        console.log('[MCPClient] Streamable模式提示列表响应类型:', typeof response);
+        console.log('[MCPClient] Streamable模式提示列表响应结构:', Object.keys(response || {}));
         
-        // 处理不同的响应格式
-        let prompts: MCPPrompt[] = [];
-        if (Array.isArray(response)) {
-          prompts = response;
-        } else if (response && response.prompts) {
-          prompts = response.prompts;
-        } else if (response && Array.isArray(response.result)) {
-          prompts = response.result;
-        } else if (response && response.result && response.result.prompts) {
-          prompts = response.result.prompts;
+        // 检查响应是否包含错误
+        if (response.error) {
+          console.error('[MCPClient] 提示列表请求返回错误:', response.error);
+          // 如果是Method not found错误，说明服务器不支持该功能，返回空数组
+          if (response.error.code === -32601) {
+            console.warn('[MCPClient] 服务器不支持提示列表功能 (Method not found)，返回空数组');
+            return [];
+          }
+          throw new Error(`提示列表请求失败: ${response.error.message || 'Unknown error'}`);
         }
         
+        // 处理不同的响应格式
+        const result = response.result as { prompts?: MCPPrompt[] };
+        console.log('[MCPClient] Streamable模式提示列表解析结果:', result);
+        console.log('[MCPClient] Streamable模式提示列表结果键:', Object.keys(result || {}));
+        const prompts = result?.prompts || [];
         console.log(`[MCPClient] Streamable模式获取到 ${prompts.length} 个提示`);
         return prompts;
       } catch (error) {
         console.error('Streamable模式获取提示列表失败:', error);
+        // 如果是Method not found错误，说明服务器不支持提示列表功能，返回空数组
+        if (error instanceof Error && error.message.includes('Method not found')) {
+          console.warn('[MCPClient] 服务器不支持提示列表功能，返回空数组');
+          return [];
+        }
         throw error;
       }
     } else {
@@ -2050,6 +2076,10 @@ export class MCPClient {
         result = response as MCPToolResult;
       } catch (error) {
         console.error('Streamable模式工具调用失败:', error);
+        // 如果是Method not found错误，说明服务器不支持该工具，抛出更友好的错误
+        if (error instanceof Error && error.message.includes('Method not found')) {
+          throw new Error(`工具 '${name}' 不存在或服务器不支持工具调用功能`);
+        }
         throw error;
       }
     } else {
@@ -2095,6 +2125,10 @@ export class MCPClient {
         result = response as MCPResourceContent;
       } catch (error) {
         console.error('Streamable模式读取资源失败:', error);
+        // 如果是Method not found错误，说明服务器不支持资源读取功能
+        if (error instanceof Error && error.message.includes('Method not found')) {
+          throw new Error(`资源 '${name}' 不存在或服务器不支持资源读取功能`);
+        }
         throw error;
       }
     } else {
@@ -2137,6 +2171,10 @@ export class MCPClient {
         result = response;
       } catch (error) {
         console.error('Streamable模式获取提示失败:', error);
+        // 如果是Method not found错误，说明服务器不支持提示功能
+        if (error instanceof Error && error.message.includes('Method not found')) {
+          throw new Error(`提示 '${name}' 不存在或服务器不支持提示功能`);
+        }
         throw error;
       }
     } else {
@@ -2319,6 +2357,13 @@ export class MCPClient {
    */
   private getNextRequestId(): number {
     return ++this.requestId;
+  }
+
+  /**
+   * 获取下一个Streamable模式请求ID
+   */
+  private getNextStreamableRequestId(): number {
+    return ++this.streamableRequestId;
   }
 
   /**

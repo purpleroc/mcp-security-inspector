@@ -287,7 +287,7 @@ export const readResource = createAsyncThunk(
     try {
       const startTime = Date.now();
       // 使用构造后的实际URI
-      const result = await mcpClient.readResource(resource.uri);
+      const result = await mcpClient.readResource(resource.uri, resource.name || '');
       const endTime = Date.now();
       
       // 创建历史记录
