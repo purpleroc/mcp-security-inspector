@@ -51,13 +51,17 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
         auth: authConfig // 添加认证配置
       };
       
+      console.log('[ConfigPanel] 开始连接服务器:', serverConfig);
       const result = await dispatch(connectToServer(serverConfig) as any).unwrap();
+      console.log('[ConfigPanel] 连接成功，结果:', result);
       message.success(t.config.messages.connectSuccess);
       
       // 确定最终的配置（如果服务器返回了名称且用户没有填写名称，使用服务器名称）
       const finalConfig = (result.serverInfo && (!values.name || values.name === 'MCP Server'))
         ? { ...serverConfig, name: result.serverInfo.serverInfo.name }
         : serverConfig;
+      
+      console.log('[ConfigPanel] 最终配置:', finalConfig);
       
       // 如果服务器返回了名称且用户没有填写名称，更新表单显示
       if (result.serverInfo && (!values.name || values.name === 'MCP Server')) {
@@ -66,21 +70,31 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
       
       // 连接成功后自动保存配置
       if (autoSave) {
+        console.log('[ConfigPanel] 自动保存配置，autoSave:', autoSave);
         const saved = storage.saveMCPConfig(finalConfig);
+        console.log('[ConfigPanel] 配置保存结果:', saved);
         if (saved) {
           message.success(t.config.messages.configSavedAuto);
           // 通知刷新配置列表
           if (onConfigSaved) {
+            console.log('[ConfigPanel] 通知刷新配置列表');
             onConfigSaved();
           }
+        } else {
+          console.error('[ConfigPanel] 配置保存失败');
+          message.error(t.errors.saveConfigFailed);
         }
+      } else {
+        console.log('[ConfigPanel] 自动保存已禁用，autoSave:', autoSave);
       }
       
       // 通知父组件配置已加载
       if (onConfigLoad) {
+        console.log('[ConfigPanel] 通知父组件配置已加载');
         onConfigLoad(finalConfig);
       }
     } catch (error) {
+      console.error('[ConfigPanel] 连接失败:', error);
       message.error(`${t.config.messages.connectFailed}: ${error}`);
     }
   };

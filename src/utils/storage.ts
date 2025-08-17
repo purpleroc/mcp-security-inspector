@@ -45,17 +45,22 @@ export const storage = {
    */
   saveMCPConfig: (config: MCPServerConfig) => {
     try {
+      console.log('[storage] 开始保存MCP配置:', config);
       const configs = storage.getSavedConfigs();
+      console.log('[storage] 当前已保存的配置数量:', configs.length);
       
       // 检查是否已存在相同名称的配置，如果存在则更新
       const existingIndex = configs.findIndex(c => c.name === config.name);
       if (existingIndex >= 0) {
+        console.log('[storage] 更新已存在的配置:', config.name);
         configs[existingIndex] = { ...config, updatedAt: Date.now() };
       } else {
+        console.log('[storage] 添加新配置:', config.name);
         configs.push({ ...config, createdAt: Date.now(), updatedAt: Date.now() });
       }
       
       localStorage.setItem(STORAGE_KEYS.SAVED_CONFIGS, JSON.stringify(configs));
+      console.log('[storage] 配置保存成功，当前配置总数:', configs.length);
       return true;
     } catch (error) {
       console.error('保存MCP配置失败:', error);

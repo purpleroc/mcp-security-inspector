@@ -82,7 +82,9 @@ export const connectToServer = createAsyncThunk(
       dispatch(setPrompts([]));
       
       mcpClient.configure(config);
+      console.log('[mcpSlice] 开始连接MCP服务器，配置:', config);
       const serverInfo = await mcpClient.connect();
+      console.log('[mcpSlice] MCP服务器连接成功，服务器信息:', serverInfo);
       
       // 连接成功后，使用MCPClient已经预处理好的组件数据
       let hasAnyData = false;
@@ -454,6 +456,8 @@ const mcpSlice = createSlice({
         state.connectionStatus = 'connected';
         state.isLoading = false;
         
+        console.log('[mcpSlice] 连接成功，payload:', action.payload);
+        
         // 如果用户没有填写名称或使用默认名称，则使用服务器返回的名称
         let finalConfig = action.payload.config;
         if (action.payload.serverInfo && 
@@ -464,10 +468,13 @@ const mcpSlice = createSlice({
           };
         }
         
+        console.log('[mcpSlice] 最终配置:', finalConfig);
+        
         state.serverConfig = finalConfig;
         state.serverInfo = action.payload.serverInfo;
         // 保存服务器配置到localStorage（使用最终的配置）
         storage.saveServerConfig(finalConfig);
+        console.log('[mcpSlice] 服务器配置已保存到localStorage');
       })
       .addCase(connectToServer.rejected, (state, action) => {
         state.connectionStatus = 'error';

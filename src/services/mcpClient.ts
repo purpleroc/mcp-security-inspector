@@ -282,6 +282,7 @@ class BrowserMCPClient {
       const wrappedResolve = (value: any) => {
         clearTimeout(timeout);
         console.log('[BrowserMCPClient] 初始化成功，清除超时器');
+        console.log('[BrowserMCPClient] 收到的响应值:', value);
         
         // 检查响应是否是初始化响应
         if (value && (value.protocolVersion || value.serverInfo || value.capabilities)) {
@@ -295,6 +296,7 @@ class BrowserMCPClient {
             capabilities: { tools: true, resources: true, prompts: true },
             serverInfo: { name: 'MCP Server', version: '1.0.0' }
           };
+          console.log('[BrowserMCPClient] 使用默认响应:', defaultResponse);
           resolve(defaultResponse);
         }
       };
@@ -352,13 +354,8 @@ class BrowserMCPClient {
           }
           
           console.log('[BrowserMCPClient] 准备resolve Promise, ID:', message.id);
-          // 确保返回正确的响应格式
-          const response = {
-            result: message.result,
-            error: message.error,
-            id: message.id
-          };
-          pending.resolve(response);
+          // 直接返回result部分，因为wrappedResolve期望的是result
+          pending.resolve(message.result);
           console.log('[BrowserMCPClient] Promise已resolve, ID:', message.id);
         }
       } else {
