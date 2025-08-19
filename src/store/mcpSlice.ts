@@ -83,6 +83,53 @@ export const connectToServer = createAsyncThunk(
       
       mcpClient.configure(config);
       console.log('[mcpSlice] 开始连接MCP服务器，配置:', config);
+      
+      // 在连接前设置监听器，确保能捕获到异步更新
+      mcpClient.addComponentUpdateCallback(() => {
+        console.log('[mcpSlice] 收到MCPClient组件更新通知');
+        
+        // 获取最新的组件数据
+        const enhancedTools = mcpClient.getEnhancedTools();
+        const enhancedResources = mcpClient.getEnhancedResources();
+        const enhancedResourceTemplates = mcpClient.getEnhancedResourceTemplates();
+        const enhancedPrompts = mcpClient.getEnhancedPrompts();
+        
+        // 转换为Redux store需要的格式
+        const tools = enhancedTools.map(tool => ({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema
+        }));
+        
+        const resources = enhancedResources.map(resource => ({
+          name: resource.name,
+          uri: resource.uri,
+          description: resource.description,
+          mimeType: resource.mimeType
+        }));
+        
+        const resourceTemplates = enhancedResourceTemplates.map(template => ({
+          name: template.name,
+          uri: template.uri,
+          description: template.description,
+          mimeType: template.mimeType
+        }));
+        
+        const prompts = enhancedPrompts.map(prompt => ({
+          name: prompt.name,
+          description: prompt.description,
+          arguments: prompt.arguments
+        }));
+        
+        // 更新Redux store
+        dispatch(setTools(tools));
+        dispatch(setResources(resources));
+        dispatch(setResourceTemplates(resourceTemplates));
+        dispatch(setPrompts(prompts));
+        
+        console.log('[mcpSlice] 组件数据已更新到Redux store');
+      });
+      
       const serverInfo = await mcpClient.connect();
       console.log('[mcpSlice] MCP服务器连接成功，服务器信息:', serverInfo);
       
@@ -188,6 +235,8 @@ export const connectToServer = createAsyncThunk(
         // 如果没有数据，保持在tools tab
         dispatch(setCurrentTab('explorer'));
       }
+      
+
       
       return { config, serverInfo };
     } catch (error) {

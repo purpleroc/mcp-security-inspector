@@ -14,7 +14,7 @@ import { MCPServerConfig } from './types/mcp';
 import { useI18n } from './hooks/useI18n';
 
 // 版本号
-const APP_VERSION = '2.0.2';
+const APP_VERSION = '2.0.4';
 
 const { Header, Content, Sider } = Layout;
 

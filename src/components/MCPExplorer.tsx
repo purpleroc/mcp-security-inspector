@@ -22,11 +22,12 @@ import {
   MessageOutlined, 
   PlayCircleOutlined,
   InfoCircleOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  ReloadOutlined
 } from '@ant-design/icons';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store';
-import { callTool, readResource, getPrompt } from '../store/mcpSlice';
+import { callTool, readResource, getPrompt, setTools, setPrompts, setResources, setResourceTemplates } from '../store/mcpSlice';
 import { MCPTool, MCPResource, MCPPrompt, SecurityRiskLevel } from '../types/mcp';
 import { useI18n } from '../hooks/useI18n';
 
@@ -60,6 +61,7 @@ const MCPExplorer: React.FC = () => {
   const [toolErrors, setToolErrors] = useState<Record<string, string>>({});
   const [resourceErrors, setResourceErrors] = useState<Record<string, string>>({});
   const [promptErrors, setPromptErrors] = useState<Record<string, string>>({});
+  const [refreshing, setRefreshing] = useState(false);
 
   // 监听连接状态变化，切换服务器时清空本地状态
   useEffect(() => {
@@ -99,7 +101,7 @@ const MCPExplorer: React.FC = () => {
       const result = await dispatch(callTool({ tool: selectedTool, parameters: toolParams }) as any).unwrap();
       setToolResults(prev => ({ ...prev, [selectedTool.name]: result.result }));
       setToolErrors(prev => ({ ...prev, [selectedTool.name]: '' }));
-      message.success(t.success.connected);
+      message.success(t.success.toolCallSuccess);
     } catch (error) {
       setToolErrors(prev => ({ ...prev, [selectedTool.name]: String(error) }));
       setToolResults(prev => ({ ...prev, [selectedTool.name]: null }));
@@ -166,7 +168,7 @@ const MCPExplorer: React.FC = () => {
       const resourceKey = selectedResource.name || selectedResource.uri || (selectedResource as any).uriTemplate;
       setResourceResults(prev => ({ ...prev, [resourceKey]: result.result }));
       setResourceErrors(prev => ({ ...prev, [resourceKey]: '' }));
-      message.success(t.success.connected);
+      message.success(t.success.resourceReadSuccess);
     } catch (error) {
       console.error('资源读取错误:', error);
       // 改进资源键的生成逻辑
@@ -185,11 +187,50 @@ const MCPExplorer: React.FC = () => {
       const result = await dispatch(getPrompt({ prompt: selectedPrompt, parameters: promptParams }) as any).unwrap();
       setPromptResults(prev => ({ ...prev, [selectedPrompt.name]: result.result }));
       setPromptErrors(prev => ({ ...prev, [selectedPrompt.name]: '' }));
-      message.success(t.success.connected);
+      message.success(t.success.promptGetSuccess);
     } catch (error) {
       setPromptErrors(prev => ({ ...prev, [selectedPrompt.name]: String(error) }));
       setPromptResults(prev => ({ ...prev, [selectedPrompt.name]: null }));
       message.error(`${t.errors.promptGetFailed}: ${error}`);
+    }
+  };
+
+  // 刷新组件列表
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    
+    setRefreshing(true);
+    try {
+      // 手动重新获取组件列表
+      const { mcpClient } = await import('../services/mcpClient');
+      
+      // 重新获取所有组件
+      const [tools, prompts, resources, resourceTemplates] = await Promise.allSettled([
+        mcpClient.listTools(),
+        mcpClient.listPrompts(),
+        mcpClient.listResources(),
+        mcpClient.listResourceTemplates()
+      ]);
+      
+      // 更新Redux store
+      if (tools.status === 'fulfilled') {
+        dispatch(setTools(tools.value));
+      }
+      if (prompts.status === 'fulfilled') {
+        dispatch(setPrompts(prompts.value));
+      }
+      if (resources.status === 'fulfilled') {
+        dispatch(setResources(resources.value));
+      }
+      if (resourceTemplates.status === 'fulfilled') {
+        dispatch(setResourceTemplates(resourceTemplates.value));
+      }
+      
+      message.success(t.explorer.refreshSuccess);
+    } catch (error) {
+      message.error(t.explorer.refreshFailed + ': ' + error);
+    } finally {
+      setRefreshing(false);
     }
   };
 

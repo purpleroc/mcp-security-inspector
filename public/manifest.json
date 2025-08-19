@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MCP Security Inspector",
-  "version": "2.0.2",
+  "version": "2.0.4",
   "description": "Model Security Inspector - 用于对MCP工具、资源、Prompt进行安全分析(MCP server tools, resources and prompts security analysis)",
   "action": {
     "default_title": "MCP Security Inspector"

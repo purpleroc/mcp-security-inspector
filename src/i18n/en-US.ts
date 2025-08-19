@@ -123,6 +123,7 @@ export const enUS: TranslationKey = {
     combinedMode: 'Combined Authentication Mode',
     combinedModeDesc: 'You can configure multiple authentication methods simultaneously, and the system will automatically combine and apply these authentication configurations',
     enableApiKey: 'Enable API Key Authentication',
+    authEnabled: 'Enable Authentication',
     enableUrlParams: 'Enable URL Parameter Authentication',
     enableCustomHeaders: 'Enable Custom Header Authentication',
   },
@@ -135,6 +136,9 @@ export const enUS: TranslationKey = {
     protocolVersion: 'Protocol Version',
     capabilities: 'Server Capabilities',
     instructions: 'Instructions',
+    refresh: 'Refresh',
+    refreshSuccess: 'Component list refreshed',
+    refreshFailed: 'Refresh failed',
   },
   
   tools: {
@@ -229,6 +233,9 @@ export const enUS: TranslationKey = {
     itemDeleted: 'Record deleted successfully',
     exportSuccess: 'Export successful',
     importSuccess: 'Import successful',
+    toolCallSuccess: 'Tool call successful',
+    resourceReadSuccess: 'Resource read successful',
+    promptGetSuccess: 'Prompt get successful',
   },
   
   llm: {

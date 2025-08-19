@@ -1,0 +1,8 @@
+---
+description: 安全内置规则
+globs:
+alwaysApply: true
+---
+
+- 界面相关操作，均需要适配中英双语
+- 不需要额外编写测试、验证脚本

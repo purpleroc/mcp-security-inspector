@@ -122,6 +122,7 @@ export const zhCN: TranslationKey = {
     removeParam: '删除参数',
     combinedMode: '组合认证模式',
     combinedModeDesc: '可以同时配置多种认证方式，系统会自动组合应用这些认证配置',
+    authEnabled: '启用认证',
     enableApiKey: '启用 API Key 认证',
     enableUrlParams: '启用 URL 参数认证',
     enableCustomHeaders: '启用自定义请求头认证',
@@ -135,6 +136,9 @@ export const zhCN: TranslationKey = {
     protocolVersion: '协议版本',
     capabilities: '服务器能力',
     instructions: '使用说明',
+    refresh: '刷新',
+    refreshSuccess: '组件列表已刷新',
+    refreshFailed: '刷新失败',
   },
   
   tools: {
@@ -229,6 +233,9 @@ export const zhCN: TranslationKey = {
     itemDeleted: '记录删除成功',
     exportSuccess: '导出成功',
     importSuccess: '导入成功',
+    toolCallSuccess: '工具调用成功',
+    resourceReadSuccess: '资源读取成功',
+    promptGetSuccess: '提示获取成功',
   },
   
   llm: {

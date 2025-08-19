@@ -130,6 +130,7 @@ export interface TranslationKey {
     removeParam: string;
     combinedMode: string;
     combinedModeDesc: string;
+    authEnabled: string;
     enableApiKey: string;
     enableUrlParams: string;
     enableCustomHeaders: string;
@@ -144,6 +145,9 @@ export interface TranslationKey {
     protocolVersion: string;
     capabilities: string;
     instructions: string;
+    refresh: string;
+    refreshSuccess: string;
+    refreshFailed: string;
   };
   
   // 工具面板
@@ -927,6 +931,9 @@ export interface TranslationKey {
     itemDeleted: string;
     exportSuccess: string;
     importSuccess: string;
+    toolCallSuccess: string;
+    resourceReadSuccess: string;
+    promptGetSuccess: string;
   };
   
   // 应用信息
