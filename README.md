@@ -234,6 +234,9 @@ class CustomLLMProvider implements LLMProvider {
 
 ## 📊 更新日志
 
+### v2.0.5
+- ✅ 修复streamable的CORS问题
+
 ### v2.0.2
 - ✅ 适配streamable模式MCP服务端
 
