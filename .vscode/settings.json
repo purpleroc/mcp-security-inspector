@@ -1,0 +1,12 @@
+{
+    "editor.quickSuggestions": {
+        "comments": "off",
+        "strings": "off",
+        "other": "off"
+    },
+    "editor.suggestOnTriggerCharacters": false,
+    "editor.acceptSuggestionOnEnter": "off",
+    "editor.tabCompletion": "off",
+    "typescript.suggest.enabled": false,
+    "javascript.suggest.enabled": false
+}

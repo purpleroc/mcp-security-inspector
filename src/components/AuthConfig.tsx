@@ -9,6 +9,19 @@ interface AuthConfigProps {
   onChange?: (value: AuthConfig) => void;
 }
 
+// 验证字符串是否只包含 ISO-8859-1 字符（HTTP 请求头要求）
+const isValidHeaderString = (str: string): boolean => {
+  if (!str) return true;
+  for (let i = 0; i < str.length; i++) {
+    const charCode = str.charCodeAt(i);
+    // ISO-8859-1 字符范围: 0-255
+    if (charCode > 255) {
+      return false;
+    }
+  }
+  return true;
+};
+
 const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => {
   const { t } = useI18n();
   const authEnabled = value?.type === 'combined';
@@ -40,7 +53,7 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
           onChange={handleAuthToggle}
         />
         <span style={{ marginLeft: 8, fontSize: '12px', color: '#666' }}>
-          {authEnabled ? t.auth.enableApiKey : t.auth.none}
+          {authEnabled ? t.auth.enableAuthMode : t.auth.none}
         </span>
       </Form.Item>
 
@@ -221,35 +234,50 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
 
           {value?.type === 'combined' && value.customHeaders !== undefined && (
             <div style={{ marginLeft: 24 }}>
-              {value.customHeaders.map((header, index) => (
-                <Space key={index} style={{ display: 'flex', marginBottom: 8 }} align="baseline">
-                  <Input 
-                    placeholder={t.auth.headerName} 
-                    style={{ width: 200 }}
-                    value={header.name || ''}
-                    onChange={(e) => {
-                      const headers = [...value.customHeaders!];
-                      headers[index] = { ...headers[index], name: e.target.value };
-                      handleCombinedChange('customHeaders', headers);
-                    }}
-                  />
-                  <Input 
-                    placeholder={t.auth.headerValue} 
-                    style={{ width: 250 }}
-                    value={header.value || ''}
-                    onChange={(e) => {
-                      const headers = [...value.customHeaders!];
-                      headers[index] = { ...headers[index], value: e.target.value };
-                      handleCombinedChange('customHeaders', headers);
-                    }}
-                  />
-                  <MinusCircleOutlined onClick={() => {
-                    const headers = [...value.customHeaders!];
-                    headers.splice(index, 1);
-                    handleCombinedChange('customHeaders', headers.length > 0 ? headers : [{ name: '', value: '' }]);
-                  }} />
-                </Space>
-              ))}
+              {value.customHeaders.map((header, index) => {
+                const nameValid = isValidHeaderString(header.name || '');
+                const valueValid = isValidHeaderString(header.value || '');
+                const hasError = !nameValid || !valueValid;
+                
+                return (
+                  <div key={index} style={{ marginBottom: 8 }}>
+                    <Space style={{ display: 'flex' }} align="baseline">
+                      <Input 
+                        placeholder={t.auth.headerName} 
+                        style={{ width: 200 }}
+                        status={!nameValid ? 'error' : undefined}
+                        value={header.name || ''}
+                        onChange={(e) => {
+                          const headers = [...value.customHeaders!];
+                          headers[index] = { ...headers[index], name: e.target.value };
+                          handleCombinedChange('customHeaders', headers);
+                        }}
+                      />
+                      <Input 
+                        placeholder={t.auth.headerValue} 
+                        style={{ width: 250 }}
+                        status={!valueValid ? 'error' : undefined}
+                        value={header.value || ''}
+                        onChange={(e) => {
+                          const headers = [...value.customHeaders!];
+                          headers[index] = { ...headers[index], value: e.target.value };
+                          handleCombinedChange('customHeaders', headers);
+                        }}
+                      />
+                      <MinusCircleOutlined onClick={() => {
+                        const headers = [...value.customHeaders!];
+                        headers.splice(index, 1);
+                        handleCombinedChange('customHeaders', headers.length > 0 ? headers : [{ name: '', value: '' }]);
+                      }} />
+                    </Space>
+                    {hasError && (
+                      <div style={{ color: '#ff4d4f', fontSize: '12px', marginTop: 4 }}>
+                        {t.auth.headerInvalidChars}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               <Button 
                 type="dashed" 
                 onClick={() => {

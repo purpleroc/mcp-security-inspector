@@ -1,6 +1,6 @@
 {
   "name": "mcp-security-inspector",
-  "version": "2.0.4",
+  "version": "2.0.5",
   "description": "Chrome扩展 - MCP协议安全性检测工具",
   "type": "module",
   "scripts": {
