@@ -121,11 +121,13 @@ export const zhCN: TranslationKey = {
     addParam: '添加参数',
     removeParam: '删除参数',
     combinedMode: '组合认证模式',
+    enableAuthMode: '启用认证模式',
     combinedModeDesc: '可以同时配置多种认证方式，系统会自动组合应用这些认证配置',
     authEnabled: '启用认证',
     enableApiKey: '启用 API Key 认证',
     enableUrlParams: '启用 URL 参数认证',
-    enableCustomHeaders: '启用自定义请求头认证',
+    enableCustomHeaders: '启用自定义请求头认证（可能会导致CORS问题）',
+    headerInvalidChars: '请求头只能包含英文字母、数字和常用符号',
   },
   
   explorer: {

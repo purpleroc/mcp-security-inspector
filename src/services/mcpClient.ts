@@ -38,14 +38,18 @@ class BrowserStreamableTransport {
   private abortController?: AbortController;
   private requestInit?: RequestInit;
   private isConnected = false;
+  // 是否使用URL参数传递session ID（避免CORS问题）
+  private useSessionIdInUrl = true;
 
   public onclose?: () => void;
   public onerror?: (error: Error) => void;
   public onmessage?: (message: StreamableMessage) => void;
 
-  constructor(url: URL, options?: { requestInit?: RequestInit }) {
+  constructor(url: URL, options?: { requestInit?: RequestInit; useSessionIdInUrl?: boolean }) {
     this.url = url;
     this.requestInit = options?.requestInit;
+    // 默认使用URL参数传递session ID，避免自定义header导致CORS问题
+    this.useSessionIdInUrl = options?.useSessionIdInUrl ?? true;
   }
 
   async start(): Promise<void> {
@@ -69,15 +73,30 @@ class BrowserStreamableTransport {
       'Accept': 'application/json, text/event-stream'
     };
 
-    if (this._sessionId) {
+    // 如果不使用URL参数方式，则通过header传递session ID
+    // 注意：使用自定义header会触发CORS预检请求，如果服务器没有正确配置CORS，会导致请求失败
+    if (!this.useSessionIdInUrl && this._sessionId) {
       headers['mcp-session-id'] = this._sessionId;
     }
 
-    if (this.protocolVersion) {
+    if (!this.useSessionIdInUrl && this.protocolVersion) {
       headers['mcp-protocol-version'] = this.protocolVersion;
     }
 
     return headers;
+  }
+
+  /**
+   * 获取带有session ID的请求URL
+   * 通过URL参数传递session ID，避免自定义header导致的CORS问题
+   */
+  private getRequestUrl(): string {
+    if (this.useSessionIdInUrl && this._sessionId) {
+      const urlWithSession = new URL(this.url.toString());
+      urlWithSession.searchParams.set('sessionId', this._sessionId);
+      return urlWithSession.toString();
+    }
+    return this.url.toString();
   }
 
   async send(message: StreamableMessage | StreamableMessage[]): Promise<void> {
@@ -87,7 +106,9 @@ class BrowserStreamableTransport {
 
     try {
       const headers = await this.getCommonHeaders();
-      console.log('[Streamable] 发送请求到:', this.url.toString());
+      const requestUrl = this.getRequestUrl();
+      console.log('[Streamable] 发送请求到:', requestUrl);
+      console.log('[Streamable] Session ID传递方式:', this.useSessionIdInUrl ? 'URL参数' : 'Header');
       console.log('[Streamable] 请求头:', headers);
       console.log('[Streamable] 请求体:', JSON.stringify(message, null, 2));
       
@@ -145,7 +166,7 @@ class BrowserStreamableTransport {
         console.log(`  ${key}: ${value}`);
       });
       
-      const response = await fetch(this.url.toString(), fetchOptions);
+      const response = await fetch(requestUrl, fetchOptions);
 
       console.log('[Streamable] 收到响应状态:', response.status, response.statusText);
 
@@ -1121,6 +1142,27 @@ export class MCPClient {
       // 应用自定义请求头
       if (this.config.auth.customHeaders) {
         this.config.auth.customHeaders.forEach(header => {
+          // 跳过空的请求头
+          if (!header.name || !header.value) {
+            return;
+          }
+          // 验证请求头名称和值是否只包含 ISO-8859-1 字符
+          const isValidHeaderString = (str: string): boolean => {
+            for (let i = 0; i < str.length; i++) {
+              const charCode = str.charCodeAt(i);
+              // ISO-8859-1 字符范围: 0-255
+              if (charCode > 255) {
+                return false;
+              }
+            }
+            return true;
+          };
+          
+          if (!isValidHeaderString(header.name) || !isValidHeaderString(header.value)) {
+            console.warn(`跳过无效的自定义请求头 "${header.name}": 包含非 ISO-8859-1 字符`);
+            return;
+          }
+          
           headers[header.name] = header.value;
         });
       }
@@ -1501,11 +1543,27 @@ export class MCPClient {
       const headers: Record<string, string> = {};
       this.applyAuthHeaders(headers);
       
-      // 安全地添加自定义headers，过滤掉null/undefined值
+      // 安全地添加自定义headers，过滤掉null/undefined值和非法字符
       if (this.config.headers) {
+        const isValidHeaderString = (str: string): boolean => {
+          for (let i = 0; i < str.length; i++) {
+            const charCode = str.charCodeAt(i);
+            // ISO-8859-1 字符范围: 0-255
+            if (charCode > 255) {
+              return false;
+            }
+          }
+          return true;
+        };
+        
         Object.entries(this.config.headers).forEach(([key, value]) => {
           if (value !== null && value !== undefined && value !== '') {
-            headers[key] = String(value);
+            const strValue = String(value);
+            if (isValidHeaderString(key) && isValidHeaderString(strValue)) {
+              headers[key] = strValue;
+            } else {
+              console.warn(`跳过无效的请求头 "${key}": 包含非 ISO-8859-1 字符`);
+            }
           }
         });
       }

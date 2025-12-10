@@ -133,7 +133,9 @@ export interface TranslationKey {
     authEnabled: string;
     enableApiKey: string;
     enableUrlParams: string;
+    enableAuthMode: string;
     enableCustomHeaders: string;
+    headerInvalidChars: string;
   };
   
   // MCP浏览器

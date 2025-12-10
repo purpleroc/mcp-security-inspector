@@ -123,9 +123,11 @@ export const enUS: TranslationKey = {
     combinedMode: 'Combined Authentication Mode',
     combinedModeDesc: 'You can configure multiple authentication methods simultaneously, and the system will automatically combine and apply these authentication configurations',
     enableApiKey: 'Enable API Key Authentication',
+    enableAuthMode: 'Enable Authentication Mode',
     authEnabled: 'Enable Authentication',
     enableUrlParams: 'Enable URL Parameter Authentication',
-    enableCustomHeaders: 'Enable Custom Header Authentication',
+    enableCustomHeaders: 'Enable Custom Header Authentication (may cause CORS issues)',
+    headerInvalidChars: 'Headers can only contain ASCII characters',
   },
   
   explorer: {
