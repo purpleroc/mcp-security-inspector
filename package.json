@@ -11,7 +11,7 @@
     "clean-dist": "rm -rf dist/public",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
-    "package": "npm run build:extension && cd dist && zip -r ../mcp-security-inspector-v2.0.4.zip ."
+    "package": "npm run build:extension && cd dist && zip -r ../mcp-security-inspector-v2.0.5.zip ."
   },
   "dependencies": {
     "@ant-design/icons": "^5.2.6",
