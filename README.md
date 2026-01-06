@@ -233,6 +233,8 @@ class CustomLLMProvider implements LLMProvider {
 ```
 
 ## 📊 更新日志
+### v2.0.6
+- ✅ 按照tool要求提供对应类型参数
 
 ### v2.0.5
 - ✅ 修复streamable的CORS问题

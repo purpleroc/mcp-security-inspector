@@ -16,7 +16,8 @@ import {
   EnhancedMCPTool,
   EnhancedMCPPrompt,
   EnhancedMCPResource,
-  MCPTransportMode
+  MCPTransportMode,
+  MCPToolInputSchema
 } from '@/types/mcp';
 import { i18n } from '../i18n';
 import { securityEngine } from './securityEngine';
@@ -2325,10 +2326,146 @@ export class MCPClient {
   }
 
   /**
+   * 根据工具schema转换参数类型
+   */
+  private convertParametersBySchema(
+    parameters: Record<string, unknown>,
+    inputSchema?: MCPToolInputSchema
+  ): Record<string, unknown> {
+    if (!inputSchema?.properties) {
+      return parameters;
+    }
+
+    const converted: Record<string, unknown> = {};
+    const properties = inputSchema.properties;
+
+    for (const [key, value] of Object.entries(parameters)) {
+      const schema = properties[key];
+      
+      if (!schema) {
+        // 如果schema中没有定义该参数，保持原值
+        converted[key] = value;
+        continue;
+      }
+
+      const paramType = schema.type;
+      
+      // 如果值已经是正确的类型（非字符串），直接使用
+      if (value === null || value === undefined) {
+        converted[key] = value;
+        continue;
+      }
+
+      // 如果值是字符串，需要根据schema类型进行转换
+      if (typeof value === 'string') {
+        const trimmedValue = value.trim();
+        
+        // 空字符串处理
+        if (trimmedValue === '') {
+          converted[key] = schema.default ?? null;
+          continue;
+        }
+
+        try {
+          switch (paramType) {
+            case 'number':
+            case 'float':
+            case 'float64':
+            case 'float32':
+              converted[key] = parseFloat(trimmedValue);
+              if (isNaN(converted[key] as number)) {
+                console.warn(`参数 ${key} 无法转换为数字，保持原值: ${value}`);
+                converted[key] = value;
+              }
+              break;
+            
+            case 'integer':
+            case 'int':
+            case 'int64':
+            case 'int32':
+              converted[key] = parseInt(trimmedValue, 10);
+              if (isNaN(converted[key] as number)) {
+                console.warn(`参数 ${key} 无法转换为整数，保持原值: ${value}`);
+                converted[key] = value;
+              }
+              break;
+            
+            case 'boolean':
+            case 'bool':
+              const lowerValue = trimmedValue.toLowerCase();
+              if (lowerValue === 'true' || lowerValue === '1' || lowerValue === 'yes') {
+                converted[key] = true;
+              } else if (lowerValue === 'false' || lowerValue === '0' || lowerValue === 'no') {
+                converted[key] = false;
+              } else {
+                console.warn(`参数 ${key} 无法转换为布尔值，保持原值: ${value}`);
+                converted[key] = value;
+              }
+              break;
+            
+            case 'array':
+              // 尝试解析JSON数组
+              try {
+                const parsed = JSON.parse(trimmedValue);
+                if (Array.isArray(parsed)) {
+                  converted[key] = parsed;
+                } else {
+                  converted[key] = value;
+                }
+              } catch {
+                // 如果不是JSON格式，尝试按逗号分割
+                converted[key] = trimmedValue.split(',').map(item => item.trim());
+              }
+              break;
+            
+            case 'object':
+              // 尝试解析JSON对象
+              try {
+                converted[key] = JSON.parse(trimmedValue);
+              } catch {
+                console.warn(`参数 ${key} 无法解析为对象，保持原值: ${value}`);
+                converted[key] = value;
+              }
+              break;
+            
+            case 'string':
+            default:
+              // 字符串类型或其他未知类型，保持原值
+              converted[key] = value;
+              break;
+          }
+        } catch (error) {
+          console.warn(`参数 ${key} 类型转换失败，保持原值: ${value}`, error);
+          converted[key] = value;
+        }
+      } else {
+        // 非字符串值，直接使用（可能是已经转换过的）
+        converted[key] = value;
+      }
+    }
+
+    return converted;
+  }
+
+  /**
    * 调用工具
    */
   async callTool(name: string, arguments_: Record<string, unknown>): Promise<MCPToolResult> {
     let result: MCPToolResult;
+
+    // 查找工具对象以获取inputSchema
+    const tool = this.enhancedTools.find(t => t.name === name);
+    const inputSchema = tool?.inputSchema;
+
+    // 根据工具schema转换参数类型
+    const convertedArguments = this.convertParametersBySchema(arguments_, inputSchema);
+    
+    console.log('[MCPClient] 工具调用参数转换:', {
+      toolName: name,
+      original: arguments_,
+      converted: convertedArguments,
+      hasSchema: !!inputSchema
+    });
 
     if (this.config?.transport === 'streamable' && this.mcpClient && this.transport) {
       // Streamable模式 - 使用统一的streamable传输层
@@ -2340,7 +2477,7 @@ export class MCPClient {
           method: 'tools/call',
           params: {
             name,
-            arguments: arguments_
+            arguments: convertedArguments
           }
         };
 
@@ -2392,11 +2529,12 @@ export class MCPClient {
         method: 'tools/call',
         params: {
           name,
-          arguments: arguments_
+          arguments: convertedArguments
         }
       };
 
-      const response = await this.sendRequest(request);
+      // 工具调用使用30秒超时
+      const response = await this.sendRequest(request, 30000);
       result = response.result as MCPToolResult;
     }
 
@@ -2404,7 +2542,7 @@ export class MCPClient {
     console.log(`[被动检测] 检查状态: passiveDetectionEnabled=${this.passiveDetectionEnabled}, securityConfig=${!!this.securityConfig}`);
     if (this.passiveDetectionEnabled) {
       // 异步执行，不阻塞主流程
-      this.performPassiveDetection('tool', name, arguments_, result).catch(error => {
+      this.performPassiveDetection('tool', name, convertedArguments, result).catch(error => {
         console.error('被动检测执行失败:', error);
       });
     } else {
@@ -2585,7 +2723,7 @@ export class MCPClient {
   /**
    * 发送JSON-RPC请求
    */
-  private async sendRequest(request: JSONRPCRequest): Promise<JSONRPCResponse> {
+  private async sendRequest(request: JSONRPCRequest, timeoutMs: number = 10000): Promise<JSONRPCResponse> {
     if (!this.config) {
       throw new Error('MCP客户端未配置');
     }
@@ -2594,13 +2732,11 @@ export class MCPClient {
       throw new Error('消息端点未从SSE获取到');
     }
 
-    const timeout = 10000; // 减少到10秒超时，提高响应速度
-
     return new Promise((resolve, reject) => {
       const timeoutHandle = setTimeout(() => {
         this.pendingRequests.delete(request.id);
         reject(new Error('请求超时'));
-      }, timeout);
+      }, timeoutMs);
 
       this.pendingRequests.set(request.id, {
         resolve,
