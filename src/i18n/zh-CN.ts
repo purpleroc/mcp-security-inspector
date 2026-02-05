@@ -931,4 +931,11 @@ export const zhCN: TranslationKey = {
     language: '语言',
     changeLanguage: '切换语言',
   },
+
+  theme: {
+    title: '主题设置',
+    darkMode: '深色模式',
+    lightMode: '浅色模式',
+    systemDefault: '跟随系统',
+  },
 }; 

@@ -211,11 +211,11 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
               return (
                 <List.Item
                   key={config.name}
-                  style={{ 
+                  style={{
                     padding: '12px',
                     marginBottom: '8px',
-                    backgroundColor: isConnected ? '#f6ffed' : '#fafafa',
-                    border: `1px solid ${isConnected ? '#52c41a' : '#e8e8e8'}`,
+                    backgroundColor: isConnected ? 'var(--color-success-bg)' : 'var(--bg-elevated)',
+                    border: `1px solid ${isConnected ? 'var(--color-success)' : 'var(--border-color)'}`,
                     borderRadius: '8px',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
@@ -223,14 +223,14 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
                   }}
                   onMouseEnter={(e) => {
                     if (!isConnected) {
-                      e.currentTarget.style.backgroundColor = '#f0f0f0';
-                      e.currentTarget.style.borderColor = '#d9d9d9';
+                      e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                      e.currentTarget.style.borderColor = 'var(--color-primary)';
                     }
                   }}
                   onMouseLeave={(e) => {
                     if (!isConnected) {
-                      e.currentTarget.style.backgroundColor = '#fafafa';
-                      e.currentTarget.style.borderColor = '#e8e8e8';
+                      e.currentTarget.style.backgroundColor = 'var(--bg-elevated)';
+                      e.currentTarget.style.borderColor = 'var(--border-color)';
                     }
                   }}
                 >
@@ -243,10 +243,10 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
                       marginBottom: '8px'
                     }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ 
-                          fontSize: '14px', 
+                        <div style={{
+                          fontSize: '14px',
                           fontWeight: '600',
-                          color: '#262626',
+                          color: 'var(--text-primary)',
                           marginBottom: '2px',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -254,9 +254,9 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
                         }}>
                           {config.name}
                         </div>
-                        <div style={{ 
+                        <div style={{
                           fontSize: '12px',
-                          color: '#8c8c8c',
+                          color: 'var(--text-secondary)',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap'
@@ -270,7 +270,7 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
                         <div style={{
                           width: '8px',
                           height: '8px',
-                          backgroundColor: '#52c41a',
+                          backgroundColor: 'var(--color-success)',
                           borderRadius: '50%',
                           marginLeft: '8px'
                         }} />
@@ -289,10 +289,10 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
                           <span style={{
                             fontSize: '10px',
                             padding: '2px 6px',
-                            backgroundColor: config.auth?.type !== 'none' && config.auth?.type ? '#e6f7ff' : '#f5f5f5',
-                            color: config.auth?.type !== 'none' && config.auth?.type ? '#1890ff' : '#8c8c8c',
+                            backgroundColor: config.auth?.type !== 'none' && config.auth?.type ? 'var(--color-primary-bg)' : 'var(--bg-surface)',
+                            color: config.auth?.type !== 'none' && config.auth?.type ? 'var(--color-primary)' : 'var(--text-muted)',
                             borderRadius: '3px',
-                            border: `1px solid ${config.auth?.type !== 'none' && config.auth?.type ? '#d1e9ff' : '#e8e8e8'}`
+                            border: `1px solid ${config.auth?.type !== 'none' && config.auth?.type ? 'var(--color-primary-border)' : 'var(--border-color)'}`
                           }}>
                             {(() => {
                               if (!config.auth || config.auth.type === 'none') {
@@ -310,7 +310,7 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
                         {config.updatedAt && (
                           <div style={{
                             fontSize: '10px',
-                            color: '#bfbfbf'
+                            color: 'var(--text-muted)'
                           }}>
                             {formatTime(config.updatedAt)}
                           </div>
@@ -358,11 +358,11 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
                                 handleConnect(config);
                               }}
                               loading={loading === config.name}
-                              style={{ 
+                              style={{
                                 minWidth: '28px',
                                 height: '28px',
                                 padding: '0',
-                                color: '#1890ff'
+                                color: 'var(--color-primary)'
                               }}
                             />
                           </Tooltip>

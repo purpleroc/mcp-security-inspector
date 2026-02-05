@@ -52,18 +52,18 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
           checked={authEnabled}
           onChange={handleAuthToggle}
         />
-        <span style={{ marginLeft: 8, fontSize: '12px', color: '#666' }}>
+        <span style={{ marginLeft: 8, fontSize: '12px', color: 'var(--text-secondary)' }}>
           {authEnabled ? t.auth.enableAuthMode : t.auth.none}
         </span>
       </Form.Item>
 
       {authEnabled && (
         <div>
-          <div style={{ marginBottom: 16, padding: '8px 12px', backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: '6px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#52c41a', marginBottom: '4px' }}>
+          <div style={{ marginBottom: 16, padding: '8px 12px', backgroundColor: 'var(--color-success-bg)', border: '1px solid var(--color-success-border)', borderRadius: '6px' }}>
+            <div style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--color-success)', marginBottom: '4px' }}>
               {t.auth.combinedMode}
             </div>
-            <div style={{ fontSize: '12px', color: '#666' }}>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
               {t.auth.combinedModeDesc}
             </div>
           </div>
@@ -84,7 +84,7 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
                 }
               }}
             />
-            <span style={{ marginLeft: 8, fontSize: '12px', color: '#666' }}>
+            <span style={{ marginLeft: 8, fontSize: '12px', color: 'var(--text-secondary)' }}>
               {t.auth.enableApiKey}
             </span>
           </Form.Item>
@@ -127,7 +127,7 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
                 }
               }}
             />
-            <span style={{ marginLeft: 8, fontSize: '12px', color: '#666' }}>
+            <span style={{ marginLeft: 8, fontSize: '12px', color: 'var(--text-secondary)' }}>
               {t.auth.enableUrlParams}
             </span>
           </Form.Item>
@@ -191,7 +191,7 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
                 }
               }}
             />
-            <span style={{ marginLeft: 8, fontSize: '12px', color: '#666' }}>
+            <span style={{ marginLeft: 8, fontSize: '12px', color: 'var(--text-secondary)' }}>
               {t.auth.basic}
             </span>
           </Form.Item>
@@ -227,7 +227,7 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
                 }
               }}
             />
-            <span style={{ marginLeft: 8, fontSize: '12px', color: '#666' }}>
+            <span style={{ marginLeft: 8, fontSize: '12px', color: 'var(--text-secondary)' }}>
               {t.auth.enableCustomHeaders}
             </span>
           </Form.Item>
@@ -271,7 +271,7 @@ const AuthConfigComponent: React.FC<AuthConfigProps> = ({ value, onChange }) => 
                       }} />
                     </Space>
                     {hasError && (
-                      <div style={{ color: '#ff4d4f', fontSize: '12px', marginTop: 4 }}>
+                      <div style={{ color: 'var(--color-error)', fontSize: '12px', marginTop: 4 }}>
                         {t.auth.headerInvalidChars}
                       </div>
                     )}

@@ -282,7 +282,7 @@ const LLMConfigComponent: React.FC<LLMConfigProps> = ({ onConfigChange }) => {
       dataIndex: 'endpoint',
       key: 'endpoint',
       render: (endpoint: string) => (
-        <Text style={{ fontSize: '12px', color: '#666' }}>
+        <Text style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
           {endpoint.length > 40 ? `${endpoint.substring(0, 40)}...` : endpoint}
         </Text>
       ),

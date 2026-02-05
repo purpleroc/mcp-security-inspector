@@ -930,4 +930,11 @@ export const enUS: TranslationKey = {
     language: 'Language',
     changeLanguage: 'Change Language',
   },
+
+  theme: {
+    title: 'Theme Settings',
+    darkMode: 'Dark Mode',
+    lightMode: 'Light Mode',
+    systemDefault: 'System Default',
+  },
 }; 

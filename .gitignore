@@ -9,3 +9,7 @@ mcp-security-inspector-*.zip
 create_icons.py
 python_mcp
 /.codebuddy/*
+.ftp
+.cursor
+.claude
+.shared

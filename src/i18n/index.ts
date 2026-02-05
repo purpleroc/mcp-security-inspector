@@ -946,6 +946,14 @@ export interface TranslationKey {
     language: string;
     changeLanguage: string;
   };
+
+  // 主题相关
+  theme?: {
+    title: string;
+    darkMode: string;
+    lightMode: string;
+    systemDefault: string;
+  };
 }
 
 // 导入翻译文件

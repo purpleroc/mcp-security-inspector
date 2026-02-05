@@ -79,10 +79,10 @@ const HistoryPanel: React.FC = () => {
         key={item.id}
         style={{
           padding: 16,
-          border: '1px solid #f0f0f0',
+          border: '1px solid var(--border-color)',
           borderRadius: 8,
           marginBottom: 8,
-          backgroundColor: hasError ? '#fff2f0' : '#fff'
+          backgroundColor: hasError ? 'var(--color-error-bg)' : 'var(--bg-elevated)'
         }}
         actions={[
           <Popconfirm
@@ -134,10 +134,10 @@ const HistoryPanel: React.FC = () => {
                     <Text type="secondary">{t.history.parameters}</Text>
                     <div style={{
                       marginTop: 8,
-                      backgroundColor: '#f5f5f5',
+                      backgroundColor: 'var(--bg-surface)',
                       padding: 8,
                       borderRadius: 4,
-                      border: '1px solid #d9d9d9',
+                      border: '1px solid var(--border-color)',
                       minHeight: 80,
                       maxHeight: 300,
                       overflow: 'auto',
@@ -156,7 +156,8 @@ const HistoryPanel: React.FC = () => {
                         width: '100%',
                         minWidth: '100%',
                         display: 'block',
-                        boxSizing: 'border-box'
+                        boxSizing: 'border-box',
+                        color: 'var(--text-secondary)'
                       }}>
                         {JSON.stringify(item.parameters, null, 2)}
                       </pre>
@@ -193,10 +194,10 @@ const HistoryPanel: React.FC = () => {
                       </summary>
                       <div style={{
                         marginTop: 8,
-                        backgroundColor: '#f5f5f5',
+                        backgroundColor: 'var(--bg-surface)',
                         padding: 8,
                         borderRadius: 4,
-                        border: '1px solid #d9d9d9',
+                        border: '1px solid var(--border-color)',
                         minHeight: 80,
                         maxHeight: 300,
                         overflow: 'auto',
@@ -210,7 +211,8 @@ const HistoryPanel: React.FC = () => {
                           lineHeight: '1.3',
                           fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
                           width: '100%',
-                          minWidth: '100%'
+                          minWidth: '100%',
+                          color: 'var(--text-secondary)'
                         }}>
                           {JSON.stringify(item.result, null, 2)}
                         </pre>

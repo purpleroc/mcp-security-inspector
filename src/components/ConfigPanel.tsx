@@ -272,7 +272,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
         {/* 连接成功后的状态和断开按钮 */}
         {connectionStatus === 'connected' && (
           <div style={{ marginTop: 16 }}>
-            <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 4 }}>
+            <div style={{ marginBottom: 16, padding: 12, backgroundColor: 'var(--color-success-bg)', border: '1px solid var(--color-success-border)', borderRadius: 4 }}>
               <p><strong>{t.config.connectionStatus.connected}:</strong> {serverConfig?.name}</p>
               <p><strong>{t.config.serverHost}:</strong> {serverConfig?.host}</p>
               <p><strong>{t.config.transportMode}:</strong> {

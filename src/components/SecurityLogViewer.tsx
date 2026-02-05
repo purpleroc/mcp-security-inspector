@@ -75,25 +75,25 @@ const SecurityLogViewer: React.FC<SecurityLogViewerProps> = ({
   const getLogIcon = (type: SecurityLogEntry['type']) => {
     switch (type) {
       case 'success':
-        return <CheckCircleOutlined style={{ color: '#52c41a' }} />;
+        return <CheckCircleOutlined style={{ color: 'var(--color-success)' }} />;
       case 'warning':
-        return <ExclamationCircleOutlined style={{ color: '#faad14' }} />;
+        return <ExclamationCircleOutlined style={{ color: 'var(--color-warning)' }} />;
       case 'error':
-        return <CloseCircleOutlined style={{ color: '#ff4d4f' }} />;
+        return <CloseCircleOutlined style={{ color: 'var(--color-error)' }} />;
       case 'step':
-        return <ClockCircleOutlined style={{ color: '#1890ff' }} />;
+        return <ClockCircleOutlined style={{ color: 'var(--color-primary)' }} />;
       default:
-        return <InfoCircleOutlined style={{ color: '#d9d9d9' }} />;
+        return <InfoCircleOutlined style={{ color: 'var(--text-muted)' }} />;
     }
   };
 
   const getLogColor = (type: SecurityLogEntry['type']) => {
     switch (type) {
-      case 'success': return '#f6ffed';
-      case 'warning': return '#fffbe6';
-      case 'error': return '#fff2f0';
-      case 'step': return '#f0f9ff';
-      default: return '#fafafa';
+      case 'success': return 'var(--color-success-bg)';
+      case 'warning': return 'var(--color-warning-bg)';
+      case 'error': return 'var(--color-error-bg)';
+      case 'step': return 'var(--color-info-bg)';
+      default: return 'var(--bg-elevated)';
     }
   };
 
@@ -149,9 +149,9 @@ const SecurityLogViewer: React.FC<SecurityLogViewerProps> = ({
       title={
         <Space>
           <Text strong>{t.security.detectionLogs}</Text>
-          <Badge 
-            count={logs.length} 
-            style={{ backgroundColor: '#52c41a' }} 
+          <Badge
+            count={logs.length}
+            style={{ backgroundColor: 'var(--color-success)' }}
           />
           {isScanning && (
             <Badge status="processing" text={t.security.scanning} />
@@ -189,18 +189,18 @@ const SecurityLogViewer: React.FC<SecurityLogViewerProps> = ({
       }
       size="small"
     >
-      <div 
+      <div
         ref={logContainerRef}
-        style={{ 
-          height: '400px', 
+        style={{
+          height: '400px',
           overflowY: 'auto',
-          border: '1px solid #f0f0f0',
+          border: '1px solid var(--border-color)',
           borderRadius: '6px',
           padding: '8px'
         }}
       >
         {logs.length === 0 ? (
-          <div style={{ textAlign: 'center', color: '#999', marginTop: '50px' }}>
+          <div style={{ textAlign: 'center', color: 'var(--text-muted)', marginTop: '50px' }}>
             {t.security.noLogsRecord}
           </div>
         ) : (
@@ -246,10 +246,10 @@ const SecurityLogViewer: React.FC<SecurityLogViewerProps> = ({
                   
                   {log.progress !== undefined && (
                     <div style={{ marginTop: '4px', width: '200px' }}>
-                      <div 
+                      <div
                         style={{
                           height: '4px',
-                          backgroundColor: '#f0f0f0',
+                          backgroundColor: 'var(--bg-elevated)',
                           borderRadius: '2px',
                           overflow: 'hidden'
                         }}
@@ -257,7 +257,7 @@ const SecurityLogViewer: React.FC<SecurityLogViewerProps> = ({
                         <div
                           style={{
                             height: '100%',
-                            backgroundColor: '#1890ff',
+                            backgroundColor: 'var(--color-primary)',
                             width: `${log.progress}%`,
                             transition: 'width 0.3s ease'
                           }}
@@ -318,7 +318,7 @@ const SecurityLogViewer: React.FC<SecurityLogViewerProps> = ({
                   <Text strong>{t.security.metadata}：</Text>
                   <Collapse size="small" style={{ marginTop: '8px' }}>
                     <Panel header={t.security.viewDetailInfo} key="metadata">
-                      <pre style={{ fontSize: '12px', backgroundColor: '#f5f5f5', padding: '8px' }}>
+                      <pre style={{ fontSize: '12px', backgroundColor: 'var(--code-bg)', padding: '8px', borderRadius: '4px', color: 'var(--text-secondary)' }}>
                         {JSON.stringify(selectedLog.metadata, null, 2)}
                       </pre>
                     </Panel>
@@ -331,7 +331,7 @@ const SecurityLogViewer: React.FC<SecurityLogViewerProps> = ({
                   <Text strong>{t.security.detailData}：</Text>
                   <Collapse size="small" style={{ marginTop: '8px' }}>
                     <Panel header={t.security.viewDetailData} key="details">
-                      <pre style={{ fontSize: '12px', backgroundColor: '#f5f5f5', padding: '8px', maxHeight: '300px', overflow: 'auto' }}>
+                      <pre style={{ fontSize: '12px', backgroundColor: 'var(--code-bg)', padding: '8px', maxHeight: '300px', overflow: 'auto', borderRadius: '4px', color: 'var(--text-secondary)' }}>
                         {typeof selectedLog.details === 'string' 
                           ? selectedLog.details 
                           : JSON.stringify(selectedLog.details, null, 2)

@@ -1,29 +1,36 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Card, 
-  Collapse, 
-  List, 
-  Button, 
-  Form, 
-  Input, 
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Card,
+  Button,
+  Form,
+  Input,
   Select,
   Checkbox,
-  Space, 
-  Alert, 
-  Tag, 
-  Typography, 
+  Space,
+  Alert,
+  Tag,
+  Typography,
   message,
-  Divider,
-  Badge
+  Badge,
+  Tooltip,
+  Empty,
+  Spin
 } from 'antd';
-import { 
-  ToolOutlined, 
-  FileTextOutlined, 
-  MessageOutlined, 
+import {
+  ToolOutlined,
+  FileTextOutlined,
+  MessageOutlined,
   PlayCircleOutlined,
-  InfoCircleOutlined,
-  ExclamationCircleOutlined,
-  ReloadOutlined
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  CopyOutlined,
+  ExpandOutlined,
+  CompressOutlined,
+  SearchOutlined,
+  ThunderboltOutlined,
+  ApiOutlined,
+  CodeOutlined,
+  RightOutlined
 } from '@ant-design/icons';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store';
@@ -34,21 +41,26 @@ import { useI18n } from '../hooks/useI18n';
 const { Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
+// 类型选项卡类型
+type TabType = 'tools' | 'resources' | 'prompts';
+
 const MCPExplorer: React.FC = () => {
   const { t } = useI18n();
   const dispatch = useDispatch();
-  const { 
-    connectionStatus, 
-    tools, 
-    resources, 
+  const {
+    connectionStatus,
+    tools,
+    resources,
     resourceTemplates,
-    prompts, 
-    isLoading, 
-    lastResult, 
+    prompts,
+    isLoading,
+    lastResult,
     lastError,
-    securityCheck 
+    securityCheck
   } = useSelector((state: RootState) => state.mcp);
 
+  const [activeTab, setActiveTab] = useState<TabType>('tools');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedTool, setSelectedTool] = useState<MCPTool | null>(null);
   const [selectedResource, setSelectedResource] = useState<MCPResource | null>(null);
   const [selectedPrompt, setSelectedPrompt] = useState<MCPPrompt | null>(null);
@@ -61,12 +73,13 @@ const MCPExplorer: React.FC = () => {
   const [toolErrors, setToolErrors] = useState<Record<string, string>>({});
   const [resourceErrors, setResourceErrors] = useState<Record<string, string>>({});
   const [promptErrors, setPromptErrors] = useState<Record<string, string>>({});
+  const [expandedResult, setExpandedResult] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const resultRef = useRef<HTMLDivElement>(null);
 
   // 监听连接状态变化，切换服务器时清空本地状态
   useEffect(() => {
     if (connectionStatus === 'connecting') {
-      // 清空所有选中状态和结果
       setSelectedTool(null);
       setSelectedResource(null);
       setSelectedPrompt(null);
@@ -82,16 +95,23 @@ const MCPExplorer: React.FC = () => {
     }
   }, [connectionStatus]);
 
-  // 安全等级颜色映射
-  const getRiskColor = (level: SecurityRiskLevel) => {
-    switch (level) {
-      case 'low': return 'green';
-      case 'medium': return 'orange';
-      case 'high': return 'red';
-      case 'critical': return '#FF0000';
-      default: return 'default';
-    }
-  };
+  // 过滤列表
+  const filteredTools = tools.filter(tool =>
+    tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (tool.description?.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const allResources = [...resources, ...resourceTemplates];
+  const filteredResources = allResources.filter(resource =>
+    (resource.name?.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (resource.description?.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (resource.uri?.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const filteredPrompts = prompts.filter(prompt =>
+    prompt.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (prompt.description?.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   // 执行工具调用
   const handleToolCall = async () => {
@@ -114,39 +134,30 @@ const MCPExplorer: React.FC = () => {
     if (!selectedResource) return;
 
     try {
-      // 如果是动态资源模板，构造实际的URI
       let actualUri = selectedResource.uri || (selectedResource as any).uriTemplate;
-      console.log('原始URI模板:', actualUri);
-      console.log('当前参数:', resourceParams);
-      
+
       if (actualUri && actualUri.includes('{')) {
-        // 检查是否所有必需的参数都已填写
         const requiredParams = actualUri.match(/\{([^}]+)\}/g) || [];
         const missingParams: string[] = [];
-        
+
         requiredParams.forEach((param: string) => {
-          const paramName = param.slice(1, -1); // 移除 { 和 }
+          const paramName = param.slice(1, -1);
           if (!resourceParams[paramName] || resourceParams[paramName].toString().trim() === '') {
             missingParams.push(paramName);
           }
         });
-        
+
         if (missingParams.length > 0) {
           message.error(`请填写以下必需参数: ${missingParams.join(', ')}`);
           return;
         }
-        
-        // 替换URI模板中的参数
+
         Object.entries(resourceParams).forEach(([key, value]) => {
           if (value && value.toString().trim() !== '') {
-            console.log(`替换参数 ${key} = ${value}`);
             actualUri = actualUri.replace(`{${key}}`, String(value));
           }
         });
-        
-        console.log('替换后的URI:', actualUri);
-        
-        // 检查是否还有未替换的参数
+
         const remainingParams = actualUri.match(/\{([^}]+)\}/g) || [];
         if (remainingParams.length > 0) {
           const remainingParamNames = remainingParams.map((param: string) => param.slice(1, -1));
@@ -155,23 +166,13 @@ const MCPExplorer: React.FC = () => {
         }
       }
 
-      // 创建带有实际URI的资源对象
-      const resourceToRead = {
-        ...selectedResource,
-        uri: actualUri
-      };
-      
-      console.log('发送给服务器的资源对象:', resourceToRead);
-
+      const resourceToRead = { ...selectedResource, uri: actualUri };
       const result = await dispatch(readResource({ resource: resourceToRead, parameters: resourceParams }) as any).unwrap();
-      // 改进资源键的生成逻辑
       const resourceKey = selectedResource.name || selectedResource.uri || (selectedResource as any).uriTemplate;
       setResourceResults(prev => ({ ...prev, [resourceKey]: result.result }));
       setResourceErrors(prev => ({ ...prev, [resourceKey]: '' }));
       message.success(t.success.resourceReadSuccess);
     } catch (error) {
-      console.error('资源读取错误:', error);
-      // 改进资源键的生成逻辑
       const resourceKey = selectedResource.name || selectedResource.uri || (selectedResource as any).uriTemplate;
       setResourceErrors(prev => ({ ...prev, [resourceKey]: String(error) }));
       setResourceResults(prev => ({ ...prev, [resourceKey]: null }));
@@ -195,150 +196,97 @@ const MCPExplorer: React.FC = () => {
     }
   };
 
-  // 刷新组件列表
-  const handleRefresh = async () => {
-    if (refreshing) return;
-    
-    setRefreshing(true);
-    try {
-      // 手动重新获取组件列表
-      const { mcpClient } = await import('../services/mcpClient');
-      
-      // 重新获取所有组件
-      const [tools, prompts, resources, resourceTemplates] = await Promise.allSettled([
-        mcpClient.listTools(),
-        mcpClient.listPrompts(),
-        mcpClient.listResources(),
-        mcpClient.listResourceTemplates()
-      ]);
-      
-      // 更新Redux store
-      if (tools.status === 'fulfilled') {
-        dispatch(setTools(tools.value));
-      }
-      if (prompts.status === 'fulfilled') {
-        dispatch(setPrompts(prompts.value));
-      }
-      if (resources.status === 'fulfilled') {
-        dispatch(setResources(resources.value));
-      }
-      if (resourceTemplates.status === 'fulfilled') {
-        dispatch(setResourceTemplates(resourceTemplates.value));
-      }
-      
-      message.success(t.explorer.refreshSuccess);
-    } catch (error) {
-      message.error(t.explorer.refreshFailed + ': ' + error);
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
   // 从URI模板中提取参数
   const extractParamsFromUri = (uri: string): Record<string, { type: string; description?: string }> => {
     const params: Record<string, { type: string; description?: string }> = {};
     const matches = uri.match(/\{([^}]+)\}/g) || [];
-    
+
     matches.forEach((match) => {
-      const paramName = match.slice(1, -1); // 移除 { 和 }
-      params[paramName] = {
-        type: 'string',
-        description: `参数: ${paramName}`
-      };
+      const paramName = match.slice(1, -1);
+      params[paramName] = { type: 'string', description: `参数: ${paramName}` };
     });
-    
+
     return params;
   };
 
-  // 渲染结果显示组件
-  const renderResultDisplay = (result: any, error: string, onClose: () => void) => {
-    if (!result && !error) return null;
+  // 复制结果到剪贴板
+  const copyToClipboard = (content: any) => {
+    const text = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+    navigator.clipboard.writeText(text);
+    message.success('已复制到剪贴板');
+  };
 
-    return (
-      <Card 
-        size="small" 
-        title={t.tools.result}
-        style={{ marginTop: 16 }}
-        extra={
-          <Button size="small" onClick={onClose}>
-            {t.common.close}
-          </Button>
-        }
-      >
-        {error ? (
-          <Alert
-            message={t.common.error}
-            description={error}
-            type="error"
-          />
-        ) : result ? (
-          <div>
-            <div style={{ 
-              backgroundColor: '#f5f5f5', 
-              padding: 12, 
-              borderRadius: 4,
-              maxHeight: '400px',
-              overflow: 'auto',
-              border: '1px solid #d9d9d9'
-            }}>
-              <pre style={{
-                margin: 0,
-                whiteSpace: 'pre-wrap',
-                wordWrap: 'break-word',
-                fontSize: '12px',
-                lineHeight: '1.4',
-                fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace'
-              }}>
-                {JSON.stringify(result, null, 2)}
-              </pre>
-            </div>
-          </div>
-        ) : (
-          <div>{t.common.loading}</div>
-        )}
-      </Card>
-    );
+  // 获取当前结果和错误
+  const getCurrentResult = () => {
+    if (activeTab === 'tools' && selectedTool) {
+      return { result: toolResults[selectedTool.name], error: toolErrors[selectedTool.name] };
+    }
+    if (activeTab === 'resources' && selectedResource) {
+      const key = selectedResource.name || selectedResource.uri || (selectedResource as any).uriTemplate;
+      return { result: resourceResults[key], error: resourceErrors[key] };
+    }
+    if (activeTab === 'prompts' && selectedPrompt) {
+      return { result: promptResults[selectedPrompt.name], error: promptErrors[selectedPrompt.name] };
+    }
+    return { result: null, error: '' };
+  };
+
+  // 清除当前结果
+  const clearCurrentResult = () => {
+    if (activeTab === 'tools' && selectedTool) {
+      setToolResults(prev => ({ ...prev, [selectedTool.name]: null }));
+      setToolErrors(prev => ({ ...prev, [selectedTool.name]: '' }));
+    }
+    if (activeTab === 'resources' && selectedResource) {
+      const key = selectedResource.name || selectedResource.uri || (selectedResource as any).uriTemplate;
+      setResourceResults(prev => ({ ...prev, [key]: null }));
+      setResourceErrors(prev => ({ ...prev, [key]: '' }));
+    }
+    if (activeTab === 'prompts' && selectedPrompt) {
+      setPromptResults(prev => ({ ...prev, [selectedPrompt.name]: null }));
+      setPromptErrors(prev => ({ ...prev, [selectedPrompt.name]: '' }));
+    }
   };
 
   // 渲染参数表单
   const renderParameterForm = (
-    schema: any, 
-    values: Record<string, any>, 
+    schema: any,
+    values: Record<string, any>,
     onChange: (values: Record<string, any>) => void,
     uriTemplate?: string
   ) => {
-    
-    // 如果没有schema但有URI模板，从模板中提取参数
     let effectiveSchema = schema;
     if ((!schema?.properties || Object.keys(schema.properties || {}).length === 0) && uriTemplate) {
       const extractedParams = extractParamsFromUri(uriTemplate);
       effectiveSchema = { properties: extractedParams };
     }
-    
+
     if (!effectiveSchema?.properties || Object.keys(effectiveSchema.properties).length === 0) {
-      return null;
+      return (
+        <div className="no-params-hint">
+          <Text type="secondary">无需参数</Text>
+        </div>
+      );
     }
 
     return (
-      <Form layout="vertical">
+      <Form layout="vertical" className="modern-form">
         {Object.entries(effectiveSchema.properties).map(([key, prop]: [string, any]) => (
-          <Form.Item 
-            key={key} 
-            label={prop.title || key}
-            help={prop.description}
-            required={true} // 从URI模板提取的参数都是必需的
+          <Form.Item
+            key={key}
+            label={<span className="param-label">{prop.title || key}</span>}
+            className="modern-form-item"
           >
             {prop.type === 'string' && prop.enum ? (
               <Select
-                placeholder={`${t.tools.selectTool} ${key}`}
+                placeholder={`选择 ${key}`}
                 value={values[key]}
                 allowClear
                 onChange={(value: any) => onChange({ ...values, [key]: value })}
+                className="modern-select"
               >
                 {prop.enum.map((option: string) => (
-                  <Select.Option key={option} value={option}>
-                    {option}
-                  </Select.Option>
+                  <Select.Option key={option} value={option}>{option}</Select.Option>
                 ))}
               </Select>
             ) : prop.type === 'boolean' ? (
@@ -346,15 +294,26 @@ const MCPExplorer: React.FC = () => {
                 checked={values[key] || false}
                 onChange={(e: any) => onChange({ ...values, [key]: e.target.checked })}
               >
-                {prop.title || key}
+                {prop.description || key}
               </Checkbox>
-            ) : (
-              <Input
-                placeholder={prop.description ? prop.description : `${t.tools.pleaseInput} ${key}`}
+            ) : prop.type === 'object' || prop.type === 'array' ? (
+              <TextArea
+                placeholder={prop.description || `输入 ${key} (JSON 格式)`}
                 value={values[key] || ''}
                 onChange={(e) => onChange({ ...values, [key]: e.target.value })}
-                required
+                autoSize={{ minRows: 2, maxRows: 6 }}
+                className="modern-textarea"
               />
+            ) : (
+              <Input
+                placeholder={prop.description || `输入 ${key}`}
+                value={values[key] || ''}
+                onChange={(e) => onChange({ ...values, [key]: e.target.value })}
+                className="modern-input"
+              />
+            )}
+            {prop.description && (
+              <div className="param-description">{prop.description}</div>
             )}
           </Form.Item>
         ))}
@@ -362,420 +321,449 @@ const MCPExplorer: React.FC = () => {
     );
   };
 
+  // 渲染工具卡片
+  const renderToolCard = (tool: MCPTool) => {
+    const isSelected = selectedTool?.name === tool.name;
+    return (
+      <div
+        key={tool.name}
+        className={`item-card ${isSelected ? 'selected' : ''}`}
+        onClick={() => {
+          setSelectedTool(tool);
+          setToolParams({});
+        }}
+      >
+        <div className="item-card-header">
+          <div className="item-icon tool-icon">
+            <ThunderboltOutlined />
+          </div>
+          <div className="item-info">
+            <div className="item-name">{tool.name}</div>
+            <div className="item-desc">{tool.description || '暂无描述'}</div>
+          </div>
+          <RightOutlined className="item-arrow" />
+        </div>
+      </div>
+    );
+  };
+
+  // 渲染资源卡片
+  const renderResourceCard = (resource: MCPResource) => {
+    const isTemplate = !!(resource as any).uriTemplate;
+    const resourceKey = resource.name || resource.uri || (resource as any).uriTemplate;
+    const isSelected = selectedResource &&
+      ((selectedResource.name === resource.name) ||
+       (selectedResource.uri === resource.uri) ||
+       ((selectedResource as any).uriTemplate === (resource as any).uriTemplate));
+
+    return (
+      <div
+        key={resourceKey}
+        className={`item-card ${isSelected ? 'selected' : ''}`}
+        onClick={() => {
+          setSelectedResource(resource);
+          setResourceParams({});
+        }}
+      >
+        <div className="item-card-header">
+          <div className="item-icon resource-icon">
+            <FileTextOutlined />
+          </div>
+          <div className="item-info">
+            <div className="item-name">
+              {resource.name || resource.uri || (resource as any).uriTemplate}
+              {isTemplate && <Tag className="template-tag">模板</Tag>}
+            </div>
+            <div className="item-desc">{resource.description || resource.uri || (resource as any).uriTemplate}</div>
+          </div>
+          <RightOutlined className="item-arrow" />
+        </div>
+      </div>
+    );
+  };
+
+  // 渲染提示卡片
+  const renderPromptCard = (prompt: MCPPrompt) => {
+    const isSelected = selectedPrompt?.name === prompt.name;
+    return (
+      <div
+        key={prompt.name}
+        className={`item-card ${isSelected ? 'selected' : ''}`}
+        onClick={() => {
+          setSelectedPrompt(prompt);
+          setPromptParams({});
+        }}
+      >
+        <div className="item-card-header">
+          <div className="item-icon prompt-icon">
+            <MessageOutlined />
+          </div>
+          <div className="item-info">
+            <div className="item-name">{prompt.name}</div>
+            <div className="item-desc">{prompt.description || '暂无描述'}</div>
+          </div>
+          <RightOutlined className="item-arrow" />
+        </div>
+      </div>
+    );
+  };
+
+  // 渲染详情面板
+  const renderDetailPanel = () => {
+    const { result, error } = getCurrentResult();
+
+    if (activeTab === 'tools' && selectedTool) {
+      return (
+        <div className="detail-panel">
+          <div className="detail-header">
+            <div className="detail-icon tool-icon">
+              <ThunderboltOutlined />
+            </div>
+            <div className="detail-title-section">
+              <h3 className="detail-title">{selectedTool.name}</h3>
+              <p className="detail-subtitle">{selectedTool.description}</p>
+            </div>
+          </div>
+
+          <div className="detail-content">
+            <div className="params-section">
+              <h4 className="section-title">
+                <CodeOutlined /> 参数配置
+              </h4>
+              {renderParameterForm(selectedTool.inputSchema, toolParams, setToolParams)}
+            </div>
+
+            <div className="action-section">
+              <Button
+                type="primary"
+                size="large"
+                icon={<PlayCircleOutlined />}
+                onClick={handleToolCall}
+                loading={isLoading}
+                className="execute-btn"
+              >
+                执行调用
+              </Button>
+            </div>
+
+            {(result || error) && (
+              <div className="result-section">
+                <div className="result-header">
+                  <h4 className="section-title">
+                    {error ? <CloseCircleOutlined style={{ color: 'var(--color-error)' }} /> :
+                            <CheckCircleOutlined style={{ color: 'var(--color-success)' }} />}
+                    {error ? ' 执行失败' : ' 执行结果'}
+                  </h4>
+                  <Space>
+                    {result && (
+                      <Tooltip title="复制结果">
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<CopyOutlined />}
+                          onClick={() => copyToClipboard(result)}
+                        />
+                      </Tooltip>
+                    )}
+                    <Tooltip title={expandedResult ? '收起' : '展开'}>
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={expandedResult ? <CompressOutlined /> : <ExpandOutlined />}
+                        onClick={() => setExpandedResult(!expandedResult)}
+                      />
+                    </Tooltip>
+                    <Button size="small" onClick={clearCurrentResult}>关闭</Button>
+                  </Space>
+                </div>
+                <div
+                  ref={resultRef}
+                  className={`result-content ${expandedResult ? 'expanded' : ''} ${error ? 'error' : 'success'}`}
+                >
+                  <pre>{error || JSON.stringify(result, null, 2)}</pre>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (activeTab === 'resources' && selectedResource) {
+      const uriTemplate = selectedResource.uri || (selectedResource as any).uriTemplate;
+      return (
+        <div className="detail-panel">
+          <div className="detail-header">
+            <div className="detail-icon resource-icon">
+              <FileTextOutlined />
+            </div>
+            <div className="detail-title-section">
+              <h3 className="detail-title">{selectedResource.name || uriTemplate}</h3>
+              <p className="detail-subtitle">{selectedResource.description || uriTemplate}</p>
+            </div>
+          </div>
+
+          <div className="detail-content">
+            <div className="uri-display">
+              <span className="uri-label">URI:</span>
+              <code className="uri-value">{uriTemplate}</code>
+            </div>
+
+            <div className="params-section">
+              <h4 className="section-title">
+                <CodeOutlined /> 参数配置
+              </h4>
+              {renderParameterForm(
+                (selectedResource as any).inputSchema || { properties: {} },
+                resourceParams,
+                setResourceParams,
+                uriTemplate
+              )}
+            </div>
+
+            <div className="action-section">
+              <Button
+                type="primary"
+                size="large"
+                icon={<PlayCircleOutlined />}
+                onClick={handleResourceRead}
+                loading={isLoading}
+                className="execute-btn"
+              >
+                读取资源
+              </Button>
+            </div>
+
+            {(result || error) && (
+              <div className="result-section">
+                <div className="result-header">
+                  <h4 className="section-title">
+                    {error ? <CloseCircleOutlined style={{ color: 'var(--color-error)' }} /> :
+                            <CheckCircleOutlined style={{ color: 'var(--color-success)' }} />}
+                    {error ? ' 读取失败' : ' 读取结果'}
+                  </h4>
+                  <Space>
+                    {result && (
+                      <Tooltip title="复制结果">
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<CopyOutlined />}
+                          onClick={() => copyToClipboard(result)}
+                        />
+                      </Tooltip>
+                    )}
+                    <Tooltip title={expandedResult ? '收起' : '展开'}>
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={expandedResult ? <CompressOutlined /> : <ExpandOutlined />}
+                        onClick={() => setExpandedResult(!expandedResult)}
+                      />
+                    </Tooltip>
+                    <Button size="small" onClick={clearCurrentResult}>关闭</Button>
+                  </Space>
+                </div>
+                <div
+                  ref={resultRef}
+                  className={`result-content ${expandedResult ? 'expanded' : ''} ${error ? 'error' : 'success'}`}
+                >
+                  <pre>{error || JSON.stringify(result, null, 2)}</pre>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (activeTab === 'prompts' && selectedPrompt) {
+      return (
+        <div className="detail-panel">
+          <div className="detail-header">
+            <div className="detail-icon prompt-icon">
+              <MessageOutlined />
+            </div>
+            <div className="detail-title-section">
+              <h3 className="detail-title">{selectedPrompt.name}</h3>
+              <p className="detail-subtitle">{selectedPrompt.description}</p>
+            </div>
+          </div>
+
+          <div className="detail-content">
+            {selectedPrompt.arguments && selectedPrompt.arguments.length > 0 && (
+              <div className="params-section">
+                <h4 className="section-title">
+                  <CodeOutlined /> 参数配置
+                </h4>
+                <Form layout="vertical" className="modern-form">
+                  {selectedPrompt.arguments.map((arg) => (
+                    <Form.Item
+                      key={arg.name}
+                      label={<span className="param-label">{arg.name}</span>}
+                      className="modern-form-item"
+                    >
+                      <Input
+                        placeholder={arg.description || `输入 ${arg.name}`}
+                        value={promptParams[arg.name] || ''}
+                        onChange={(e) => setPromptParams({ ...promptParams, [arg.name]: e.target.value })}
+                        className="modern-input"
+                      />
+                      {arg.description && (
+                        <div className="param-description">{arg.description}</div>
+                      )}
+                    </Form.Item>
+                  ))}
+                </Form>
+              </div>
+            )}
+
+            <div className="action-section">
+              <Button
+                type="primary"
+                size="large"
+                icon={<PlayCircleOutlined />}
+                onClick={handlePromptGet}
+                loading={isLoading}
+                className="execute-btn"
+              >
+                获取提示
+              </Button>
+            </div>
+
+            {(result || error) && (
+              <div className="result-section">
+                <div className="result-header">
+                  <h4 className="section-title">
+                    {error ? <CloseCircleOutlined style={{ color: 'var(--color-error)' }} /> :
+                            <CheckCircleOutlined style={{ color: 'var(--color-success)' }} />}
+                    {error ? ' 获取失败' : ' 提示内容'}
+                  </h4>
+                  <Space>
+                    {result && (
+                      <Tooltip title="复制结果">
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<CopyOutlined />}
+                          onClick={() => copyToClipboard(result)}
+                        />
+                      </Tooltip>
+                    )}
+                    <Tooltip title={expandedResult ? '收起' : '展开'}>
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={expandedResult ? <CompressOutlined /> : <ExpandOutlined />}
+                        onClick={() => setExpandedResult(!expandedResult)}
+                      />
+                    </Tooltip>
+                    <Button size="small" onClick={clearCurrentResult}>关闭</Button>
+                  </Space>
+                </div>
+                <div
+                  ref={resultRef}
+                  className={`result-content ${expandedResult ? 'expanded' : ''} ${error ? 'error' : 'success'}`}
+                >
+                  <pre>{error || JSON.stringify(result, null, 2)}</pre>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="detail-panel empty-state">
+        <div className="empty-content">
+          <ApiOutlined className="empty-icon" />
+          <h3>选择一个项目开始</h3>
+          <p>从左侧列表中选择一个工具、资源或提示来查看详情并执行操作</p>
+        </div>
+      </div>
+    );
+  };
+
   if (connectionStatus !== 'connected') {
     return (
-      <div style={{ padding: 24, textAlign: 'center' }}>
-        <Alert
-          message={t.explorer.noConnection}
-          description={t.explorer.connectFirst}
-          type="warning"
-          showIcon
-        />
+      <div className="mcp-explorer-disconnected">
+        <div className="disconnected-content">
+          <ApiOutlined className="disconnected-icon" />
+          <h2>{t.explorer.noConnection}</h2>
+          <p>{t.explorer.connectFirst}</p>
+        </div>
       </div>
     );
   }
 
-  // Collapse items配置
-  const collapseItems = [
-    // 工具部分
-    {
-      key: 'tools',
-      label: (
-        <Space>
-          <ToolOutlined />
-          <span>{t.tools.title}</span>
-          <Badge count={tools.length} />
-        </Space>
-      ),
-      children: (
-        <div>
-          {tools.length === 0 ? (
-            <Alert message={t.tools.noTools} type="info" />
-          ) : (
-            <List
-              dataSource={tools}
-              renderItem={(tool) => (
-                <div key={tool.name}>
-                  <List.Item
-                    actions={[
-                      <Button 
-                        key="select"
-                        type={selectedTool?.name === tool.name ? 'primary' : 'default'}
-                        onClick={() => {
-                          setSelectedTool(tool);
-                          setToolParams({}); // 清空参数状态
-                        }}
-                      >
-                        {selectedTool?.name === tool.name ? t.tools.selectTool : t.tools.selectTool}
-                      </Button>
-                    ]}
-                  >
-                    <List.Item.Meta
-                      title={tool.name}
-                      description={tool.description}
-                    />
-                  </List.Item>
-                  
-                  {/* 在选中的工具下方显示调用功能框 */}
-                  {selectedTool?.name === tool.name && (
-                    <div style={{ marginLeft: 24, marginBottom: 16, marginTop: 8 }}>
-                      <Card size="small" title={`${t.tools.callTool}: ${selectedTool.name}`}>
-                        {renderParameterForm(
-                          selectedTool.inputSchema,
-                          toolParams,
-                          setToolParams
-                        )}
-                        
-                        {securityCheck && (
-                          <Alert
-                            message={`${t.security.riskAssessment}: ${securityCheck.level.toUpperCase()}`}
-                            description={
-                              <div>
-                                {securityCheck.warnings.length > 0 && (
-                                  <div>
-                                    <Text strong>{t.common.warning}:</Text>
-                                    <ul>
-                                      {securityCheck.warnings.map((warning, idx) => (
-                                        <li key={idx}>{warning}</li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-                                {securityCheck.recommendations.length > 0 && (
-                                  <div>
-                                    <Text strong>{t.security.recommendations}:</Text>
-                                    <ul>
-                                      {securityCheck.recommendations.map((rec, idx) => (
-                                        <li key={idx}>{rec}</li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-                              </div>
-                            }
-                            type={securityCheck.level === 'low' ? 'success' : 
-                                  securityCheck.level === 'medium' ? 'warning' : 'error'}
-                            style={{ marginBottom: 16 }}
-                          />
-                        )}
-
-                        <Button 
-                          type="primary" 
-                          icon={<PlayCircleOutlined />}
-                          onClick={handleToolCall}
-                          loading={isLoading}
-                        >
-                          {t.tools.callTool}
-                        </Button>
-                      </Card>
-                      
-                            {/* 工具调用结果显示 */}
-                            {renderResultDisplay(
-                              toolResults[tool.name], 
-                              toolErrors[tool.name], 
-                              () => {
-                                setToolResults(prev => ({ ...prev, [tool.name]: null }));
-                                setToolErrors(prev => ({ ...prev, [tool.name]: '' }));
-                              }
-                            )}
-                    </div>
-                  )}
-                </div>
-              )}
-            />
-          )}
-
-        </div>
-      )
-    },
-    // 资源部分
-    {
-      key: 'resources',
-      label: (
-        <Space>
-          <FileTextOutlined />
-          <span>{t.resources.title}</span>
-          <Badge count={resources.length + resourceTemplates.length} />
-        </Space>
-      ),
-      children: (
-        <div>
-          {resources.length === 0 && resourceTemplates.length === 0 ? (
-            <Alert message={t.resources.noResources} type="info" />
-          ) : (
-            <div>
-              {resources.length > 0 && (
-                <div>
-                  <Text strong>{t.resources.staticResources} ({resources.length})</Text>
-                  <List
-                    dataSource={resources}
-                    renderItem={(resource) => (
-                      <div key={resource.uri}>
-                        <List.Item
-                          actions={[
-                            <Button 
-                              key="select"
-                              type={selectedResource?.uri === resource.uri ? 'primary' : 'default'}
-                              onClick={() => {
-                                setSelectedResource(resource);
-                                setResourceParams({}); // 清空参数状态
-                              }}
-                            >
-                              {selectedResource?.uri === resource.uri ? t.resources.selectResource : t.resources.selectResource}
-                            </Button>
-                          ]}
-                        >
-                          <List.Item.Meta
-                            title={resource.name || resource.uri}
-                            description={
-                              <div>
-                                <div>{resource.description}</div>
-                                <Text type="secondary">{t.resources.resourceUri}: {resource.uri}</Text>
-                                {resource.mimeType && <Tag>{resource.mimeType}</Tag>}
-                              </div>
-                            }
-                          />
-                        </List.Item>
-                        
-                        {/* 在选中的资源下方显示读取功能框 */}
-                        {selectedResource?.uri === resource.uri && (
-                          <div style={{ marginLeft: 24, marginBottom: 16, marginTop: 8 }}>
-                            <Card size="small" title={`${t.resources.readResource}: ${selectedResource?.name || selectedResource?.uri}`}>
-                              <div style={{ marginBottom: 16 }}>
-                                <Alert
-                                  message={`${t.resources.resourceUri}: ${selectedResource.uri}`}
-                                  type="info"
-                                  style={{ marginBottom: 16 }}
-                                />
-                                {renderParameterForm(
-                                  (selectedResource as any).inputSchema || { properties: {} },
-                                  resourceParams,
-                                  setResourceParams,
-                                  selectedResource.uri
-                                )}
-                              </div>
-                              
-                              <Button 
-                                type="primary" 
-                                icon={<PlayCircleOutlined />}
-                                onClick={handleResourceRead}
-                                loading={isLoading}
-                              >
-                                {t.resources.readResource}
-                              </Button>
-                            </Card>
-                            
-                            {/* 资源读取结果显示 */}
-                            {renderResultDisplay(
-                              resourceResults[resource.name || resource.uri], 
-                              resourceErrors[resource.name || resource.uri], 
-                              () => {
-                                const resourceKey = resource.name || resource.uri;
-                                setResourceResults(prev => ({ ...prev, [resourceKey]: null }));
-                                setResourceErrors(prev => ({ ...prev, [resourceKey]: '' }));
-                              }
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  />
-                </div>
-              )}
-
-              {resourceTemplates.length > 0 && (
-                <div style={{ marginTop: resources.length > 0 ? 16 : 0 }}>
-                  <Text strong>{t.resources.templates} ({resourceTemplates.length})</Text>
-                  <List
-                    dataSource={resourceTemplates}
-                    renderItem={(template) => (
-                      <div key={template.name}>
-                        <List.Item
-                          actions={[
-                            <Button 
-                              key="select"
-                              type={selectedResource?.name === template.name ? 'primary' : 'default'}
-                              onClick={() => {
-                                setSelectedResource(template);
-                                setResourceParams({}); // 清空参数状态
-                              }}
-                            >
-                              {selectedResource?.name === template.name ? t.resources.selectResource : t.resources.selectResource}
-                            </Button>
-                          ]}
-                        >
-                          <List.Item.Meta
-                            title={template.name || (template as any).uriTemplate}
-                            description={
-                              <div>
-                                <div>{template.description}</div>
-                                <Text type="secondary">{t.resources.resourceUri}: {(template as any).uriTemplate}</Text>
-                                {template.mimeType && <Tag>{template.mimeType}</Tag>}
-                                <Tag color="blue">{t.resources.templates}</Tag>
-                              </div>
-                            }
-                          />
-                        </List.Item>
-                        
-                        {/* 在选中的资源模板下方显示读取功能框 */}
-                        {selectedResource?.name === template.name && (
-                          <div style={{ marginLeft: 24, marginBottom: 16, marginTop: 8 }}>
-                            <Card size="small" title={`${t.resources.readResource}: ${selectedResource?.name || selectedResource?.uri}`}>
-                              <div style={{ marginBottom: 16 }}>
-                                <Alert
-                                  message={`${t.resources.resourceUri}: ${selectedResource?.uri || (template as any).uriTemplate}`}
-                                  type="info"
-                                  style={{ marginBottom: 16 }}
-                                />
-                                {renderParameterForm(
-                                  (selectedResource as any).inputSchema || (template as any).inputSchema || { properties: {} },
-                                  resourceParams,
-                                  setResourceParams,
-                                  (template as any).uriTemplate
-                                )}
-                              </div>
-                              
-                              <Button 
-                                type="primary" 
-                                icon={<PlayCircleOutlined />}
-                                onClick={handleResourceRead}
-                                loading={isLoading}
-                              >
-                                {t.resources.readResource}
-                              </Button>
-                            </Card>
-                            
-                            {/* 资源读取结果显示 */}
-                            {renderResultDisplay(
-                              resourceResults[template.name || (template as any).uriTemplate || ''], 
-                              resourceErrors[template.name || (template as any).uriTemplate || ''], 
-                              () => {
-                                const resourceKey = template.name || (template as any).uriTemplate || '';
-                                setResourceResults(prev => ({ ...prev, [resourceKey]: null }));
-                                setResourceErrors(prev => ({ ...prev, [resourceKey]: '' }));
-                              }
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  />
-            </div>
-          )}
-
-            </div>
-          )}
-        </div>
-      )
-    },
-    // 提示部分
-    {
-      key: 'prompts',
-      label: (
-        <Space>
-          <MessageOutlined />
-          <span>{t.prompts.title}</span>
-          <Badge count={prompts.length} />
-        </Space>
-      ),
-      children: (
-        <div>
-          {prompts.length === 0 ? (
-            <Alert message={t.prompts.noPrompts} type="info" />
-          ) : (
-            <List
-              dataSource={prompts}
-              renderItem={(prompt) => (
-                <div key={prompt.name}>
-                  <List.Item
-                    actions={[
-                      <Button 
-                        key="select"
-                        type={selectedPrompt?.name === prompt.name ? 'primary' : 'default'}
-                        onClick={() => {
-                          setSelectedPrompt(prompt);
-                          setPromptParams({}); // 清空参数状态
-                        }}
-                      >
-                        {selectedPrompt?.name === prompt.name ? t.prompts.selectPrompt : t.prompts.selectPrompt}
-                      </Button>
-                    ]}
-                  >
-                    <List.Item.Meta
-                      title={prompt.name}
-                      description={prompt.description}
-                    />
-                  </List.Item>
-                  
-                  {/* 在选中的提示下方显示获取功能框 */}
-                  {selectedPrompt?.name === prompt.name && (
-                    <div style={{ marginLeft: 24, marginBottom: 16, marginTop: 8 }}>
-                      <Card size="small" title={`${t.prompts.getPrompt}: ${selectedPrompt.name}`}>
-                        {selectedPrompt.arguments && selectedPrompt.arguments.length > 0 && (
-                          <div style={{ marginBottom: 16 }}>
-                            <Form layout="vertical">
-                              {selectedPrompt.arguments.map((arg) => (
-                                <Form.Item 
-                                  key={arg.name} 
-                                  label={arg.name}
-                                  help={arg.description}
-                                  required={false}
-                                >
-                                  <Input
-                                    placeholder={arg.description ? arg.description : `${t.prompts.pleaseInput} ${arg.name}`}
-                                    value={promptParams[arg.name] || ''}
-                                    onChange={(e) => setPromptParams({ 
-                                      ...promptParams, 
-                                      [arg.name]: e.target.value 
-                                    })}
-                                  />
-                                </Form.Item>
-                              ))}
-                            </Form>
-                          </div>
-                        )}
-                        
-                        <Button 
-                          type="primary" 
-                          icon={<PlayCircleOutlined />}
-                          onClick={handlePromptGet}
-                          loading={isLoading}
-                        >
-                          {t.prompts.getPrompt}
-                        </Button>
-                      </Card>
-                      
-                      {/* 提示获取结果显示 */}
-                      {renderResultDisplay(
-                        promptResults[prompt.name], 
-                        promptErrors[prompt.name], 
-                        () => {
-                          setPromptResults(prev => ({ ...prev, [prompt.name]: null }));
-                          setPromptErrors(prev => ({ ...prev, [prompt.name]: '' }));
-                        }
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            />
-          )}
-
-        </div>
-      )
-    }
+  const tabData = [
+    { key: 'tools' as TabType, label: t.tools.title, icon: <ThunderboltOutlined />, count: tools.length },
+    { key: 'resources' as TabType, label: t.resources.title, icon: <FileTextOutlined />, count: allResources.length },
+    { key: 'prompts' as TabType, label: t.prompts.title, icon: <MessageOutlined />, count: prompts.length },
   ];
 
-  return (
-    <div style={{ height: '100%', overflow: 'auto' }}>
-        <Collapse 
-          items={collapseItems}
-        defaultActiveKey={['tools', 'resources', 'prompts']}
-        size="small"
-        />
+  const getCurrentList = () => {
+    switch (activeTab) {
+      case 'tools': return filteredTools;
+      case 'resources': return filteredResources;
+      case 'prompts': return filteredPrompts;
+      default: return [];
+    }
+  };
 
+  return (
+    <div className="mcp-explorer">
+      {/* 左侧列表面板 */}
+      <div className="list-panel">
+        {/* Tab 切换 */}
+        <div className="tab-bar">
+          {tabData.map(tab => (
+            <div
+              key={tab.key}
+              className={`tab-item ${activeTab === tab.key ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab.key)}
+            >
+              {tab.icon}
+              <span className="tab-label">{tab.label}</span>
+              <Badge count={tab.count} className="tab-badge" />
+            </div>
+          ))}
+        </div>
+
+        {/* 搜索框 */}
+        <div className="search-bar">
+          <Input
+            prefix={<SearchOutlined />}
+            placeholder="搜索..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            allowClear
+            className="search-input"
+          />
+        </div>
+
+        {/* 列表内容 */}
+        <div className="list-content">
+          {getCurrentList().length === 0 ? (
+            <Empty
+              description={searchQuery ? '未找到匹配项' : '暂无数据'}
+              className="empty-list"
+            />
+          ) : (
+            <div className="item-list">
+              {activeTab === 'tools' && filteredTools.map(renderToolCard)}
+              {activeTab === 'resources' && filteredResources.map(renderResourceCard)}
+              {activeTab === 'prompts' && filteredPrompts.map(renderPromptCard)}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 右侧详情面板 */}
+      {renderDetailPanel()}
     </div>
   );
 };
 
-export default MCPExplorer; 
+export default MCPExplorer;
