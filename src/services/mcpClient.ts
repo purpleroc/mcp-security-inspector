@@ -545,11 +545,15 @@ export interface PassiveDetectionResult {
  * 负责与MCP服务器通信，实现协议规范
  */
 export class MCPClient {
+  private static readonly DEFAULT_REQUEST_TIMEOUT = 10000;
+  private static readonly TOOL_CALL_TIMEOUT = 120000;
+
   private config: MCPServerConfig | null = null;
   private status: MCPConnectionStatus = 'disconnected';
   
   // SSE模式相关属性
   private eventSource: EventSource | null = null;
+  private fetchSSEReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   private sessionId: string | null = null;
   private sessionIdParamName: string = 'session_id'; // 动态保存参数名
   private messageEndpoint: string | null = null; // 从SSE获取的完整message端点
@@ -1386,7 +1390,8 @@ export class MCPClient {
         });
       }
 
-      let resolved = false;
+      let sessionReady = false;
+      let connectSettled = false;
 
       try {
         const response = await fetch(sseEndpoint, {
@@ -1404,6 +1409,7 @@ export class MCPClient {
         }
 
         const reader = response.body.getReader();
+        this.fetchSSEReader = reader;
         const decoder = new TextDecoder();
         let buffer = '';
 
@@ -1412,7 +1418,8 @@ export class MCPClient {
             const { done, value } = await reader.read();
             
             if (done) {
-              console.log('SSE流结束');
+              console.log('[SSE-Fetch] SSE流结束');
+              this.fetchSSEReader = null;
               return;
             }
 
@@ -1421,18 +1428,25 @@ export class MCPClient {
             buffer = lines.pop() || ''; // 保留最后一个不完整的行
 
             for (const line of lines) {
-              this.processFetchSSELine(line, resolve, resolved);
-              if (resolved) break;
+              if (!sessionReady) {
+                sessionReady = this.processFetchSSELine(line, () => {
+                  if (!connectSettled) {
+                    connectSettled = true;
+                    resolve();
+                  }
+                });
+              } else {
+                this.processFetchSSELine(line);
+              }
             }
 
-            if (!resolved) {
-              // 继续读取下一个chunk
-              processChunk();
-            }
+            // session 就绪后仍需持续读取，以接收 202 Accepted 后通过 SSE 推送的 JSON-RPC 响应
+            processChunk();
           } catch (error) {
             console.error('读取SSE流失败:', error);
-            if (!resolved) {
-              resolved = true;
+            if (!connectSettled) {
+              connectSettled = true;
+              this.fetchSSEReader = null;
               reject(error);
             }
           }
@@ -1442,17 +1456,18 @@ export class MCPClient {
 
         // 超时处理
         setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            reader.cancel();
+          if (!connectSettled) {
+            connectSettled = true;
+            reader.cancel().catch(() => {});
+            this.fetchSSEReader = null;
             reject(new Error('等待服务器推送session_id超时'));
           }
-        }, 10000);
+        }, MCPClient.DEFAULT_REQUEST_TIMEOUT);
 
       } catch (error) {
         console.error('Fetch SSE连接失败:', error);
-        if (!resolved) {
-          resolved = true;
+        if (!connectSettled) {
+          connectSettled = true;
           reject(error);
         }
       }
@@ -1460,11 +1475,12 @@ export class MCPClient {
   }
 
   /**
-   * 处理Fetch SSE的每一行数据
+   * 处理Fetch SSE的每一行数据；返回 true 表示已获取 session
    */
-  private processFetchSSELine(line: string, resolve: () => void, resolved: boolean): void {
-    if (line.startsWith('data: ')) {
-      const data = line.substring(6);
+  private processFetchSSELine(line: string, onSessionReady?: () => void): boolean {
+    const dataPrefix = line.startsWith('data: ') ? 'data: ' : (line.startsWith('data:') ? 'data:' : null);
+    if (dataPrefix) {
+      const data = line.substring(dataPrefix.length).trim();
       
       // 检查是否包含endpoint信息
       if (data.includes('session_id=') || data.includes('sessionId=')) {
@@ -1478,10 +1494,8 @@ export class MCPClient {
            this.sessionIdParamName = 'sessionId';
            console.log('从Fetch SSE中获取到完整端点:', this.messageEndpoint);
            console.log('提取的sessionId:', this.sessionId, '参数名:', this.sessionIdParamName);
-           if (!resolved) {
-             resolve();
-           }
-           return;
+           onSessionReady?.();
+           return true;
          }
          
          match = data.match(/session_id=([a-f0-9\-]+)/);
@@ -1490,16 +1504,14 @@ export class MCPClient {
            this.sessionIdParamName = 'session_id';
            console.log('从Fetch SSE中获取到完整端点:', this.messageEndpoint);
            console.log('提取的sessionId:', this.sessionId, '参数名:', this.sessionIdParamName);
-           if (!resolved) {
-             resolve();
-           }
-           return;
+           onSessionReady?.();
+           return true;
          }
       }
 
       // 处理其他消息
       if (data === 'ping') {
-        return;
+        return false;
       }
 
       // 尝试解析JSON-RPC响应
@@ -1510,6 +1522,7 @@ export class MCPClient {
         console.log('收到非JSON消息:', data);
       }
     }
+    return false;
   }
 
   /**
@@ -1621,14 +1634,23 @@ export class MCPClient {
   }
 
   /**
+   * 是否应使用 Fetch 建立 SSE（EventSource 无法携带自定义请求头）
+   */
+  private shouldUseFetchSSE(): boolean {
+    if (!this.config) return false;
+    if (this.config.auth?.type === 'combined') return true;
+    if (this.config.headers && Object.keys(this.config.headers).length > 0) return true;
+    return false;
+  }
+
+  /**
    * 建立SSE连接并获取session_id
    */
   private async establishSSEConnection(): Promise<void> {
     if (!this.config) return;
 
-    // 如果配置了组合认证，优先使用Fetch方式（支持自定义请求头）
-    if (this.config.auth?.type === 'combined') {
-      console.log('[Streamable] 检测到组合认证方式，使用Fetch方式建立SSE连接以支持自定义请求头');
+    if (this.shouldUseFetchSSE()) {
+      console.log('[SSE] 检测到自定义请求头或组合认证，使用 Fetch 方式建立 SSE 连接');
       return this.establishFetchSSEConnection();
     }
 
@@ -1804,6 +1826,10 @@ export class MCPClient {
    */
   private async cleanup(): Promise<void> {
     // 清理SSE连接
+    if (this.fetchSSEReader) {
+      this.fetchSSEReader.cancel().catch(() => {});
+      this.fetchSSEReader = null;
+    }
     if (this.eventSource) {
       this.eventSource.close();
       this.eventSource = null;
@@ -2533,8 +2559,14 @@ export class MCPClient {
         }
       };
 
-      // 工具调用使用30秒超时
-      const response = await this.sendRequest(request, 30000);
+      const timeoutSec = typeof convertedArguments.timeout_sec === 'number'
+        ? convertedArguments.timeout_sec
+        : 120;
+      const toolCallTimeout = Math.max(
+        MCPClient.TOOL_CALL_TIMEOUT,
+        timeoutSec * 1000 + 5000
+      );
+      const response = await this.sendRequest(request, toolCallTimeout);
       result = response.result as MCPToolResult;
     }
 
@@ -2847,17 +2879,46 @@ export class MCPClient {
   }
 
   /**
+   * 查找待处理的请求（兼容服务端返回 string/number 类型的 id）
+   */
+  private findPendingRequest(id: string | number | undefined): {
+    resolve: (value: any) => void;
+    reject: (error: any) => void;
+    timestamp: number;
+    key: string | number;
+  } | null {
+    if (id === undefined) return null;
+
+    let pending = this.pendingRequests.get(id);
+    let key: string | number = id;
+
+    if (!pending && typeof id === 'string' && id !== '') {
+      const numericId = Number(id);
+      if (!Number.isNaN(numericId)) {
+        pending = this.pendingRequests.get(numericId);
+        if (pending) key = numericId;
+      }
+    } else if (!pending && typeof id === 'number') {
+      pending = this.pendingRequests.get(String(id));
+      if (pending) key = String(id);
+    }
+
+    if (!pending) return null;
+    return { ...pending, key };
+  }
+
+  /**
    * 处理响应
    */
   private handleResponse(response: JSONRPCResponse): void {
-    const pending = this.pendingRequests.get(response.id);
+    const pending = this.findPendingRequest(response.id);
     if (!pending) {
       console.warn('收到未知请求ID的响应:', response.id);
       return;
     }
 
     clearTimeout(pending.timestamp);
-    this.pendingRequests.delete(response.id);
+    this.pendingRequests.delete(pending.key);
 
     if (response.error) {
       pending.reject(new Error(`MCP错误 ${response.error.code}: ${response.error.message}`));

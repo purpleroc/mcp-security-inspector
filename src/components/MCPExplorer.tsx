@@ -37,6 +37,7 @@ import { RootState } from '../store';
 import { callTool, readResource, getPrompt, setTools, setPrompts, setResources, setResourceTemplates } from '../store/mcpSlice';
 import { MCPTool, MCPResource, MCPPrompt, SecurityRiskLevel } from '../types/mcp';
 import { useI18n } from '../hooks/useI18n';
+import McpResultViewer from './McpResultViewer';
 
 const { Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -476,11 +477,12 @@ const MCPExplorer: React.FC = () => {
                     <Button size="small" onClick={clearCurrentResult}>关闭</Button>
                   </Space>
                 </div>
-                <div
-                  ref={resultRef}
-                  className={`result-content ${expandedResult ? 'expanded' : ''} ${error ? 'error' : 'success'}`}
-                >
-                  <pre>{error || JSON.stringify(result, null, 2)}</pre>
+                <div ref={resultRef}>
+                  <McpResultViewer
+                    value={error || result}
+                    isError={!!error}
+                    expanded={expandedResult}
+                  />
                 </div>
               </div>
             )}
@@ -564,11 +566,12 @@ const MCPExplorer: React.FC = () => {
                     <Button size="small" onClick={clearCurrentResult}>关闭</Button>
                   </Space>
                 </div>
-                <div
-                  ref={resultRef}
-                  className={`result-content ${expandedResult ? 'expanded' : ''} ${error ? 'error' : 'success'}`}
-                >
-                  <pre>{error || JSON.stringify(result, null, 2)}</pre>
+                <div ref={resultRef}>
+                  <McpResultViewer
+                    value={error || result}
+                    isError={!!error}
+                    expanded={expandedResult}
+                  />
                 </div>
               </div>
             )}
@@ -661,11 +664,12 @@ const MCPExplorer: React.FC = () => {
                     <Button size="small" onClick={clearCurrentResult}>关闭</Button>
                   </Space>
                 </div>
-                <div
-                  ref={resultRef}
-                  className={`result-content ${expandedResult ? 'expanded' : ''} ${error ? 'error' : 'success'}`}
-                >
-                  <pre>{error || JSON.stringify(result, null, 2)}</pre>
+                <div ref={resultRef}>
+                  <McpResultViewer
+                    value={error || result}
+                    isError={!!error}
+                    expanded={expandedResult}
+                  />
                 </div>
               </div>
             )}

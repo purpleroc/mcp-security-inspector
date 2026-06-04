@@ -1524,6 +1524,141 @@ div[style*="background-color: #f6ffed"] {
   border-left: 3px solid var(--color-success);
 }
 
+/* MCP 结果双栏展示 */
+.mcp-result-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.result-display-settings {
+  padding: 0 4px 8px;
+}
+
+.result-display-hint {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.result-display-template {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+}
+
+.result-display-preview {
+  margin-top: 8px;
+}
+
+.result-display-path-hints {
+  margin-top: 8px;
+}
+
+.result-display-path-hints .ant-typography {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.result-display-path-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.result-path-hint-tag {
+  cursor: pointer;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 11px;
+  margin: 0;
+}
+
+.result-display-preview-pre {
+  margin: 4px 0 0;
+  padding: 8px 12px;
+  max-height: 120px;
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.5;
+  background: var(--bg-elevated);
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.result-output-collapse {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+
+.result-output-collapse > .ant-collapse-item {
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.result-output-collapse > .ant-collapse-item:last-child {
+  border-bottom: none !important;
+}
+
+.result-output-collapse .ant-collapse-header {
+  padding: 10px 12px !important;
+  align-items: center !important;
+  background: var(--bg-elevated);
+}
+
+.result-output-collapse .ant-collapse-content-box {
+  padding: 0 !important;
+}
+
+.result-collapse-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding-right: 8px;
+  font-size: 13px;
+}
+
+.result-panel-body-scroll {
+  max-height: 240px;
+  overflow-x: auto;
+  overflow-y: auto;
+  border-left: 3px solid var(--color-success);
+}
+
+.result-panel-body-scroll.expanded {
+  max-height: min(560px, 55vh);
+}
+
+.result-panel-body-scroll.raw-scroll {
+  max-height: 320px;
+  border-left-color: var(--border-color);
+}
+
+.result-panel-body-scroll pre {
+  margin: 0;
+  padding: 12px 16px;
+  font-size: 12px;
+  line-height: 1.6;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-primary);
+  background: transparent !important;
+}
+
+.result-expand-icon {
+  transition: transform 0.2s ease;
+  font-size: 12px;
+}
+
+.result-expand-icon.expanded {
+  transform: rotate(180deg);
+}
+
 /* 动画效果 */
 @keyframes fadeIn {
   from {

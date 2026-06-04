@@ -197,6 +197,38 @@ export interface TranslationKey {
     messages: string;
     pleaseInput: string;
   };
+
+  // 结果展示
+  resultDisplay: {
+    settingsTitle: string;
+    presets: string;
+    presetLabels: {
+      auto: string;
+      allContentText: string;
+      textByType: string;
+      allParsed: string;
+      firstText: string;
+      printEachText: string;
+      commandOutput: string;
+    };
+    templateHint: string;
+    pathHints: string;
+    preview: string;
+    previewEmpty: string;
+    showRaw: string;
+    showPretty: string;
+    autoParseJson: string;
+    saveTemplate: string;
+    resetTemplate: string;
+    templateSaved: string;
+    copied: string;
+    prettyTitle: string;
+    rawTitle: string;
+    copyPretty: string;
+    copyRaw: string;
+    expandPretty: string;
+    collapsePretty: string;
+  };
   
   // 历史面板
   history: {

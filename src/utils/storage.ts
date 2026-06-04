@@ -4,6 +4,11 @@
  */
 
 import { MCPServerConfig, LLMConfig, LLMRequest, LLMResponse } from '../types/mcp';
+import {
+  DEFAULT_RESULT_DISPLAY_SETTINGS,
+  ResultDisplaySettings
+} from '../types/resultDisplay';
+import { normalizeResultDisplaySettings } from './resultDisplay';
 
 const STORAGE_KEYS = {
   SERVER_CONFIG: 'mcp_server_config',
@@ -216,6 +221,29 @@ export const storage = {
       });
     } catch (error) {
       console.error('清除数据失败:', error);
+    }
+  },
+
+  getResultDisplaySettings: (): ResultDisplaySettings => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+      if (!raw) return { ...DEFAULT_RESULT_DISPLAY_SETTINGS };
+      const settings = JSON.parse(raw);
+      return normalizeResultDisplaySettings(settings?.resultDisplay);
+    } catch (error) {
+      console.error('获取结果展示配置失败:', error);
+      return { ...DEFAULT_RESULT_DISPLAY_SETTINGS };
+    }
+  },
+
+  saveResultDisplaySettings: (resultDisplay: ResultDisplaySettings): void => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+      const settings = raw ? JSON.parse(raw) : {};
+      settings.resultDisplay = normalizeResultDisplaySettings(resultDisplay);
+      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    } catch (error) {
+      console.error('保存结果展示配置失败:', error);
     }
   }
 };
