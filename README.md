@@ -30,6 +30,8 @@ MCP Security Inspector 是专为 Model Context Protocol (MCP) 服务器设计的
 - 🌐 **多语言支持**: 完整的中英双语界面
 - 📊 **智能报告**: 实时生成详细的安全分析报告
 - 🛡️ **隐私保护**: 本地检测，敏感信息智能遮蔽
+- 🔌 **MCP 协议浏览器**: 支持 SSE / Streamable HTTP，可调用工具、读取资源、获取提示
+- 📋 **可配置结果展示**: 通用模板与 `{{auto}}` 自动美化，原始/格式化双栏，通配路径
 
 ## 🏗️ 技术架构
 
@@ -138,21 +140,31 @@ public async performSecurityAnalysis(
 
 ### 使用方法
 
-1. **连接MCP服务器**
-   - 在扩展面板中输入MCP服务器地址
-   - 配置连接参数和认证信息
+1. **连接 MCP 服务器**
+   - **传输模式**：多数远程服务使用 **SSE**（如 Cursor `url` 指向的 HTTP 端点）；部分服务使用 **Streamable HTTP**
+   - **主机**：仅填协议与域名，例如 `http://ftp-ai.woa.com`
+   - **路径**：SSE 路径填服务端暴露的地址，例如 `/mcp/server/<id>/`
+   - **认证**：若需 `app_id`、`app_token` 等自定义请求头，请在配置中填写 **Headers JSON**，或使用 **组合认证 → 自定义请求头**（SSE 长连接也会携带这些头）
+   - 连接成功后在 **MCP 浏览器** 中查看工具 / 资源 / 提示列表
 
-2. **配置LLM服务**（可选）
+2. **调用工具与查看结果**
+   - 在 MCP 浏览器选择工具、填写参数并执行
+   - **格式化结果**默认展开，内容区可下拉滚动；可点击 ▼ 拉高展示区
+   - **原始返回**默认折叠，需要时展开查看完整 JSON
+   - 展开 **结果展示设置** 可编辑模板（默认 `{{auto}}` 自动适配任意 `content[]` 结构）
+   - 模板支持：`{{content[*].text}}`、`{{content[?type=text].text}}`、`{{parsed[*]}}`、`print(路径)` 等；可根据当前返回点击路径标签插入
+
+3. **配置 LLM 服务**（可选）
    - 选择LLM服务提供商
    - 输入API密钥和配置参数
    - 测试连接是否正常
 
-3. **执行安全检测**
+4. **执行安全检测**
    - 选择检测模式（主动扫描 / 被动监控）
    - 配置检测参数和规则
    - 启动检测并查看实时进度
 
-4. **查看检测结果**
+5. **查看安全检测报告**
    - 查看详细的安全报告
    - 分析风险等级和修复建议
    - 导出报告或历史记录
@@ -162,17 +174,30 @@ public async performSecurityAnalysis(
 ### 项目结构
 ```
 src/
-├── components/          # React组件
-│   ├── SecurityPanel.tsx
-│   ├── MCPExplorer.tsx
-│   └── ConfigPanel.tsx
-├── services/           # 核心服务
-│   ├── securityEngine.ts
-│   ├── mcpClient.ts
-│   └── llmClient.ts
-├── types/              # TypeScript类型定义
-├── i18n/               # 国际化资源
-└── utils/              # 工具函数
+├── components/              # React 组件
+│   ├── SecurityPanel.tsx    # 安全检测主面板
+│   ├── MCPExplorer.tsx      # MCP 工具/资源/提示浏览器
+│   ├── McpResultViewer.tsx  # 调用结果展示（模板 + 折叠）
+│   ├── ConfigPanel.tsx      # 服务器连接配置
+│   └── AuthConfig.tsx       # 认证配置
+├── services/
+│   ├── securityEngine.ts    # 统一安全检测引擎
+│   ├── mcpClient.ts         # MCP 客户端（SSE / Streamable）
+│   └── llmClient.ts         # LLM 调用
+├── types/
+│   └── resultDisplay.ts     # 结果展示配置类型
+├── utils/
+│   ├── resultDisplay.ts     # 结果模板解析与 {{auto}} 格式化
+│   └── storage.ts           # 本地配置持久化
+└── i18n/                    # 中英双语
+```
+
+### 常用脚本
+```bash
+npm run dev              # 本地开发
+npm run build:extension  # 构建 Chrome 扩展（输出 dist/）
+npm run type-check       # TypeScript 检查
+npm run package          # 打包 dist 为 zip
 ```
 
 ### 核心API
@@ -192,20 +217,24 @@ const result = await engine.performSecurityAnalysis(
 );
 ```
 
-#### MCP客户端
+#### MCP 客户端
 ```typescript
-import { MCPClient } from './services/mcpClient';
+import { mcpClient } from './services/mcpClient';
 
-const client = new MCPClient();
+mcpClient.configure({
+  name: 'My MCP',
+  host: 'http://example.com',
+  ssePath: '/mcp/server/xxx/',
+  transport: 'sse', // 或 'streamable'
+  headers: { app_id: '...', app_token: '...' },
+});
 
-// 连接到MCP服务器
-await client.connect(serverUrl, authConfig);
-
-// 获取组件列表
-const tools = await client.listTools();
-const prompts = await client.listPrompts();
-const resources = await client.listResources();
+await mcpClient.connect();
+const tools = await mcpClient.listTools();
+const result = await mcpClient.callTool('tool_name', { /* args */ });
 ```
+
+> **说明**：SSE 模式下服务端常返回 `202 Accepted`，JSON-RPC 响应经 **同一条 SSE 流** 异步推送；客户端在配置了自定义 Headers 时会使用 Fetch 维持 SSE，并持续读取直至收到对应 `id` 的响应。
 
 ### 扩展开发
 
@@ -233,8 +262,19 @@ class CustomLLMProvider implements LLMProvider {
 ```
 
 ## 📊 更新日志
+
+### v2.0.8
+- ✅ MCP 浏览器：通用结果展示（`{{auto}}`、通配路径、双栏原始/格式化）
+- ✅ 原始返回默认折叠；格式化结果区可滚动、可拉高展开
+- ✅ 结果展示配置持久化至本地存储
+
+### v2.0.7
+- ✅ SSE 模式：自定义 Headers 时使用 Fetch 建立 SSE（修复 EventSource 无法带头导致的超时）
+- ✅ SSE 连接在获取 session 后继续读流，正确接收 `202 Accepted` 后的异步 JSON-RPC 响应
+- ✅ 工具调用超时与 `timeout_sec` 对齐；请求 ID 兼容 string/number
+
 ### v2.0.6
-- ✅ 按照tool要求提供对应类型参数
+- ✅ 按照 tool schema 自动转换调用参数类型
 
 ### v2.0.5
 - ✅ 修复streamable的CORS问题
@@ -297,6 +337,8 @@ MCP Security Inspector is the world's first AI-enhanced security detection Chrom
 - 🌐 **Multi-language Support**: Complete bilingual interface (English/Chinese)
 - 📊 **Intelligent Reports**: Real-time generation of detailed security analysis reports
 - 🛡️ **Privacy Protection**: Local detection with intelligent sensitive information masking
+- 🔌 **MCP Protocol Explorer**: SSE / Streamable HTTP; invoke tools, read resources, get prompts
+- 📋 **Configurable Result Display**: `{{auto}}` formatting, raw/formatted dual view, wildcard template paths
 
 ### 🔒 Security Detection Capabilities
 
@@ -360,20 +402,27 @@ MCP Security Inspector is the world's first AI-enhanced security detection Chrom
 #### Usage
 
 1. **Connect to MCP Server**
-   - Enter MCP server address in the extension panel
-   - Configure connection parameters and authentication information
+   - **Transport**: use **SSE** for most HTTP `url`-style servers; **Streamable HTTP** where supported
+   - **Host**: scheme + host only (e.g. `http://example.com`); put the path in **SSE path** (e.g. `/mcp/server/<id>/`)
+   - **Auth**: put custom headers (`app_id`, `app_token`, etc.) in **Headers JSON** or **Combined auth → Custom headers** so the SSE stream also sends them
+   - Browse tools / resources / prompts in **MCP Explorer** after connecting
 
-2. **Configure LLM Service** (Optional)
+2. **Invoke Tools & View Results**
+   - Run tools from MCP Explorer; **formatted** output is expanded and scrollable; **raw JSON** is collapsed by default
+   - Edit display templates under **Result display settings** (default `{{auto}}` for any MCP `content[]` shape)
+   - Wildcards: `{{content[*].text}}`, `{{parsed[*]}}`, `print(path)`, etc.
+
+3. **Configure LLM Service** (Optional)
    - Select LLM service provider
    - Enter API key and configuration parameters
    - Test connection
 
-3. **Execute Security Detection**
+4. **Execute Security Detection**
    - Choose detection mode (Active Scan / Passive Monitor)
    - Configure detection parameters and rules
    - Start detection and view real-time progress
 
-4. **View Detection Results**
+5. **View Security Reports**
    - View detailed security reports
    - Analyze risk levels and remediation recommendations
    - Export reports or history
@@ -383,12 +432,23 @@ MCP Security Inspector is the world's first AI-enhanced security detection Chrom
 #### Project Structure
 ```
 src/
-├── components/          # React components
-├── services/           # Core services
-├── types/              # TypeScript type definitions
-├── i18n/               # Internationalization resources
-└── utils/              # Utility functions
+├── components/              # MCPExplorer, McpResultViewer, SecurityPanel, …
+├── services/                # mcpClient, securityEngine, llmClient
+├── utils/resultDisplay.ts   # Result template engine
+└── i18n/                    # en-US / zh-CN
 ```
+
+#### Build
+```bash
+npm install
+npm run build:extension   # output: dist/
+npm run type-check
+```
+
+### 📊 Changelog (recent)
+
+- **v2.0.8**: Generic result display templates; collapsible raw JSON; scrollable formatted panel
+- **v2.0.7**: Fetch-based SSE with custom headers; async response handling after HTTP 202
 
 ### 🤝 Contributing
 
