@@ -590,13 +590,32 @@ body {
   background: var(--color-primary-bg) !important;
 }
 
-/* Switch */
+/* Switch — 关闭态需与卡片背景有足够对比，否则几乎看不见 */
 .ant-switch {
-  background: var(--bg-elevated) !important;
+  background: var(--text-muted) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.ant-switch:hover:not(.ant-switch-disabled):not(.ant-switch-checked) {
+  background: var(--text-secondary) !important;
 }
 
 .ant-switch-checked {
   background: var(--color-primary) !important;
+  border-color: var(--color-primary-border) !important;
+}
+
+.ant-switch-checked:hover:not(.ant-switch-disabled) {
+  background: var(--color-primary-hover) !important;
+}
+
+.ant-switch .ant-switch-handle::before {
+  background-color: #fff !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+}
+
+.ant-switch-checked .ant-switch-handle::before {
+  background-color: var(--color-on-primary) !important;
 }
 
 /* Divider */

@@ -23,18 +23,23 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ onConfigLoad, selectedConfig,
   const [authConfig, setAuthConfig] = useState<any>({ type: 'none' });
   const [autoSave, setAutoSave] = useState(true);
 
-  // 监听选中的配置变化
+  // 监听选中的配置变化，加载到表单
   useEffect(() => {
-    if (selectedConfig) {
-      form.setFieldsValue({
-        name: selectedConfig.name,
-        host: selectedConfig.host,
-        transport: selectedConfig.transport,
-        ssePath: selectedConfig.ssePath,
-        sessionId: selectedConfig.sessionId
-      });
-      setAuthConfig(selectedConfig.auth || { type: 'none' });
-    }
+    if (!selectedConfig) return;
+
+    form.setFieldsValue({
+      name: selectedConfig.name,
+      host: selectedConfig.host,
+      transport: selectedConfig.transport || 'sse',
+      ssePath: selectedConfig.ssePath || (selectedConfig.transport === 'streamable' ? '/mcp' : '/sse'),
+      sessionId: selectedConfig.sessionId,
+      headers: selectedConfig.headers ? JSON.stringify(selectedConfig.headers, null, 2) : undefined
+    });
+    setAuthConfig(
+      selectedConfig.auth
+        ? JSON.parse(JSON.stringify(selectedConfig.auth))
+        : { type: 'none' }
+    );
   }, [selectedConfig, form]);
 
   // 连接到服务器

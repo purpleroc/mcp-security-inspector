@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Card, 
-  List, 
-  Button, 
-  Space, 
-  Popconfirm, 
-  message, 
-  Upload, 
+import {
+  Card,
+  List,
+  Button,
+  Space,
+  Popconfirm,
+  message,
+  Upload,
   Typography,
   Tooltip,
-  Empty
+  Empty,
+  Modal,
+  Alert,
+  Tag
 } from 'antd';
 import { 
   PlayCircleOutlined, 
@@ -24,6 +27,7 @@ import { connectToServer, disconnectFromServer } from '../store/mcpSlice';
 import { RootState } from '../store';
 import { storage } from '../utils/storage';
 import { MCPServerConfig } from '../types/mcp';
+import { McpConfigParseResult } from '../utils/mcpConfigParser';
 import { useI18n } from '../hooks/useI18n';
 
 const { Text } = Typography;
@@ -35,14 +39,17 @@ interface SavedConfig extends MCPServerConfig {
 
 interface MCPListPanelProps {
   onConfigLoad?: (config: MCPServerConfig) => void;
+  selectedConfig?: MCPServerConfig | null;
   refreshTrigger?: number;
 }
 
-const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigger }) => {
+const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, selectedConfig, refreshTrigger }) => {
   const { t } = useI18n();
   const dispatch = useDispatch();
   const [savedConfigs, setSavedConfigs] = useState<SavedConfig[]>([]);
   const [loading, setLoading] = useState<string | null>(null);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importPreview, setImportPreview] = useState<McpConfigParseResult | null>(null);
   
   // 从状态中获取连接信息
   const { connectionStatus, serverConfig } = useSelector((state: RootState) => state.mcp);
@@ -71,6 +78,14 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
            serverConfig.name === config.name &&
            serverConfig.host === config.host &&
            serverConfig.ssePath === config.ssePath;
+  };
+
+  const isSelectedConfig = (config: MCPServerConfig) => {
+    return selectedConfig?.name === config.name;
+  };
+
+  const handleConfigSelect = (config: MCPServerConfig) => {
+    onConfigLoad?.(config);
   };
 
   // 连接到指定配置
@@ -128,16 +143,47 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
     }
   };
 
-  // 导入配置
+  const getSourceLabel = (source?: string) => {
+    if (!source) return '';
+    const key = source as keyof typeof t.config.mcpConfigIO.sources;
+    return t.config.mcpConfigIO.sources[key] || t.config.mcpConfigIO.sources.unknown;
+  };
+
+  const getSkipReasonLabel = (reason: string) => {
+    const key = reason as keyof typeof t.config.mcpConfigIO.skipReasons;
+    return t.config.mcpConfigIO.skipReasons[key] || reason;
+  };
+
+  // 预览导入（仅远程 MCP，过滤本地 stdio）
   const handleImport = async (file: File) => {
-    const success = await storage.importConfigs(file);
-    if (success) {
-      message.success(t.success.importSuccess);
-      loadSavedConfigs();
-    } else {
-      message.error(t.errors.importFailed);
+    const preview = await storage.previewImportFile(file);
+
+    if (preview.configs.length === 0) {
+      if (preview.skipped.length > 0) {
+        message.warning(t.config.mcpConfigIO.stdioSkipped.replace('{count}', String(preview.skipped.length)));
+      } else {
+        message.error(t.errors.importFailed);
+      }
+      return false;
     }
-    return false; // 阻止默认上传行为
+
+    setImportPreview(preview);
+    setImportModalOpen(true);
+    return false;
+  };
+
+  const handleConfirmImport = () => {
+    if (!importPreview) return;
+
+    const imported = storage.mergeConfigs(importPreview.configs);
+    let msg = t.config.mcpConfigIO.importedMultiple.replace('{count}', String(imported));
+    if (importPreview.skipped.length > 0) {
+      msg += ` ${t.config.mcpConfigIO.skippedCount.replace('{count}', String(importPreview.skipped.length))}`;
+    }
+    message.success(msg);
+    loadSavedConfigs();
+    setImportModalOpen(false);
+    setImportPreview(null);
   };
 
   // 格式化时间
@@ -170,26 +216,28 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
         size="small"
         extra={
           <Space>
-            <Upload
-              accept=".json"
-              showUploadList={false}
-              beforeUpload={handleImport}
-            >
-              <Button 
-                type="text" 
-                icon={<UploadOutlined />} 
+            <Tooltip title={t.config.importConfigsTooltip}>
+              <Upload
+                accept=".json"
+                showUploadList={false}
+                beforeUpload={handleImport}
+              >
+                <Button
+                  type="text"
+                  icon={<UploadOutlined />}
+                  size="small"
+                />
+              </Upload>
+            </Tooltip>
+            <Tooltip title={t.config.exportConfigsTooltip}>
+              <Button
+                type="text"
+                icon={<DownloadOutlined />}
+                onClick={handleExport}
                 size="small"
-                title={t.config.importConfigs}
+                disabled={savedConfigs.length === 0}
               />
-            </Upload>
-            <Button 
-              type="text" 
-              icon={<DownloadOutlined />}
-              onClick={handleExport}
-              size="small"
-              title={t.config.exportConfigs}
-              disabled={savedConfigs.length === 0}
-            />
+            </Tooltip>
           </Space>
         }
         bodyStyle={{ padding: '12px' }}
@@ -208,14 +256,26 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
             style={{ padding: '0' }}
             renderItem={(config) => {
               const isConnected = isCurrentConnection(config);
+              const isSelected = isSelectedConfig(config);
+              const borderColor = isConnected
+                ? 'var(--color-success)'
+                : isSelected
+                  ? 'var(--color-primary)'
+                  : 'var(--border-color)';
+              const backgroundColor = isConnected
+                ? 'var(--color-success-bg)'
+                : isSelected
+                  ? 'var(--color-primary-bg)'
+                  : 'var(--bg-elevated)';
               return (
                 <List.Item
                   key={config.name}
+                  onClick={() => handleConfigSelect(config)}
                   style={{
                     padding: '12px',
                     marginBottom: '8px',
-                    backgroundColor: isConnected ? 'var(--color-success-bg)' : 'var(--bg-elevated)',
-                    border: `1px solid ${isConnected ? 'var(--color-success)' : 'var(--border-color)'}`,
+                    backgroundColor,
+                    border: `1px solid ${borderColor}`,
                     borderRadius: '8px',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
@@ -229,8 +289,8 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
                   }}
                   onMouseLeave={(e) => {
                     if (!isConnected) {
-                      e.currentTarget.style.backgroundColor = 'var(--bg-elevated)';
-                      e.currentTarget.style.borderColor = 'var(--border-color)';
+                      e.currentTarget.style.backgroundColor = backgroundColor;
+                      e.currentTarget.style.borderColor = borderColor;
                     }
                   }}
                 >
@@ -396,6 +456,77 @@ const MCPListPanel: React.FC<MCPListPanelProps> = ({ onConfigLoad, refreshTrigge
           />
         )}
       </Card>
+
+      <Modal
+        title={t.config.mcpConfigIO.importPreview}
+        open={importModalOpen}
+        onCancel={() => {
+          setImportModalOpen(false);
+          setImportPreview(null);
+        }}
+        onOk={handleConfirmImport}
+        okText={t.config.mcpConfigIO.confirmImport}
+        cancelText={t.common.cancel}
+        width={520}
+      >
+        {importPreview && (
+          <>
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message={t.config.mcpConfigIO.detectedSource.replace(
+                '{source}',
+                getSourceLabel(importPreview.source)
+              )}
+            />
+            {importPreview.skipped.length > 0 && (
+              <Alert
+                type="warning"
+                showIcon
+                style={{ marginBottom: 16 }}
+                message={t.config.mcpConfigIO.skippedCount.replace(
+                  '{count}',
+                  String(importPreview.skipped.length)
+                )}
+                description={
+                  <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}>
+                    {importPreview.skipped.map((s) => (
+                      <li key={s.name}>
+                        <strong>{s.name}</strong> — {getSkipReasonLabel(s.reason)}
+                      </li>
+                    ))}
+                  </ul>
+                }
+              />
+            )}
+            <List
+              size="small"
+              header={t.config.mcpConfigIO.remoteServersToImport.replace(
+                '{count}',
+                String(importPreview.configs.length)
+              )}
+              dataSource={importPreview.configs}
+              renderItem={(config) => (
+                <List.Item>
+                  <List.Item.Meta
+                    title={
+                      <Space>
+                        <span>{config.name}</span>
+                        <Tag color="blue">{config.transport}</Tag>
+                        {config.auth?.type === 'combined' && (
+                          <Tag color="orange">{t.auth.combined}</Tag>
+                        )}
+                      </Space>
+                    }
+                    description={`${config.host}${config.ssePath || ''}`}
+                  />
+                </List.Item>
+              )}
+            />
+          </>
+        )}
+      </Modal>
     </div>
   );
 };

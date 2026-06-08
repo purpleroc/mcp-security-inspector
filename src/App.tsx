@@ -186,6 +186,7 @@ const App: React.FC = () => {
           <div style={{ padding: '16px' }}>
             <MCPListPanel
               onConfigLoad={handleConfigLoad}
+              selectedConfig={selectedConfig}
               refreshTrigger={refreshTrigger}
             />
           </div>

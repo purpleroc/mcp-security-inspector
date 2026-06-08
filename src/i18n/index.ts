@@ -78,6 +78,32 @@ export interface TranslationKey {
     deleteConfig: string;
     exportConfigs: string;
     importConfigs: string;
+    exportConfigsTooltip: string;
+    importConfigsTooltip: string;
+    mcpConfigIO: {
+      importPreview: string;
+      confirmImport: string;
+      remoteServersToImport: string;
+      detectedSource: string;
+      importedMultiple: string;
+      skippedCount: string;
+      stdioSkipped: string;
+      sources: {
+        native: string;
+        legacy: string;
+        cursor: string;
+        claude: string;
+        vscode: string;
+        windsurf: string;
+        unknown: string;
+      };
+      skipReasons: {
+        stdio: string;
+        oauth: string;
+        invalid: string;
+        no_url: string;
+      };
+    };
     autoSave: string;
     autoSaveTooltip: string;
     noSavedConfigs: string;

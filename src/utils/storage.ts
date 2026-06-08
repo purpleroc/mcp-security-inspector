@@ -9,6 +9,7 @@ import {
   ResultDisplaySettings
 } from '../types/resultDisplay';
 import { normalizeResultDisplaySettings } from './resultDisplay';
+import { ImportConfigsResult, configsToUniversalFormat, parseMcpConfigFile } from './mcpConfigParser';
 
 const STORAGE_KEYS = {
   SERVER_CONFIG: 'mcp_server_config',
@@ -107,23 +108,12 @@ export const storage = {
   exportAllConfigs: () => {
     try {
       const configs = storage.getSavedConfigs();
-      const exportData = {
-        version: '1.0',
-        exportedAt: new Date().toISOString(),
-        configs: configs.map(config => ({
-          ...config,
-          // 出于安全考虑，可以选择是否导出认证信息
-          auth: config.auth?.type === 'none' ? config.auth : {
-            type: config.auth?.type,
-            // 不导出敏感信息，只导出结构
-          }
-        }))
-      };
-      
+      const exportData = configsToUniversalFormat(configs);
+
       const dataStr = JSON.stringify(exportData, null, 2);
       const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-      
-      const exportFileDefaultName = `mcp-configs-${new Date().toISOString().split('T')[0]}.json`;
+
+      const exportFileDefaultName = 'mcp.json';
       
       const linkElement = document.createElement('a');
       linkElement.setAttribute('href', dataUri);
@@ -138,52 +128,90 @@ export const storage = {
   },
 
   /**
-   * 导入配置
+   * 合并配置到已保存列表
    */
-  importConfigs: (file: File): Promise<boolean> => {
+  mergeConfigs: (configs: MCPServerConfig[]): number => {
+    const currentConfigs = storage.getSavedConfigs();
+    let imported = 0;
+
+    configs.forEach((config) => {
+      const existingIndex = currentConfigs.findIndex(c => c.name === config.name);
+      if (existingIndex >= 0) {
+        currentConfigs[existingIndex] = { ...config, updatedAt: Date.now() };
+      } else {
+        currentConfigs.push({ ...config, createdAt: Date.now(), updatedAt: Date.now() });
+      }
+      imported++;
+    });
+
+    localStorage.setItem(STORAGE_KEYS.SAVED_CONFIGS, JSON.stringify(currentConfigs));
+    return imported;
+  },
+
+  /**
+   * 导入配置（支持本应用格式及 Cursor、Claude、VS Code 等工具的 MCP 配置格式）
+   */
+  importConfigs: (file: File): Promise<ImportConfigsResult> => {
     return new Promise((resolve) => {
       try {
         const reader = new FileReader();
         reader.onload = (e) => {
           try {
-            const importData = JSON.parse(e.target?.result as string);
-            
-            if (!importData.configs || !Array.isArray(importData.configs)) {
-              console.error('无效的配置文件格式');
-              resolve(false);
+            const content = e.target?.result as string;
+            const parseResult = parseMcpConfigFile(content, file.name);
+
+            if (parseResult.configs.length === 0) {
+              resolve({
+                success: false,
+                imported: 0,
+                skipped: parseResult.skipped.length,
+                source: parseResult.source
+              });
               return;
             }
-            
-            const currentConfigs = storage.getSavedConfigs();
-            
-            // 合并配置，相同名称的配置会被覆盖
-            importData.configs.forEach((config: MCPServerConfig) => {
-              const existingIndex = currentConfigs.findIndex(c => c.name === config.name);
-              if (existingIndex >= 0) {
-                currentConfigs[existingIndex] = { ...config, updatedAt: Date.now() };
-              } else {
-                currentConfigs.push({ ...config, createdAt: Date.now(), updatedAt: Date.now() });
-              }
+
+            const imported = storage.mergeConfigs(parseResult.configs);
+            resolve({
+              success: true,
+              imported,
+              skipped: parseResult.skipped.length,
+              source: parseResult.source
             });
-            
-            localStorage.setItem(STORAGE_KEYS.SAVED_CONFIGS, JSON.stringify(currentConfigs));
-            resolve(true);
           } catch (error) {
             console.error('解析配置文件失败:', error);
-            resolve(false);
+            resolve({ success: false, imported: 0, skipped: 0 });
           }
         };
-        
+
         reader.onerror = () => {
           console.error('读取文件失败');
-          resolve(false);
+          resolve({ success: false, imported: 0, skipped: 0 });
         };
-        
+
         reader.readAsText(file);
       } catch (error) {
         console.error('导入配置失败:', error);
-        resolve(false);
+        resolve({ success: false, imported: 0, skipped: 0 });
       }
+    });
+  },
+
+  /**
+   * 预览解析配置文件（不保存）
+   */
+  previewImportFile: (file: File): Promise<ReturnType<typeof parseMcpConfigFile>> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const content = e.target?.result as string;
+          resolve(parseMcpConfigFile(content, file.name));
+        } catch {
+          resolve({ configs: [], skipped: [], source: 'unknown' });
+        }
+      };
+      reader.onerror = () => resolve({ configs: [], skipped: [], source: 'unknown' });
+      reader.readAsText(file);
     });
   },
 

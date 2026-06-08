@@ -19,19 +19,26 @@
 <a id="chinese"></a>
 ## 🚀 项目概述
 
-MCP Security Inspector 是专为 Model Context Protocol (MCP) 服务器设计的AI增强安全检测Chrome扩展。该项目结合主动扫描和被动监控两种方式，深度集成多种LLM服务（OpenAI GPT、Claude、Gemini等），让AI直接参与测试样例的生成和安全分析，确保安全检测既全面又实时。[《MCP Security Inspector：AI驱动的MCP协议安全检测工具》](https://mp.weixin.qq.com/s/kTlgse3SPNL3AkjaGt-QHg)
+MCP Security Inspector 是一款 Chrome 扩展，面向 **Model Context Protocol (MCP)** 远程服务器，提供 **协议调试** 与 **AI 增强安全检测** 两大能力：
 
+- **协议调试**：连接 SSE / Streamable HTTP 服务器，浏览并调用工具、资源、提示，支持自定义 Headers 与多种认证方式
+- **安全检测**：结合主动扫描与被动监控，集成 OpenAI、Claude、Gemini 等 LLM，自动生成测试用例并输出风险报告
+
+配置可在 Cursor、Claude Desktop、VS Code 等工具与本扩展之间 **导入 / 导出标准 `mcp.json`**，便于复用已有 MCP 配置进行安全审计。
+
+详细介绍：[《MCP Security Inspector：AI驱动的MCP协议安全检测工具》](https://mp.weixin.qq.com/s/kTlgse3SPNL3AkjaGt-QHg)
 
 ### ✨ 核心特性
 
-- 🧠 **AI增强检测**: 集成OpenAI、Claude、Gemini等多种LLM服务
-- 🔄 **双重检测模式**: 主动扫描 + 被动监控，确保全面安全覆盖
-- 🎯 **统一检测引擎**: 支持工具、提示、资源三种MCP组件的统一安全检测
-- 🌐 **多语言支持**: 完整的中英双语界面
-- 📊 **智能报告**: 实时生成详细的安全分析报告
+- 🔌 **MCP 协议浏览器**: SSE / Streamable HTTP；调用工具、读取资源、获取提示
+- 📥 **配置导入导出**: 标准 `mcp.json` 格式，兼容 Cursor、Claude Desktop、VS Code、Windsurf；自动过滤本地 stdio 进程
+- 🧠 **AI 增强检测**: 集成 OpenAI、Claude、Gemini 等多种 LLM 服务
+- 🔄 **双重检测模式**: 主动扫描 + 被动监控，全面覆盖 MCP 交互
+- 🎯 **统一检测引擎**: 工具、提示、资源三类 MCP 组件统一检测框架
+- 📋 **可配置结果展示**: `{{auto}}` 自动美化，原始 / 格式化双栏，通配路径模板
+- 🌐 **多语言支持**: 完整中英双语界面
+- 📊 **智能报告**: 实时生成详细安全分析报告
 - 🛡️ **隐私保护**: 本地检测，敏感信息智能遮蔽
-- 🔌 **MCP 协议浏览器**: 支持 SSE / Streamable HTTP，可调用工具、读取资源、获取提示
-- 📋 **可配置结果展示**: 通用模板与 `{{auto}}` 自动美化，原始/格式化双栏，通配路径
 
 ## 🏗️ 技术架构
 
@@ -140,31 +147,36 @@ public async performSecurityAnalysis(
 
 ### 使用方法
 
-1. **连接 MCP 服务器**
+1. **管理 MCP 配置**
+   - 在 **已保存配置** 列表中点击条目，可加载到左侧连接表单进行编辑
+   - **导入**：上传 Cursor / Claude / VS Code 等工具的 `mcp.json`，预览后确认；自动跳过本地 stdio 与 OAuth 配置
+   - **导出**：下载标准 `mcp.json`，可直接用于 Cursor、Claude Desktop 等工具
+
+2. **连接 MCP 服务器**
    - **传输模式**：多数远程服务使用 **SSE**（如 Cursor `url` 指向的 HTTP 端点）；部分服务使用 **Streamable HTTP**
-   - **主机**：仅填协议与域名，例如 `http://ftp-ai.woa.com`
+   - **主机**：仅填协议与域名，例如 `http://example.com`
    - **路径**：SSE 路径填服务端暴露的地址，例如 `/mcp/server/<id>/`
    - **认证**：若需 `app_id`、`app_token` 等自定义请求头，请在配置中填写 **Headers JSON**，或使用 **组合认证 → 自定义请求头**（SSE 长连接也会携带这些头）
    - 连接成功后在 **MCP 浏览器** 中查看工具 / 资源 / 提示列表
 
-2. **调用工具与查看结果**
+3. **调用工具与查看结果**
    - 在 MCP 浏览器选择工具、填写参数并执行
    - **格式化结果**默认展开，内容区可下拉滚动；可点击 ▼ 拉高展示区
    - **原始返回**默认折叠，需要时展开查看完整 JSON
    - 展开 **结果展示设置** 可编辑模板（默认 `{{auto}}` 自动适配任意 `content[]` 结构）
    - 模板支持：`{{content[*].text}}`、`{{content[?type=text].text}}`、`{{parsed[*]}}`、`print(路径)` 等；可根据当前返回点击路径标签插入
 
-3. **配置 LLM 服务**（可选）
-   - 选择LLM服务提供商
-   - 输入API密钥和配置参数
+4. **配置 LLM 服务**（可选）
+   - 选择 LLM 服务提供商
+   - 输入 API 密钥和配置参数
    - 测试连接是否正常
 
-4. **执行安全检测**
+5. **执行安全检测**
    - 选择检测模式（主动扫描 / 被动监控）
    - 配置检测参数和规则
    - 启动检测并查看实时进度
 
-5. **查看安全检测报告**
+6. **查看安全检测报告**
    - 查看详细的安全报告
    - 分析风险等级和修复建议
    - 导出报告或历史记录
@@ -179,6 +191,7 @@ src/
 │   ├── MCPExplorer.tsx      # MCP 工具/资源/提示浏览器
 │   ├── McpResultViewer.tsx  # 调用结果展示（模板 + 折叠）
 │   ├── ConfigPanel.tsx      # 服务器连接配置
+│   ├── MCPListPanel.tsx     # 已保存配置列表、导入/导出
 │   └── AuthConfig.tsx       # 认证配置
 ├── services/
 │   ├── securityEngine.ts    # 统一安全检测引擎
@@ -187,6 +200,7 @@ src/
 ├── types/
 │   └── resultDisplay.ts     # 结果展示配置类型
 ├── utils/
+│   ├── mcpConfigParser.ts   # 多格式 mcp.json 解析与导出
 │   ├── resultDisplay.ts     # 结果模板解析与 {{auto}} 格式化
 │   └── storage.ts           # 本地配置持久化
 └── i18n/                    # 中英双语
@@ -263,6 +277,13 @@ class CustomLLMProvider implements LLMProvider {
 
 ## 📊 更新日志
 
+### v2.1.0
+- ✅ **配置导入导出**：支持标准 `mcp.json`，兼容 Cursor、Claude Desktop、VS Code、Windsurf 及本应用旧格式
+- ✅ **智能导入预览**：导入前展示来源识别、可导入远程服务器列表及跳过项（stdio / OAuth / 无效配置）
+- ✅ **配置列表交互**：点击已保存配置加载到连接表单；选中态与连接态视觉区分
+- ✅ **表单回填增强**：选中配置时同步加载 Headers JSON 与认证信息
+- ✅ **UI 修复**：Switch 开关在深色主题下对比度优化
+
 ### v2.0.8
 - ✅ MCP 浏览器：通用结果展示（`{{auto}}`、通配路径、双栏原始/格式化）
 - ✅ 原始返回默认折叠；格式化结果区可滚动、可拉高展开
@@ -323,22 +344,28 @@ class CustomLLMProvider implements LLMProvider {
 <a id="english"></a>
 ## 🌟 English
 
-**The world's first AI-enhanced security detection Chrome extension specifically designed for Model Context Protocol (MCP) servers**
+**AI-enhanced security inspection and MCP protocol debugger for remote MCP servers**
 
 ### 🚀 Project Overview
 
-MCP Security Inspector is the world's first AI-enhanced security detection Chrome extension specifically designed for Model Context Protocol (MCP) servers. This project combines active scanning and passive monitoring modes, deeply integrates various LLM services (OpenAI GPT, Claude, Gemini, etc.), allowing AI to directly participate in test case generation and security analysis, ensuring comprehensive and real-time security detection.
+MCP Security Inspector is a Chrome extension for **Model Context Protocol (MCP)** remote servers, combining **protocol debugging** and **AI-enhanced security inspection**:
+
+- **Protocol debugging**: Connect via SSE or Streamable HTTP, browse and invoke tools/resources/prompts, with custom headers and auth
+- **Security inspection**: Active scanning + passive monitoring, powered by OpenAI, Claude, Gemini, etc., with automated test cases and risk reports
+
+Configs can be **imported/exported as standard `mcp.json`**, compatible with Cursor, Claude Desktop, VS Code, and more — reuse existing MCP setups for security audits.
 
 ### ✨ Core Features
 
-- 🧠 **AI-Enhanced Detection**: Integrates multiple LLM services including OpenAI, Claude, Gemini
-- 🔄 **Dual Detection Modes**: Active scanning + passive monitoring for comprehensive security coverage
-- 🎯 **Unified Detection Engine**: Supports unified security detection for tools, prompts, and resources
-- 🌐 **Multi-language Support**: Complete bilingual interface (English/Chinese)
-- 📊 **Intelligent Reports**: Real-time generation of detailed security analysis reports
-- 🛡️ **Privacy Protection**: Local detection with intelligent sensitive information masking
 - 🔌 **MCP Protocol Explorer**: SSE / Streamable HTTP; invoke tools, read resources, get prompts
-- 📋 **Configurable Result Display**: `{{auto}}` formatting, raw/formatted dual view, wildcard template paths
+- 📥 **Config Import/Export**: Standard `mcp.json`; compatible with Cursor, Claude Desktop, VS Code, Windsurf; auto-filters local stdio servers
+- 🧠 **AI-Enhanced Detection**: OpenAI, Claude, Gemini, and other LLM services
+- 🔄 **Dual Detection Modes**: Active scanning + passive monitoring
+- 🎯 **Unified Detection Engine**: Tools, prompts, and resources in one framework
+- 📋 **Configurable Result Display**: `{{auto}}` formatting, raw/formatted dual view, wildcard paths
+- 🌐 **Multi-language Support**: English / Chinese
+- 📊 **Intelligent Reports**: Real-time security analysis reports
+- 🛡️ **Privacy Protection**: Local detection with sensitive data masking
 
 ### 🔒 Security Detection Capabilities
 
@@ -401,7 +428,12 @@ MCP Security Inspector is the world's first AI-enhanced security detection Chrom
 
 #### Usage
 
-1. **Connect to MCP Server**
+1. **Manage MCP Configs**
+   - Click a saved config to load it into the connection form
+   - **Import**: upload `mcp.json` from Cursor, Claude, VS Code, etc.; preview before confirm; stdio and OAuth entries are skipped
+   - **Export**: download standard `mcp.json` for use in other MCP clients
+
+2. **Connect to MCP Server**
    - **Transport**: use **SSE** for most HTTP `url`-style servers; **Streamable HTTP** where supported
    - **Host**: scheme + host only (e.g. `http://example.com`); put the path in **SSE path** (e.g. `/mcp/server/<id>/`)
    - **Auth**: put custom headers (`app_id`, `app_token`, etc.) in **Headers JSON** or **Combined auth → Custom headers** so the SSE stream also sends them
@@ -412,17 +444,17 @@ MCP Security Inspector is the world's first AI-enhanced security detection Chrom
    - Edit display templates under **Result display settings** (default `{{auto}}` for any MCP `content[]` shape)
    - Wildcards: `{{content[*].text}}`, `{{parsed[*]}}`, `print(path)`, etc.
 
-3. **Configure LLM Service** (Optional)
+4. **Configure LLM Service** (Optional)
    - Select LLM service provider
    - Enter API key and configuration parameters
    - Test connection
 
-4. **Execute Security Detection**
+5. **Execute Security Detection**
    - Choose detection mode (Active Scan / Passive Monitor)
    - Configure detection parameters and rules
    - Start detection and view real-time progress
 
-5. **View Security Reports**
+6. **View Security Reports**
    - View detailed security reports
    - Analyze risk levels and remediation recommendations
    - Export reports or history
@@ -447,6 +479,7 @@ npm run type-check
 
 ### 📊 Changelog (recent)
 
+- **v2.1.0**: Standard `mcp.json` import/export (Cursor, Claude, VS Code, Windsurf); import preview modal; config list selection; Switch contrast fix
 - **v2.0.8**: Generic result display templates; collapsible raw JSON; scrollable formatted panel
 - **v2.0.7**: Fetch-based SSE with custom headers; async response handling after HTTP 202
 
